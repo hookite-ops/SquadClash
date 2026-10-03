@@ -10,7 +10,7 @@ if [ -z "$PROJECT" ] || [ "$PROJECT" = "(unset)" ]; then echo "프로젝트가 �
 echo "▶ 프로젝트 [$PROJECT]"
 
 # 이 프로젝트의 SQUAD CLASH 서비스들 (이름이 squadclash… 또는 squad-clash… 인 것만 다룸)
-mapfile -t SVCS < <(gcloud run services list --format='value(metadata.name,metadata.labels."cloud.googleapis.com/location")' 2>/dev/null | awk '$1 ~ /^(squadclash|squad-clash)/ {print $1" "$2}')
+mapfile -t SVCS < <(gcloud run services list --format='value(metadata.name,region)' 2>/dev/null | awk '$1 ~ /^(squadclash|squad-clash)/ {print $1" "$2}')
 echo "▶ 찾은 서비스:"; printf '   %s\n' "${SVCS[@]}"
 
 # 1) 저장소에서 자동 배포된 서비스의 최신 이미지를 찾아 서울에 올림
@@ -55,5 +55,5 @@ done
 
 echo
 echo "✅ 남은 게임 주소 (서울):"
-gcloud run services list --format='table(metadata.name,metadata.labels."cloud.googleapis.com/location",status.url)' 2>/dev/null | awk 'NR==1 || $1 ~ /^(squadclash|squad-clash)/'
+gcloud run services list --format='table(metadata.name,region,status.url)' 2>/dev/null | awk 'NR==1 || $1 ~ /^(squadclash|squad-clash)/'
 if [ "$TRIG_OK" = 1 ]; then echo "자동 배포: 저장소 main 에 올라오면 서울 서비스로 배포됩니다."; else echo "⚠ 자동 배포 트리거를 찾지 못했습니다. 이 화면을 캡처해서 알려 주세요."; fi
