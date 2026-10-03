@@ -104,7 +104,7 @@ function holdGun(o, wi) { // 다른 사람이 든 무기 바꾸기 (모델은 �
   if (!WEAPONS[wi] || o.w === wi) return;
   if (!o.guns[wi]) {
     const gg = makeGun(wi, o.sk ? o.sk[wi] : 0).group, small = WEAPONS[wi].vm === 'pistol' || WEAPONS[wi].vm === 'knife';
-    gg.scale.setScalar(1.3); gg.position.set(0.16, 0.04, small ? -0.42 : -0.34);
+    gg.scale.setScalar(1.3); gg.position.set(0.19, 0.07, small ? -0.7 : -0.52);
     o.arms.add(gg); o.guns[wi] = gg;
   }
   o.guns.forEach((gg, i) => { if (gg) gg.visible = i === wi; });
