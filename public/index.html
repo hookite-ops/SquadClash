@@ -142,7 +142,7 @@ body.layedit .pad{outline:2px dashed rgba(255,255,255,.55);outline-offset:3px;to
 #dmg{position:absolute;inset:0;opacity:0;transition:opacity .5s;background:radial-gradient(ellipse at center,transparent 55%,rgba(255,30,45,.55))}
 #dmgDir{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0;transition:opacity .6s}
 #dmgDir::after{content:"";position:absolute;left:-26px;top:-96px;border:26px solid transparent;border-top:0;border-bottom:16px solid rgba(255,60,70,.9)}
-#scopeOv{position:absolute;inset:0;background:radial-gradient(circle at center,transparent 0,transparent 33vh,#000 33.6vh)}
+#scopeOv{position:absolute;inset:0;background:radial-gradient(circle at center,transparent 0,transparent calc(var(--vh,1vh)*33),#000 calc(var(--vh,1vh)*33.6))}
 #scopeOv::before,#scopeOv::after{content:"";position:absolute;background:rgba(0,0,0,.8)}
 #scopeOv::before{left:50%;top:0;bottom:0;width:1px}#scopeOv::after{top:50%;left:0;right:0;height:1px}
 #bottom{position:absolute;left:50%;bottom:calc(8px + var(--sb));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;width:max-content}
@@ -172,7 +172,7 @@ body.br #top div{font-size:15px;min-width:74px;padding:5px 12px;white-space:nowr
 body.br.touch #slotMed{display:none!important}
 body.br #sR{background:linear-gradient(90deg,rgba(74,222,128,.4),transparent)}body.br #sB{background:linear-gradient(270deg,rgba(255,210,63,.4),transparent)}
 body.br #top .mine{box-shadow:none}
-#bigMap{width:min(46vh,300px);height:min(46vh,300px);border-radius:10px;border:1px solid var(--line);flex:0 0 auto}
+#bigMap{width:min(calc(var(--vh,1vh)*46),300px);height:min(calc(var(--vh,1vh)*46),300px);border-radius:10px;border:1px solid var(--line);flex:0 0 auto}
 #boardRow{display:flex;gap:10px;align-items:flex-start;justify-content:center;width:min(760px,100%)}
 #bHeal{right:calc(262px + var(--sr));bottom:calc(84px + var(--sb));width:54px;height:54px;font-size:11px;background:rgba(74,222,128,.22);border-color:rgba(74,222,128,.8)}
 #bHeal.none{opacity:.3}
@@ -253,7 +253,7 @@ body:not(.touch) .pad,body:not(.touch) #stickHint{display:none}
 #lkX{height:30px;border:1px solid rgba(255,120,120,.6);border-radius:8px;font-size:13px;font-weight:800;padding:0 12px;cursor:pointer;background:rgba(190,40,48,.85);color:#fff}
 #menuExit{position:fixed;top:calc(8px + var(--st));right:calc(10px + var(--sr));height:32px;border-radius:8px;border-width:1px;border-style:solid;font-size:13px;font-weight:800;padding:0 12px;cursor:pointer;z-index:3}
 #board p{margin:0;color:var(--dim);font-size:13px}
-#cols{display:flex;gap:10px;width:min(640px,100%);flex:1;min-width:0;max-height:62vh;overflow:hidden}
+#cols{display:flex;gap:10px;width:min(640px,100%);flex:1;min-width:0;max-height:calc(var(--vh,1vh)*62);overflow:hidden}
 #cols table{flex:1;border-collapse:collapse;font-size:13px;background:var(--panel);border-radius:9px;overflow:hidden}
 #cols th{padding:5px 8px;text-align:left;font-size:13px}#cols td{padding:3px 8px;border-top:1px solid var(--line)}
 #cols td:nth-child(n+2),#cols th:nth-child(n+2){text-align:right;width:46px;white-space:nowrap}
@@ -262,7 +262,9 @@ body:not(.touch) .pad,body:not(.touch) #stickHint{display:none}
 #rotate{position:fixed;inset:0;background:var(--ink);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:17px;z-index:9;text-align:center}
 #rotate i{font-size:54px;font-style:normal;animation:rot 1.8s ease-in-out infinite}
 @keyframes rot{0%,20%{transform:rotate(0)}60%,100%{transform:rotate(90deg)}}
-@media (orientation:portrait) and (pointer:coarse){body.playing #rotate{display:flex}}
+/* 세로로 쥐면 아래쪽 절반만 씀: body 가 아래 절반을 차지하고, 화면에 고정된 요소들이 모두 그 안에 놓임 */
+html:has(body.half){background:#000}
+body.half{position:fixed;left:0;right:0;bottom:0;top:50%;height:auto;transform:translateZ(0);border-top:1px solid rgba(255,255,255,.18)}
 @media (max-height:420px){#shopBox{padding:7px 10px}.item{padding:3px 2px;font-size:11px}.item small{font-size:10px;margin-top:0}.srow{margin-bottom:4px}#shopBox h3{margin-bottom:5px;font-size:14px}#shopFoot{margin-top:5px}.card{padding:12px 14px 10px}.logo b{font-size:24px}.help{display:none}.sub{margin-bottom:8px}}
 </style>
 </head>

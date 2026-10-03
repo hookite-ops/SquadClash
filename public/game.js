@@ -45,8 +45,14 @@ const vmSun = new THREE.DirectionalLight(0xffffff, 1.4);
 vmSun.position.set(-0.6, 2, 1.5);
 vmScene.add(vmSun);
 
+// 게임이 쓰는 화면 영역: 가로로 쥐면 화면 전체, 세로로 쥐면(터치 기기) 아래쪽 절반만 씀
+let VW = window.innerWidth, VH = window.innerHeight, VT = 0; // 너비, 높이, 위쪽 여백
 function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
+  const half = isTouch && window.innerHeight > window.innerWidth;
+  VW = window.innerWidth; VH = half ? Math.round(window.innerHeight / 2) : window.innerHeight; VT = window.innerHeight - VH;
+  document.body.classList.toggle('half', half);
+  document.documentElement.style.setProperty('--vh', VH / 100 + 'px');
+  const w = VW, h = VH;
   renderer.setSize(w, h, false);
   camera.aspect = vmCam.aspect = w / h;
   camera.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
@@ -1194,8 +1200,8 @@ function applyLayout() { // 저장해 둔 버튼 자리·크기 (화면 크기�
     const L = ctl.layout[el.id];
     if (!L) { el.style.left = el.style.top = el.style.right = el.style.bottom = el.style.scale = ''; continue; }
     el.style.right = el.style.bottom = 'auto'; el.style.scale = L.s || 1;
-    el.style.left = clamp(L.x * window.innerWidth - el.offsetWidth / 2, 0, window.innerWidth - el.offsetWidth) + 'px';
-    el.style.top = clamp(L.y * window.innerHeight - el.offsetHeight / 2, 0, window.innerHeight - el.offsetHeight) + 'px';
+    el.style.left = clamp(L.x * VW - el.offsetWidth / 2, 0, VW - el.offsetWidth) + 'px';
+    el.style.top = clamp(L.y * VH - el.offsetHeight / 2, 0, VH - el.offsetHeight) + 'px';
   }
 }
 function syncCtl() {
@@ -1227,15 +1233,15 @@ function setLayEdit(on) {
   else { for (const el of PADS()) el.classList.remove('sel'); saveCtl(); if (!joined) { $('hud').classList.add('hide'); $('menu').classList.remove('hide'); openCtl(true); } }
   applyLayout();
 }
-const laySave = (el) => { const r = el.getBoundingClientRect(), s = (ctl.layout[el.id] && ctl.layout[el.id].s) || 1; ctl.layout[el.id] = { x: (r.left + r.width / 2) / window.innerWidth, y: (r.top + r.height / 2) / window.innerHeight, s }; };
+const laySave = (el) => { const r = el.getBoundingClientRect(), s = (ctl.layout[el.id] && ctl.layout[el.id].s) || 1; ctl.layout[el.id] = { x: (r.left + r.width / 2) / VW, y: (r.top + r.height / 2 - VT) / VH, s }; };
 document.addEventListener('pointerdown', (e) => {
   if (!layEdit) return;
   const el = e.target.closest ? e.target.closest('#hud .pad') : null; if (!el) return;
   e.preventDefault(); for (const p of PADS()) p.classList.toggle('sel', p === el);
-  laySel = el; laySave(el); layDrag = { id: e.pointerId, dx: e.clientX - ctl.layout[el.id].x * window.innerWidth, dy: e.clientY - ctl.layout[el.id].y * window.innerHeight };
+  laySel = el; laySave(el); layDrag = { id: e.pointerId, dx: e.clientX - ctl.layout[el.id].x * VW, dy: e.clientY - VT - ctl.layout[el.id].y * VH };
   $('layMsg').textContent = `[${el.textContent}] 고름 · 크기 ${Math.round(ctl.layout[el.id].s * 100)}%`;
 });
-document.addEventListener('pointermove', (e) => { if (!layEdit || !layDrag || e.pointerId !== layDrag.id || !laySel) return; const L = ctl.layout[laySel.id]; L.x = clamp((e.clientX - layDrag.dx) / window.innerWidth, 0.03, 0.97); L.y = clamp((e.clientY - layDrag.dy) / window.innerHeight, 0.05, 0.95); applyLayout(); });
+document.addEventListener('pointermove', (e) => { if (!layEdit || !layDrag || e.pointerId !== layDrag.id || !laySel) return; const L = ctl.layout[laySel.id]; L.x = clamp((e.clientX - layDrag.dx) / VW, 0.03, 0.97); L.y = clamp((e.clientY - VT - layDrag.dy) / VH, 0.05, 0.95); applyLayout(); });
 const layEnd = (e) => { if (layDrag && e.pointerId === layDrag.id) { layDrag = null; saveCtl(); } };
 document.addEventListener('pointerup', layEnd); document.addEventListener('pointercancel', layEnd);
 const laySize = (k) => { if (!laySel) { $('layMsg').textContent = '먼저 버튼을 눌러 고르세요'; return; } const L = ctl.layout[laySel.id]; L.s = clamp(Math.round((L.s + k) * 20) / 20, 0.6, 1.8); applyLayout(); saveCtl(); $('layMsg').textContent = `[${laySel.textContent}] 고름 · 크기 ${Math.round(L.s * 100)}%`; };
@@ -1321,7 +1327,7 @@ function goFullscreen(toggle) {
     if (document.fullscreenElement) { if (toggle) document.exitFullscreen(); return; }
     const el = document.documentElement;
     const p = (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
-    if (p && p.then) p.then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
+    if (p && p.then) p.then(() => { if (window.innerWidth > window.innerHeight) screen.orientation?.lock?.('landscape').catch(() => {}); }).catch(() => {}); // 세로로 쥐고 있으면 그대로 둠 (아래쪽 절반 모드)
   } catch {}
 }
 const touches = new Map();
@@ -1341,9 +1347,9 @@ document.addEventListener('touchstart', (e) => {
     if (el) { pressBtn(rec.btn, true, el); rec.role = rec.btn === 'fire' ? 'look' : 'btn'; }
     else if (modalOpen()) rec.role = 'btn';
     else if (!me.alive) { specIdx++; rec.role = 'btn'; }
-    else if (t.clientX < window.innerWidth * 0.42 && ![...touches.values()].some((r) => r.role === 'move')) {
+    else if (t.clientX < VW * 0.42 && ![...touches.values()].some((r) => r.role === 'move')) {
       rec.role = 'move';
-      const s = $('stick'); s.style.left = t.clientX + 'px'; s.style.top = t.clientY + 'px'; s.classList.remove('hide'); $('stickHint').classList.add('hide');
+      const s = $('stick'); s.style.left = t.clientX + 'px'; s.style.top = t.clientY - VT + 'px'; s.classList.remove('hide'); $('stickHint').classList.add('hide');
       $('knob').style.transform = '';
     }
     touches.set(t.identifier, rec);
@@ -1791,9 +1797,9 @@ function frame(now) {
   lastT = now;
   if (!joined && paintUI.open) { // 캐릭터 그리기: 오른쪽에 그린 그림을 입은 캐릭터를 돌려 보여 줌
     const r = $('ptPrev').getBoundingClientRect(), asp = vmCam.aspect;
-    const d = Math.min(9, Math.max(2.1 / (1.108 * Math.max(0.2, r.height / window.innerHeight)), 1.05 / (1.108 * asp * Math.max(0.08, r.width / window.innerWidth))));
+    const d = Math.min(9, Math.max(2.1 / (1.108 * Math.max(0.2, r.height / VH)), 1.05 / (1.108 * asp * Math.max(0.08, r.width / VW))));
     if (!paintUI.drag) paintUI.yaw = now / 1400;
-    pvGroup.position.set((((r.left + r.right) / 2 / window.innerWidth) * 2 - 1) * 0.554 * d * asp, -(((r.top + r.bottom) / 2 / window.innerHeight) * 2 - 1) * 0.554 * d - 0.95, -d);
+    pvGroup.position.set((((r.left + r.right) / 2 / VW) * 2 - 1) * 0.554 * d * asp, -((((r.top + r.bottom) / 2 - VT) / VH) * 2 - 1) * 0.554 * d - 0.95, -d);
     pvGroup.rotation.y = paintUI.yaw;
     pvGroup.visible = true; vm.visible = false; lkGroup.visible = false;
     renderer.setClearColor(0x161a21, 1); renderer.clear(); renderer.render(vmScene, vmCam);
@@ -1801,9 +1807,9 @@ function frame(now) {
   }
   if (!joined && lockerOpen) { // 무기고: 어두운 배경에 총만 크게
     lkBuild();
-    const r = $('lkMid').getBoundingClientRect(), asp = vmCam.aspect, wf = Math.max(0.2, r.width / window.innerWidth);
+    const r = $('lkMid').getBoundingClientRect(), asp = vmCam.aspect, wf = Math.max(0.2, r.width / VW);
     const d = Math.max(0.36, lkGun.userData.len / (0.8 * wf * 1.108 * asp));
-    lkGroup.position.set((((r.left + r.right) / 2 / window.innerWidth) * 2 - 1) * 0.554 * d * asp, -0.015 * d, -d);
+    lkGroup.position.set((((r.left + r.right) / 2 / VW) * 2 - 1) * 0.554 * d * asp, -0.015 * d, -d);
     if (lkSpin) lkYaw = Math.PI / 2 + Math.sin(now / 1900) * 0.95; // 옆모습을 중심으로 천천히 흔들어 보여 줌
     lkGun.rotation.set(0.1, lkYaw, 0);
     lkGroup.visible = true; vm.visible = false;
