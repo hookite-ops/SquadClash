@@ -566,9 +566,9 @@ function optic(b, kind, f, u0, M) { return kind === 'dot' ? reddot(b, f, u0, M) 
 function muzzleAtt(b, kind, f, u, r, M) { // 총구 파츠. f = 총열 끝, 돌려주는 값 = 새 총구 끝
   if (kind === 'sup') return suppressor(b, f - 0.012, Math.max(0.1, r * 9.5), r * 1.4, u, M);
   if (kind === 'comp') { // 보정기: 위로 구멍이 난 각진 통
-    const len = r * 4.2, w = r * 2.3, f0 = f + 0.004;
+    const len = r * 3.6, w = r * 1.75, f0 = f + 0.004;
     b.cyl(r * 0.85, r * 0.85, f - 0.006, 0.01, u, M.steel);
-    b.box(w, w, len, f0 + len / 2, u, M.steel);
+    b.prof([[f0, u - w / 2], [f0, u + w / 2], [f0 + len, u + w / 2], [f0 + len, u - w / 2]], w, M.steel, 0.004, 0, { r: 0.003 });
     for (let i = 0; i < 3; i++) b.box(w * 0.6, 0.002, len * 0.16, f0 + len * (0.25 + i * 0.25), u + w / 2 + 0.0002, M.dark);
     for (const s of [-1, 1]) b.box(0.002, w * 0.45, len * 0.2, f0 + len * 0.75, u, M.dark, s * (w / 2 + 0.0002));
     b.disc(r * 0.55, f0 + len + 0.0005, u, M.dark);
