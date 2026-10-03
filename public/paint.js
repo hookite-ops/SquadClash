@@ -25,16 +25,42 @@ export function camoDraw(g, seed) { // 무작위 위장 무늬 (봇, [무작위 
   face(g);
 }
 
+export function outfitDraw(g, seed) { // 봇 복장: 헬멧·조끼·장갑·무릎 보호대·군화 (색 조합 여섯 가지)
+  let s = (seed * 2654435761) >>> 0; const R = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const sets = [ // 군복, 조끼, 헬멧, 바지, 포인트
+    ['#b99a6a', '#6f5a3c', '#8a7350', '#a48a5e', '#3d3226'], ['#5c6d44', '#39432c', '#4a5838', '#515f3d', '#2a2f22'], ['#6f757d', '#3c4148', '#555b63', '#5d636b', '#24272c'],
+    ['#2c3c5c', '#1a2438', '#25324c', '#27344f', '#111827'], ['#2b2d31', '#17181b', '#222428', '#26282c', '#5a5f66'], ['#7d6a52', '#4a5a3a', '#5e6b48', '#6b5a44', '#2e2a22']];
+  const [U, V, H, P, K] = sets[Math.floor(R() * sets.length)], skin = ['#f0c8a4', '#d9a57c', '#b07a54', '#8a5a3a'][Math.floor(R() * 4)];
+  const X = (x) => (1 - (x + HW) / DW) * SW, Y = (y) => (1 - y / DH) * SH; // 몸 자리(m) → 그림 자리
+  for (const side of [0, 1]) {
+    g.save(); g.beginPath(); g.rect(side * SW, 0, SW, SH); g.clip(); g.translate(side * SW, 0);
+    const box = (x0, y0, x1, y1, c) => { g.fillStyle = c; g.fillRect(Math.min(X(x0), X(x1)), Y(y1), Math.abs(X(x1) - X(x0)), Y(y0) - Y(y1)); };
+    box(-0.48, 0, 0.48, 1.9, U);
+    box(-0.25, 0, 0.25, 0.77, P); box(-0.25, 0, 0.25, 0.13, '#17181b'); box(-0.25, 0.13, 0.25, 0.155, '#0c0d0f');              // 바지, 군화
+    for (const x of [-0.225, 0.015]) box(x, 0.36, x + 0.21, 0.5, K);                                                             // 무릎 보호대
+    box(-0.25, 0.74, 0.25, 0.8, '#1c1d20'); if (!side) box(-0.04, 0.745, 0.04, 0.795, '#8a8f97');                                 // 허리띠
+    box(-0.2, 0.83, 0.2, 1.38, V);                                                                                               // 조끼
+    if (!side) { for (const x of [-0.17, -0.05, 0.07]) { box(x, 0.86, x + 0.1, 1.02, K); box(x, 1.0, x + 0.1, 1.02, '#0e0f11'); } box(-0.17, 1.2, -0.05, 1.3, K); box(0.06, 1.22, 0.16, 1.27, '#c9ccd1'); }
+    else { box(-0.16, 0.9, 0.16, 1.34, K); box(-0.12, 1.12, 0.12, 1.16, '#0e0f11'); box(-0.1, 0.94, 0.1, 1.06, V); }              // 등에는 배낭
+    for (const x of [-0.2, 0.15]) box(x, 1.38, x + 0.05, 1.44, '#1c1d20');                                                       // 어깨끈
+    for (const sx of [-1, 1]) { box(sx * 0.25, 0.76, sx * 0.48, 0.9, '#1c1d20'); box(sx * 0.25, 0.9, sx * 0.48, 0.93, K); box(sx * 0.27, 1.22, sx * 0.45, 1.32, V); } // 장갑, 소매 끝, 팔 표식
+    box(-0.21, 1.44, 0.21, 1.82, skin);                                                                                          // 얼굴
+    box(-0.21, side ? 1.56 : 1.67, 0.21, 1.82, H); box(-0.21, side ? 1.56 : 1.67, 0.21, (side ? 1.56 : 1.67) + 0.025, K);         // 헬멧 (뒤는 더 깊이 덮음)
+    if (!side) { g.fillStyle = '#17181b'; for (const x of [53, 75]) { g.beginPath(); g.ellipse(x, 39, 3.2, 4.4, 0, 0, 7); g.fill(); } g.fillRect(57, 49, 14, 2.4); box(-0.21, 1.47, -0.17, 1.67, '#1c1d20'); box(0.17, 1.47, 0.21, 1.67, '#1c1d20'); } // 눈, 입, 턱끈
+    g.restore();
+  }
+}
+
 // ── 질감 ──
 function mkTex(cv) { const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; }
 const texCache = new Map();
-export function paintTex(key, kind, val) { // kind: 'url' 사람이 그린 그림 · 'camo' 봇 위장 · 그 외 기본. 같은 그림은 질감 하나를 같이 씀
+export function paintTex(key, kind, val) { // kind: 'url' 사람이 그린 그림 · 'bot' 봇 복장 · 'camo' 위장 무늬 · 그 외 기본. 같은 그림은 질감 하나를 같이 씀
   let t = texCache.get(key);
   if (t) return t;
   if (texCache.size > 60) { for (const v of texCache.values()) v.dispose(); texCache.clear(); }
   const cv = document.createElement('canvas'); cv.width = AW; cv.height = SH;
   const g = cv.getContext('2d');
-  if (kind === 'camo') camoDraw(g, val); else defaultDraw(g);
+  if (kind === 'bot') outfitDraw(g, val); else if (kind === 'camo') camoDraw(g, val); else defaultDraw(g);
   t = mkTex(cv);
   if (kind === 'url') { const im = new Image(); im.onload = () => { g.drawImage(im, 0, 0, AW, SH); t.needsUpdate = true; }; im.src = val; }
   texCache.set(key, t);

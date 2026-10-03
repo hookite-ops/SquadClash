@@ -83,7 +83,7 @@ const paints = new Map(); // 사람 id → 그림 자료(문자열)
 function paintTexOf(info) {
   const d = paints.get(info.id);
   if (isPaint(d)) return paintTex('p' + info.id + ':' + d.length + ':' + d.slice(-40), 'url', d);
-  if (info.bot) return paintTex('b' + info.id, 'camo', info.id * 7 + 3);
+  if (info.bot) return paintTex('b' + info.id, 'bot', info.id * 7 + 3);
   return paintTex('def');
 }
 function makeAvatar(info) {

@@ -232,7 +232,7 @@ class Room {
   }
   addPlayer(name, ws, team, bot) {
     const p = { id: nextId++, name, ws, team, bot, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: 100, alive: false, w: 0, k: 0, d: 0, respawnAt: 0, lastShot: 0, protUntil: 0, hist: [], c: false, acting: false, actT: 0, actX: 0, actZ: 0, wantTeam: -1, radioAt: 0, money: ECON.start, prim: this.mode === 'tdm' ? W_DEFAULT_PRIM : 0, side: W_PISTOL, armor: 0, nades: [0, 0, 0], blindUntil: 0, med: 0, healAt: 0, air: false, veh: 0, sk: null };
-    if (bot) { Object.assign(p, { path: [], pathAt: 0, seen: 0, burst: 0, pauseUntil: 0, gx: 0, gz: 0, goal: null, goalAt: 0, lx: 0, lz: 0, stuckAt: 0, nadeAt: 0, strafe: Math.random() < 0.5 ? 1 : -1, strafeAt: 0 }); botInit(this, p); }
+    if (bot) { Object.assign(p, { path: [], pathAt: 0, seen: 0, burst: 0, pauseUntil: 0, gx: 0, gz: 0, goal: null, goalAt: 0, lx: 0, lz: 0, stuckAt: 0, nadeAt: 0, strafe: Math.random() < 0.5 ? 1 : -1, strafeAt: 0, dodgeUntil: 0, dodgeX: 0, dodgeZ: 0, stkAt: 0, sx: 0, sz: 0, roam: null, hold: null }); botInit(this, p); }
     this.players.set(p.id, p);
     this.rosterDirty = true;
     return p;
@@ -875,6 +875,11 @@ function lineFree(x0, z0, x1, z1) { // 격자에서 두 점 사이가 뚫려 있
   return true;
 }
 function botFollow(b, tx, tz, dt, now, speed) {
+  if (now < b.dodgeUntil) { botMove(b, b.dodgeX, b.dodgeZ, speed, dt); return [b.dodgeX, b.dodgeZ]; } // 끼었을 때 잠깐 다른 쪽으로
+  if (now >= b.stkAt) { // 가려는데 1.3초 동안 거의 못 움직였으면 방향을 틀고 길을 다시 찾음
+    if (now - b.stkAt < 1500 && Math.hypot(b.x - b.sx, b.z - b.sz) < 0.45 && Math.hypot(tx - b.x, tz - b.z) > 1.5) { const a = Math.random() * 6.283; b.dodgeX = Math.cos(a); b.dodgeZ = Math.sin(a); b.dodgeUntil = now + 450; b.pathAt = 0; }
+    b.sx = b.x; b.sz = b.z; b.stkAt = now + 1300;
+  }
   if (now >= b.pathAt) {
     const d = Math.hypot(tx - b.x, tz - b.z);
     if (d > 55) { tx = b.x + ((tx - b.x) / d) * 50; tz = b.z + ((tz - b.z) / d) * 50; } // 먼 곳은 중간 지점까지만 길을 찾음
@@ -902,11 +907,39 @@ function findCover(room, b, e, now) { // 적에게서 가려지는 가까운 자
   }
   return best ? { x: best.x, z: best.z, ok: true, until: now + 2600 } : { ok: false, until: now + 1200 };
 }
+// 지점(또는 설치된 폭탄)을 지켜보는 엄폐 자리 — 지점 한가운데에 몰려 서 있지 않게, 라운드마다 봇마다 따로 고름
+function holdSpot(room, b, cx, cz, key) {
+  if (b.hold && b.hold.key === key) return b.hold;
+  let best = null, bs = -1;
+  for (let k = 0; k < 28; k++) {
+    const a = Math.random() * 6.283, r = 4 + Math.random() * 10, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+    if (isBlockedAt(x, z) || !lineFree(x, z, cx, cz)) continue; // 지점까지 뚫려 있어 지켜볼 수 있는 자리만
+    let cover = 0;
+    for (const [ox, oz] of [[1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]]) if (isBlockedAt(x + ox, z + oz)) cover++; // 옆에 벽·상자가 있으면 좋은 자리
+    const s = cover * 2 + Math.random() + (r > 6 ? 1 : 0);
+    if (s > bs) { bs = s; best = { x, z }; }
+  }
+  return (b.hold = { key, x: best ? best.x : cx + b.gx, z: best ? best.z : cz + b.gz });
+}
+// 데스매치: 적 위치로 곧장 달려들지 않고, 지점·맵 곳곳을 돌아다니다가 가끔 가까운 적이 있는 쪽을 살핌
+function botRoam(b, near, now) {
+  const r = b.roam;
+  if (r && now < r.until && Math.hypot(r.x - b.x, r.z - b.z) > 3) return r;
+  let x = 0, z = 0;
+  for (let k = 0; k < 12; k++) {
+    const pick = Math.random();
+    if (near && pick < 0.4) { x = near.x + (Math.random() - 0.5) * 18; z = near.z + (Math.random() - 0.5) * 18; }
+    else if (pick < 0.75 && SITES.length) { const s = SITES[Math.floor(Math.random() * SITES.length)]; x = s.x + (Math.random() - 0.5) * 14; z = s.z + (Math.random() - 0.5) * 14; }
+    else { x = (Math.random() - 0.5) * ARENA.hx * 1.5; z = (Math.random() - 0.5) * ARENA.hz * 1.6; }
+    if (!isBlockedAt(x, z)) break;
+  }
+  return (b.roam = { x, z, until: now + 8000 + Math.random() * 8000 });
+}
 // 폭탄전에서 봇이 향할 곳 → { x, z, r(도착 반경), act(도착하면 설치/해체), must(다른 일보다 먼저) }
 function botGoal(room, b, now) {
   const bm = room.bomb;
   if (b.team === room.attack) {
-    if (bm.state === 'planted') return { x: bm.x + b.gx, z: bm.z + b.gz, r: 1.5 };
+    if (bm.state === 'planted') { const h = holdSpot(room, b, bm.x, bm.z, room.roundNo + ':p'); return { x: h.x, z: h.z, r: 0.9, look: [bm.x, bm.z] }; } // 설치 뒤에는 폭탄이 보이는 자리에서 지킴
     if (bm.state === 'dropped') return { x: bm.x, z: bm.z, r: 0.3, must: true };
     const s = SITES[room.botSite];
     if (bm.carrier === b.id) return { x: s.x + b.gx * 0.4, z: s.z + b.gz * 0.4, r: 0.9, act: siteAt(b.x, b.z) >= 0, must: true };
@@ -921,8 +954,8 @@ function botGoal(room, b, now) {
     for (const e of room.players.values()) { if (e.team === b.team || !e.alive) continue; const d = Math.hypot(e.x - b.x, e.z - b.z); if (d < nd) { nd = d; near = e; } }
     if (near) return { x: near.x, z: near.z, r: 3 };
   }
-  const s = SITES[b.id % 2];
-  return { x: s.x + b.gx * 0.8, z: s.z + b.gz * 0.8, r: 1.4 };
+  const si = b.id % 2, s = SITES[si], h = holdSpot(room, b, s.x, s.z, room.roundNo + ':d' + si);
+  return { x: h.x, z: h.z, r: 0.9, look: [s.x, s.z] };
 }
 function botTick(room, b, dt, now) {
   if (!b.alive) return;
@@ -934,6 +967,7 @@ function botTick(room, b, dt, now) {
     return;
   }
   b.y = floorAt(b.x, b.z);
+  if (!br) for (const t of room.players.values()) { if (t === b || !t.alive || !t.bot || t.team !== b.team) continue; const sx = b.x - t.x, sz = b.z - t.z, sd = Math.hypot(sx, sz); if (sd < 0.9 && sd > 0.01) botMove(b, sx, sz, 1.8, dt); } // 같은 팀 봇끼리 겹쳐 서지 않음
   // 무기와 탄창
   const wi = b.prim || b.side, W = WEAPONS[wi];
   if (b.magW !== wi) { b.magW = wi; b.mag = W.mag; b.reloadUntil = 0; }
@@ -971,15 +1005,15 @@ function botTick(room, b, dt, now) {
     let moved = false;
     if (hurt && L.smart) {
       if (!b.cover || now >= b.cover.until) b.cover = findCover(room, b, vis, now);
-      if (b.cover.ok) { moved = true; if (Math.hypot(b.cover.x - b.x, b.cover.z - b.z) > 0.5) botMove(b, b.cover.x - b.x, b.cover.z - b.z, PLAYER.speed * 1.05, dt); }
+      if (b.cover.ok) { moved = true; if (Math.hypot(b.cover.x - b.x, b.cover.z - b.z) > 0.5) botMove(b, b.cover.x - b.x, b.cover.z - b.z, PLAYER.speed * 1.25, dt); }
     }
     if (!moved) {
-      if (vd > pref * 1.6) botFollow(b, vis.x, vis.z, dt, now, PLAYER.speed * 0.8);
+      if (vd > pref * 1.6) botFollow(b, vis.x, vis.z, dt, now, PLAYER.speed);
       else {
         if (now >= b.strafeAt) { b.strafe = -b.strafe; b.strafeAt = now + 500 + Math.random() * 1300; }
         const back = vd < pref * 0.45 && W.cat !== 'sg' && !W.melee ? -0.7 : W.cat === 'sg' && vd > 5 ? 0.7 : 0; // 너무 가까우면 물러나고, 샷건은 붙음
         const hold = W.cat === 'sr' && b.aimT < 1.4; // 저격총은 멈춰서 조준
-        if (!hold && !botMove(b, -dz * b.strafe + dx * back, dx * b.strafe + dz * back, PLAYER.speed * 0.55, dt)) b.strafe = -b.strafe;
+        if (!hold && !botMove(b, -dz * b.strafe + dx * back, dx * b.strafe + dz * back, PLAYER.speed * 0.72, dt)) b.strafe = -b.strafe;
       }
     }
     if (now >= b.crouchAt) { b.crouchAt = now + 1500 + Math.random() * 2500; b.c = L.smart && vd > 14 && Math.random() < 0.3; }
@@ -1022,7 +1056,7 @@ function botTick(room, b, dt, now) {
       b.nadeAt = now + 6000;
       if (Math.random() < 0.5) { room.throwNade(b, 0, dirFrom(Math.atan2(-(poi.x - b.x), -(poi.z - b.z)), 0.2 + d * 0.012), now); b.nadeAt = now + 10000; }
     }
-    if (d > 2.5) { const mv = botFollow(b, poi.x, poi.z, dt, now, PLAYER.speed * 0.9); if (mv[0] || mv[1]) face(mv); else { b.lastSeen = null; b.alert = null; } }
+    if (d > 2.5) { const mv = botFollow(b, poi.x, poi.z, dt, now, PLAYER.speed * 1.05); if (mv[0] || mv[1]) { if (d < 26 && now >= b.dodgeUntil) b.yaw += clamp(angDiff(b.yaw, Math.atan2(-(poi.x - b.x), -(poi.z - b.z))), -6 * dt, 6 * dt); else face(mv); } else { b.lastSeen = null; b.alert = null; } } // 가까워지면 적이 있던 쪽을 겨누며 다가감
     else { b.lastSeen = null; b.alert = null; b.yaw += dt * 2.2; }
     return;
   }
@@ -1030,14 +1064,18 @@ function botTick(room, b, dt, now) {
   if (g) {
     const d = Math.hypot(g.x - b.x, g.z - b.z);
     let mv = [0, 0];
-    if (d > g.r) mv = botFollow(b, g.x, g.z, dt, now, PLAYER.speed * 0.85);
+    if (d > g.r) mv = botFollow(b, g.x, g.z, dt, now, PLAYER.speed * (nd > 28 ? 1.2 : 1)); // 적이 멀면 달려감
     const arrived = d <= g.r || (!mv[0] && !mv[1] && d < 1.9);
     b.acting = arrived && !!g.act;
     if (mv[0] || mv[1]) face(mv);
-    else if (!b.acting) b.yaw += Math.sin(now / 900 + b.id) * dt * 0.9; // 제자리 경계
+    else if (!b.acting) { // 자리를 잡으면 지점 쪽을 좌우로 훑어보며, 앉아서 기다림
+      if (g.look) { b.yaw += clamp(angDiff(b.yaw, Math.atan2(-(g.look[0] - b.x), -(g.look[1] - b.z)) + Math.sin(now / 1100 + b.id) * 0.75), -3 * dt, 3 * dt); b.c = L.smart; }
+      else b.yaw += Math.sin(now / 900 + b.id) * dt * 0.9;
+    }
     return;
   }
-  face(near ? botFollow(b, near.x, near.z, dt, now, PLAYER.speed * 0.8) : botFollow(b, 0, b.team ? 6 : -6, dt, now, PLAYER.speed * 0.8));
+  const rm = botRoam(b, near, now), mv = botFollow(b, rm.x, rm.z, dt, now, PLAYER.speed * (nd > 28 ? 1.2 : 1));
+  if (mv[0] || mv[1]) face(mv); else b.roam = null; // 갈 수 없는 곳이면 다른 곳을 고름
 }
 
 // 생존전 봇: 구역 안으로 이동 → 쓸 만한 아이템 줍기 → 돌아다니기
@@ -1067,7 +1105,7 @@ function brBotMove(room, b, dt, now) {
     if (g && g.k === 'loot' && !lost && Math.hypot(g.x - b.x, g.z - b.z) < 2.2) room.useLoot(b); // 더 좋은 무기로 바꿈
     b.goal = ng; b.goalAt = now + (ng.k === 'roam' ? 9000 : 14000); b.pathAt = 0;
   }
-  const mv = botFollow(b, b.goal.x, b.goal.z, dt, now, PLAYER.speed * (out ? 1.15 : 0.9));
+  const mv = botFollow(b, b.goal.x, b.goal.z, dt, now, PLAYER.speed * (out ? 1.2 : 1.05));
   if (mv[0] || mv[1]) b.yaw += clamp(angDiff(b.yaw, Math.atan2(-mv[0], -mv[1])), -5 * dt, 5 * dt);
   else b.yaw += Math.sin(now / 900 + b.id) * dt * 0.9;
   if (now >= b.stuckAt) { // 2.5초 동안 거의 못 움직였으면 다른 곳으로
