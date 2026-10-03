@@ -2,7 +2,7 @@
 import * as THREE from './vendor/three.module.js';
 import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, MAPS, setMap, BOXES, SITES, siteAt, dirFrom, rayWorld, rayPlayer, hitNormal, segHitsSphere, groundAt, waterAt, boxesNear } from './shared.js';
 import { makeGun, makeArms, initGunEnv, tickSkins, skinFx } from './guns.js';
-import { buildBody, paintTexFor, decodePaint, defaultPaint, camoPaint, initPaintEditor, paintUI } from './paint.js';
+import { buildBody, paintTex, isPaint, initPaintEditor, paintUI } from './paint.js';
 import { buildWorld, blobShadow, MOODS } from './world.js';
 
 const $ = (id) => document.getElementById(id);
@@ -82,9 +82,9 @@ function nameSprite(text, team) {
 const paints = new Map(); // 사람 id → 그림 자료(문자열)
 function paintTexOf(info) {
   const d = paints.get(info.id);
-  if (d && decodePaint(d)) return paintTexFor('p' + d, () => decodePaint(d));
-  if (info.bot) return paintTexFor('b' + info.id, () => camoPaint(info.id * 7 + 3));
-  return paintTexFor('def', defaultPaint);
+  if (isPaint(d)) return paintTex('p' + info.id + ':' + d.length + ':' + d.slice(-40), 'url', d);
+  if (info.bot) return paintTex('b' + info.id, 'camo', info.id * 7 + 3);
+  return paintTex('def');
 }
 function makeAvatar(info) {
   const g = new THREE.Group();
@@ -562,7 +562,7 @@ function onMsg(m) {
       if (mode === 'br') banner(`${MAPS[curMap].name} · 생존전`, 0xffd23f); else banner(`${MAPS[curMap].name} · ${TEAM_NAME[myTeam]}`, TEAM_COL[myTeam]);
       buildShop();
       break;
-    case 'paint': if (typeof m.d === 'string' && decodePaint(m.d)) { paints.set(m.id, m.d); const o = others.get(m.id); if (o) { o.mat.map = paintTexOf(o); o.mat.needsUpdate = true; } } break;
+    case 'paint': if (isPaint(m.d)) { paints.set(m.id, m.d); const o = others.get(m.id); if (o) { o.mat.map = paintTexOf(o); o.mat.needsUpdate = true; } } break;
     case 'full': $('menuMsg').textContent = '방이 가득 찼어요. 다른 코드를 써 주세요.'; lastJoin = null; ws.close(); break;
     case 'roster': {
       roster = m.players;
@@ -1332,7 +1332,7 @@ function join(room) {
   const name = $('name').value.trim();
   store.set('name', name);
   closeLocker();
-  lastJoin = { name, room, mode: selMode, map: $('mapSel').value, bot: +$('botLv').value, sk: mySk, codes: myCodes, paint: store.get('paint', '') };
+  lastJoin = { name, room, mode: selMode, map: $('mapSel').value, bot: +$('botLv').value, sk: mySk, codes: myCodes, paint: isPaint(store.get('paint', '')) ? store.get('paint', '') : '' };
   $('menuMsg').textContent = '접속 중…';
   if (ws) { ws.onclose = null; ws.close(); }
   connect();

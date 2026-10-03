@@ -1103,8 +1103,8 @@ function pickRoom(code, mode, want, lv) {
   return r;
 }
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8192 });
-const cleanPaint = (v) => (typeof v === 'string' && v.length === 3456 && /^[A-Za-z0-9+/=]+$/.test(v) ? v : ''); // 캐릭터 그림 (72 × 72칸, 16색)
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 72000 }); // 참가할 때 캐릭터 그림(최대 60000자)이 함께 옴
+const cleanPaint = (v) => (typeof v === 'string' && v.length > 100 && v.length <= 60000 && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(v) ? v : ''); // 캐릭터 그림 (256 × 256 압축 그림)
 wss.on('connection', (ws) => {
   let room = null, me = null, msgCount = 0, windowAt = Date.now();
   ws.isAlive = true;

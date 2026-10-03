@@ -1,1 +1,1 @@
-build 2026-10-03 09:25 UTC r6
+build 2026-10-03 10:00 UTC paint-hd
