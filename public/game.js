@@ -2,6 +2,7 @@
 import * as THREE from './vendor/three.module.js';
 import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, MAPS, setMap, BOXES, SITES, siteAt, dirFrom, rayWorld, rayPlayer, hitNormal, segHitsSphere, groundAt, waterAt, boxesNear } from './shared.js';
 import { makeGun, makeArms, initGunEnv, tickSkins, skinFx } from './guns.js';
+import { buildBody, paintTexFor, decodePaint, defaultPaint, camoPaint, initPaintEditor, paintUI } from './paint.js';
 import { buildWorld, blobShadow, MOODS } from './world.js';
 
 const $ = (id) => document.getElementById(id);
@@ -77,46 +78,25 @@ function nameSprite(text, team) {
   s.position.y = 2.2;
   return s;
 }
+// 캐릭터: 하얀 인형 몸에 저마다 그린 그림을 입힌다 (목의 띠가 팀 색). 봇은 무작위 위장 무늬
+const paints = new Map(); // 사람 id → 그림 자료(문자열)
+function paintTexOf(info) {
+  const d = paints.get(info.id);
+  if (d && decodePaint(d)) return paintTexFor('p' + d, () => decodePaint(d));
+  if (info.bot) return paintTexFor('b' + info.id, () => camoPaint(info.id * 7 + 3));
+  return paintTexFor('def', defaultPaint);
+}
 function makeAvatar(info) {
   const g = new THREE.Group();
   g.rotation.order = 'YXZ';
-  const body = new THREE.Group(); // 쓰러질 때 통째로 기울이는 부분
-  g.add(body);
   const br = info.ci !== undefined;
-  const tm = br ? brMat[info.ci] : teamMat[info.team], td = br ? brDark[info.ci] : teamDark[info.team];
-  body.add(box(0.5, 0.2, 0.3, uniMat, 0, 0.86, 0), box(0.54, 0.5, 0.3, uniMat, 0, 1.2, 0));
-  body.add(box(0.6, 0.4, 0.36, tm, 0, 1.2, 0), box(0.62, 0.07, 0.38, strapMat, 0, 0.99, 0));                 // 조끼와 벨트
-  for (const x of [-0.19, 0, 0.19]) body.add(box(0.14, 0.15, 0.07, td, x, 1.1, -0.2));                         // 탄창 주머니
-  body.add(box(0.42, 0.44, 0.18, strapMat, 0, 1.22, 0.26), box(0.3, 0.12, 0.12, td, 0, 1.5, 0.26));           // 배낭
-  for (const x of [-0.34, 0.34]) body.add(box(0.16, 0.14, 0.3, tm, x, 1.4, 0));                               // 어깨 보호대
-  const head = new THREE.Group();
-  head.position.y = 1.47;
-  head.add(box(0.14, 0.08, 0.14, skinMat, 0, 0.02, 0), box(0.3, 0.28, 0.3, skinMat, 0, 0.2, 0));
-  head.add(box(0.38, 0.17, 0.4, tm, 0, 0.36, 0.01), box(0.36, 0.035, 0.1, tm, 0, 0.29, -0.23), box(0.4, 0.06, 0.42, td, 0, 0.275, 0.01));
-  head.add(box(0.3, 0.08, 0.03, darkMat, 0, 0.21, -0.155), box(0.07, 0.16, 0.34, strapMat, 0.17, 0.17, 0.0), box(0.07, 0.16, 0.34, strapMat, -0.17, 0.17, 0.0));
-  body.add(head);
-  const legs = [-0.15, 0.15].map((x) => {
-    const l = new THREE.Group();
-    l.position.set(x, 0.78, 0);
-    l.add(box(0.21, 0.42, 0.24, uniMat, 0, -0.21, 0), box(0.19, 0.3, 0.22, uniMat, 0, -0.53, 0), box(0.2, 0.11, 0.07, strapMat, 0, -0.4, -0.13), box(0.21, 0.13, 0.33, darkMat, 0, -0.715, -0.04));
-    body.add(l);
-    return l;
-  });
-  const arms = new THREE.Group();
-  arms.position.y = 1.32;
-  const limb = (a, b, th, mat) => { // 두 점을 잇는 팔
-    const m = box(th, th, Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), mat, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
-    m.lookAt(b[0], b[1], b[2]);
-    return m;
-  };
-  arms.add(limb([0.33, 0.04, 0.02], [0.26, -0.12, -0.13], 0.14, uniMat), limb([0.26, -0.12, -0.13], [0.19, -0.1, -0.26], 0.12, uniMat), box(0.11, 0.11, 0.12, darkMat, 0.18, -0.1, -0.3));
-  arms.add(limb([-0.31, 0.04, 0], [-0.16, -0.14, -0.3], 0.14, uniMat), limb([-0.16, -0.14, -0.3], [0.08, -0.07, -0.6], 0.12, uniMat), box(0.11, 0.11, 0.12, darkMat, 0.1, -0.07, -0.63));
-  body.add(arms);
+  const { body, head, legs, arms, mat } = buildBody(paintTexOf(info), br ? brMat[info.ci] : teamMat[info.team]); // body = 쓰러질 때 통째로 기울이는 부분
+  g.add(body);
   const tag = nameSprite(info.name, br ? 0 : info.team);
   g.add(tag, blobShadow());
   g.visible = false;
   scene.add(g);
-  const av = { g, body, head, legs, arms, tag, guns: [], w: -1, c: false, cs: 1, buf: [], x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: 100, alive: false, wasAlive: false, deadT: 9, prot: false, walk: 0, stepT: 0, shotAt: 0, team: info.team, name: info.name, chute: null, ci: info.ci, id: info.id, sk: info.sk || null };
+  const av = { g, body, head, legs, arms, tag, mat, bot: !!info.bot, guns: [], w: -1, c: false, cs: 1, buf: [], x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: 100, alive: false, wasAlive: false, deadT: 9, prot: false, walk: 0, stepT: 0, shotAt: 0, team: info.team, name: info.name, chute: null, ci: info.ci, id: info.id, sk: info.sk || null };
   holdGun(av, W_PISTOL);
   return av;
 }
@@ -554,7 +534,7 @@ function canAct() {
 function send(m) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-  ws.onopen = () => { timeOff = null; send({ t: 'join', name: lastJoin.name, room: lastJoin.room, mode: lastJoin.mode, map: lastJoin.map, bot: lastJoin.bot, sk: lastJoin.sk, codes: lastJoin.codes }); };
+  ws.onopen = () => { timeOff = null; send({ t: 'join', name: lastJoin.name, room: lastJoin.room, mode: lastJoin.mode, map: lastJoin.map, bot: lastJoin.bot, sk: lastJoin.sk, codes: lastJoin.codes, paint: lastJoin.paint || undefined }); };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } onMsg(m); };
   ws.onclose = () => {
     if (!lastJoin) return;
@@ -582,6 +562,7 @@ function onMsg(m) {
       if (mode === 'br') banner(`${MAPS[curMap].name} · 생존전`, 0xffd23f); else banner(`${MAPS[curMap].name} · ${TEAM_NAME[myTeam]}`, TEAM_COL[myTeam]);
       buildShop();
       break;
+    case 'paint': if (typeof m.d === 'string' && decodePaint(m.d)) { paints.set(m.id, m.d); const o = others.get(m.id); if (o) { o.mat.map = paintTexOf(o); o.mat.needsUpdate = true; } } break;
     case 'full': $('menuMsg').textContent = '방이 가득 찼어요. 다른 코드를 써 주세요.'; lastJoin = null; ws.close(); break;
     case 'roster': {
       roster = m.players;
@@ -597,7 +578,7 @@ function onMsg(m) {
           continue;
         }
         const o = others.get(p.id), tm = mode === 'br' ? 1 : p.team; // 생존전에서는 나 말고 모두 적
-        if (!o || o.team !== tm || o.name !== p.name) { if (o) scene.remove(o.g); others.set(p.id, makeAvatar(mode === 'br' ? { id: p.id, name: p.name, team: 1, ci: p.id % BR_COL.length, sk: p.sk } : p)); }
+        if (!o || o.team !== tm || o.name !== p.name) { if (o) scene.remove(o.g); others.set(p.id, makeAvatar(mode === 'br' ? { id: p.id, name: p.name, team: 1, ci: p.id % BR_COL.length, sk: p.sk, bot: p.bot } : p)); }
       }
       if (!$('board').classList.contains('hide')) drawBoard();
       break;
@@ -1345,12 +1326,13 @@ window.addEventListener('blur', () => { keys.clear(); input.fire = false; });
 
 // 메뉴
 function join(room) {
+  if (!store.get('paintSeen', '')) { pendingJoin = room; openPaint('이대로 시작'); return; } // 처음 시작할 때는 캐릭터부터 그림
   initAudio();
   if (isTouch) goFullscreen(false);
   const name = $('name').value.trim();
   store.set('name', name);
   closeLocker();
-  lastJoin = { name, room, mode: selMode, map: $('mapSel').value, bot: +$('botLv').value, sk: mySk, codes: myCodes };
+  lastJoin = { name, room, mode: selMode, map: $('mapSel').value, bot: +$('botLv').value, sk: mySk, codes: myCodes, paint: store.get('paint', '') };
   $('menuMsg').textContent = '접속 중…';
   if (ws) { ws.onclose = null; ws.close(); }
   connect();
@@ -1366,6 +1348,24 @@ $('modeBomb').onclick = () => setMode('bomb'); $('modeTdm').onclick = () => setM
 $('mapSel').value = store.get('map', '');
 setMode(selMode);
 $('quick').onclick = () => join('');
+// 캐릭터 그리기: 메뉴의 [캐릭터 그리기], 그리고 처음 시작할 때 한 번
+let pendingJoin = null, pvAv = null;
+const pvGroup = new THREE.Group(); pvGroup.visible = false; vmScene.add(pvGroup);
+const paintEd = initPaintEditor($, () => store.get('paint', ''), (data) => {
+  if (data) store.set('paint', data);
+  store.set('paintSeen', '1'); pvGroup.visible = false;
+  if (!joined) $('menu').classList.remove('hide');
+  if (pendingJoin !== null) { const r = pendingJoin; pendingJoin = null; join(r); }
+});
+function openPaint(label) {
+  if (joined) return;
+  closeLocker();
+  if (!pvAv) { pvAv = { ...buildBody(paintUI.tex, teamMat[1]), guns: [], w: -1, sk: mySk }; pvGroup.add(pvAv.body); holdGun(pvAv, 13); }
+  $('menu').classList.add('hide'); paintEd.open(label);
+}
+$('openPaint').onclick = () => { pendingJoin = null; openPaint('완료'); };
+$('ptX').onclick = () => { pendingJoin = null; paintEd.close(); };
+document.addEventListener('keydown', (e) => { if (e.code === 'Escape' && paintUI.open) { pendingJoin = null; paintEd.close(); } });
 // 방 목록: 메뉴가 떠 있는 동안 몇 초마다 새로 받아 온다. 누르면 그 방으로 들어감
 const MODE_NAME = { bomb: '폭탄전', tdm: '데스매치', br: '생존전' };
 let roomBusy = false;
@@ -1683,6 +1683,16 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
+  if (!joined && paintUI.open) { // 캐릭터 그리기: 오른쪽에 그린 그림을 입은 캐릭터를 돌려 보여 줌
+    const r = $('ptPrev').getBoundingClientRect(), asp = vmCam.aspect;
+    const d = Math.min(9, Math.max(2.1 / (1.108 * Math.max(0.2, r.height / window.innerHeight)), 1.05 / (1.108 * asp * Math.max(0.08, r.width / window.innerWidth))));
+    if (!paintUI.drag) paintUI.yaw = now / 1400;
+    pvGroup.position.set((((r.left + r.right) / 2 / window.innerWidth) * 2 - 1) * 0.554 * d * asp, -(((r.top + r.bottom) / 2 / window.innerHeight) * 2 - 1) * 0.554 * d - 0.95, -d);
+    pvGroup.rotation.y = paintUI.yaw;
+    pvGroup.visible = true; vm.visible = false; lkGroup.visible = false;
+    renderer.setClearColor(0x161a21, 1); renderer.clear(); renderer.render(vmScene, vmCam);
+    return;
+  }
   if (!joined && lockerOpen) { // 무기고: 어두운 배경에 총만 크게
     lkBuild();
     const r = $('lkMid').getBoundingClientRect(), asp = vmCam.aspect, wf = Math.max(0.2, r.width / window.innerWidth);

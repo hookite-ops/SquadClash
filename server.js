@@ -1103,7 +1103,8 @@ function pickRoom(code, mode, want, lv) {
   return r;
 }
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8192 });
+const cleanPaint = (v) => (typeof v === 'string' && v.length === 3456 && /^[A-Za-z0-9+/=]+$/.test(v) ? v : ''); // 캐릭터 그림 (72 × 72칸, 16색)
 wss.on('connection', (ws) => {
   let room = null, me = null, msgCount = 0, windowAt = Date.now();
   ws.isAlive = true;
@@ -1126,6 +1127,9 @@ wss.on('connection', (ws) => {
       me = room.addPlayer(cleanName(m.name), ws, team, false);
       if (room.mode === 'br') me.team = me.id; // 생존전은 모두가 적
       me.sk = cleanSkins(m.sk, skinsFor(m.codes)); // 가진 스킨만 인정
+      me.paint = cleanPaint(m.paint);
+      for (const p of room.players.values()) if (p !== me && p.paint) room.send(me, { t: 'paint', id: p.id, d: p.paint }); // 먼저 있던 사람들의 그림
+      if (me.paint) room.broadcast({ t: 'paint', id: me.id, d: me.paint }, me);
       room.send(me, { t: 'welcome', id: me.id, team, code: room.code, pub: room.isPublic, mode: room.mode, map: room.map, botLv: room.botLv, sk: me.sk, attack: room.attack, limit: room.mode === 'bomb' ? ROUNDS_WIN : KILL_LIMIT });
       room.balanceBots();
       room.send(me, room.roster());
