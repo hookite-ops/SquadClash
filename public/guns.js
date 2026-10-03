@@ -1,0 +1,1144 @@
+// 무기 18종을 코드로 모델링 — 옆모습 윤곽을 그려 두께를 주고(모서리 둥글림), 총열·조준경은 원통으로 만듦
+// 좌표: 앞 = -Z, 위 = +Y, 원점 = 총열 중심선 위·방아쇠 근처. 단위 m.
+// 질감·요철·반사는 전부 코드로 그린다. 무료 스킨은 재질만, 코드로 여는 스킨은 형태(키트)까지 바뀐다.
+import * as THREE from './vendor/three.module.js';
+import { WEAPONS, SKINS } from './shared.js';
+
+// ───────────── 질감 도구 ─────────────
+const rnd = (() => { let s = 4242; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); })();
+function canvas(s, draw) { const c = document.createElement('canvas'); c.width = c.height = s; draw(c.getContext('2d'), s); return c; }
+function texOf(c, srgb, rep = 1) {
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 4;
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+// 밝기를 높이로 보고 요철(노멀) 지도를 만든다
+function normalOf(c, k, rep = 1) {
+  const s = c.width, src = c.getContext('2d').getImageData(0, 0, s, s).data;
+  const out = canvas(s, (g) => {
+    const img = g.createImageData(s, s), d = img.data;
+    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+      const h = (xx, yy) => src[(((yy + s) % s) * s + ((xx + s) % s)) * 4] / 255;
+      let nx = (h(x - 1, y) - h(x + 1, y)) * k, ny = (h(x, y + 1) - h(x, y - 1)) * k, nz = 1;
+      const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+      const o = (y * s + x) * 4; d[o] = (nx * 0.5 + 0.5) * 255; d[o + 1] = (ny * 0.5 + 0.5) * 255; d[o + 2] = (nz * 0.5 + 0.5) * 255; d[o + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+  return texOf(out, false, rep);
+}
+// 무늬가 이어지도록 가장자리를 넘겨 9번 그림
+function wrap(g, s, fn) { for (const dx of [-s, 0, s]) for (const dy of [-s, 0, s]) { g.save(); g.translate(dx, dy); fn(); g.restore(); } }
+
+const H = {
+  brushed: () => canvas(256, (g, s) => { g.fillStyle = '#808080'; g.fillRect(0, 0, s, s); for (let i = 0; i < 1400; i++) { const v = 90 + rnd() * 80 | 0; g.fillStyle = `rgba(${v},${v},${v},.5)`; g.fillRect(rnd() * s - 40, rnd() * s, 20 + rnd() * 90, 1); } }),
+  stipple: () => canvas(128, (g, s) => { g.fillStyle = '#707070'; g.fillRect(0, 0, s, s); for (let i = 0; i < 700; i++) { const v = rnd() < 0.5 ? 30 : 220; g.fillStyle = `rgb(${v},${v},${v})`; g.beginPath(); g.arc(rnd() * s, rnd() * s, 1.2 + rnd() * 1.6, 0, 7); g.fill(); } }),
+  wood: () => canvas(256, (g, s) => {
+    const lg = g.createLinearGradient(0, 0, 0, s); lg.addColorStop(0, '#8a5226'); lg.addColorStop(0.5, '#a5652f'); lg.addColorStop(1, '#7c4720'); g.fillStyle = lg; g.fillRect(0, 0, s, s);
+    wrap(g, s, () => { for (let i = 0; i < 46; i++) { const y = rnd() * s; g.strokeStyle = `rgba(${50 + rnd() * 40 | 0},${24 + rnd() * 20 | 0},8,${0.25 + rnd() * 0.4})`; g.lineWidth = 0.6 + rnd() * 2.2; g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(s * 0.3, y + (rnd() - 0.5) * 22, s * 0.7, y + (rnd() - 0.5) * 22, s, y); g.stroke(); } });
+    for (let i = 0; i < 5; i++) { const x = rnd() * s, y = rnd() * s; for (let r = 9; r > 1; r -= 2) { g.strokeStyle = 'rgba(55,26,8,.35)'; g.lineWidth = 1; g.beginPath(); g.ellipse(x, y, r * 2.2, r, 0, 0, 7); g.stroke(); } }
+  }),
+};
+const TEXC = {};
+const T = (k, f) => TEXC[k] || (TEXC[k] = f());
+
+// ───────────── 재질 ─────────────
+const allMats = new Set();
+let ENV = null;
+function std(o) { const m = new THREE.MeshStandardMaterial(o); if (ENV) m.envMap = ENV; m.envMapIntensity = 1.35; allMats.add(m); return m; }
+// 총에 비칠 주변 풍경(밝은 하늘, 어두운 땅, 조명판 몇 개)을 작게 만들어 반사에 쓴다
+export function initGunEnv(renderer) {
+  const sc = new THREE.Scene();
+  const sky = canvas(256, (g, s) => { const lg = g.createLinearGradient(0, 0, 0, s); lg.addColorStop(0, '#dfeeff'); lg.addColorStop(0.45, '#9fc4ee'); lg.addColorStop(0.5, '#e8e2d2'); lg.addColorStop(0.56, '#5a5448'); lg.addColorStop(1, '#2a2824'); g.fillStyle = lg; g.fillRect(0, 0, s, s); });
+  const st = new THREE.CanvasTexture(sky); st.colorSpace = THREE.SRGBColorSpace;
+  sc.add(new THREE.Mesh(new THREE.SphereGeometry(20, 24, 12), new THREE.MeshBasicMaterial({ map: st, side: THREE.BackSide })));
+  const panel = (x, y, z, w, h, v) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(v, v, v * 0.95), side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); sc.add(m); };
+  panel(-8, 9, 6, 9, 5, 7); panel(9, 6, -4, 6, 6, 4); panel(0, 12, -9, 12, 3, 5); panel(-10, 2, -8, 3, 8, 2.5);
+  const pm = new THREE.PMREMGenerator(renderer);
+  ENV = pm.fromScene(sc, 0.035).texture;
+  pm.dispose(); st.dispose();
+  for (const m of allMats) { m.envMap = ENV; m.needsUpdate = true; }
+}
+
+// 스킨과 상관없이 같은 재질
+const FIX = {
+  rubber: std({ color: 0x0f1012, metalness: 0, roughness: 0.95 }),
+  dark: std({ color: 0x08090a, metalness: 0, roughness: 1 }),
+  glass: std({ color: 0x1d4f86, metalness: 0.6, roughness: 0.08, emissive: 0x0a2440 }),
+  lens: new THREE.MeshStandardMaterial({ color: 0x6fd0ff, metalness: 0.3, roughness: 0.05, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
+  brass: std({ color: 0xc9a04a, metalness: 1, roughness: 0.3 }),
+  glove: std({ color: 0x22252a, metalness: 0, roughness: 0.9 }),
+  gloveHard: std({ color: 0x15171a, metalness: 0.1, roughness: 0.6 }),
+  dot: new THREE.MeshBasicMaterial({ color: 0xff3b30 }),
+  white: new THREE.MeshBasicMaterial({ color: 0xf2f2ee }),
+  reticle: new THREE.MeshBasicMaterial({ map: (() => texOf(canvas(64, (g) => { g.strokeStyle = '#ff4030'; g.lineWidth = 3; g.beginPath(); g.arc(32, 32, 20, 0, 7); g.stroke(); g.fillStyle = '#ff4030'; g.beginPath(); g.arc(32, 32, 3.5, 0, 7); g.fill(); for (const [x, y, w, h] of [[30.5, 4, 3, 10], [30.5, 50, 3, 10], [4, 30.5, 10, 3], [50, 30.5, 10, 3]]) g.fillRect(x, y, w, h); }), true))(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+};
+allMats.delete(FIX.lens);
+
+// 스킨마다 바뀌는 재질: recv 몸통, steel 총열, bolt 밝은 쇠, slide 권총 윗몸, poly 손잡이, mag 탄창, 나무·색 부품, accent 포인트
+function baseMats() {
+  const br = () => T('nBrushed', () => normalOf(H.brushed(), 0.6, 3)), sp = () => T('nStipple', () => normalOf(H.stipple(), 1.4, 9));
+  const wood = () => T('wood', () => texOf(H.wood(), true, 2)), woodN = () => T('nWood', () => normalOf(H.wood(), 1.2, 2));
+  const ns = new THREE.Vector2(0.35, 0.35);
+  return {
+    recv: std({ color: 0x3d424b, metalness: 0.78, roughness: 0.38, normalMap: br(), normalScale: ns }),
+    steel: std({ color: 0x2e3238, metalness: 0.92, roughness: 0.3, normalMap: br(), normalScale: ns }),
+    bolt: std({ color: 0xc2c7ce, metalness: 1, roughness: 0.22 }),
+    slide: std({ color: 0x8d949c, metalness: 0.9, roughness: 0.3, normalMap: br(), normalScale: ns }),
+    poly: std({ color: 0x2b2e33, metalness: 0, roughness: 0.84, normalMap: sp(), normalScale: new THREE.Vector2(0.5, 0.5) }),
+    furn: std({ color: 0x33373d, metalness: 0.05, roughness: 0.74, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
+    mag: std({ color: 0x444a52, metalness: 0.6, roughness: 0.45 }),
+    wood: std({ color: 0xffffff, map: wood(), metalness: 0, roughness: 0.42, normalMap: woodN(), normalScale: new THREE.Vector2(0.4, 0.4) }),
+    woodDark: std({ color: 0x9a8a80, map: wood(), metalness: 0, roughness: 0.5, normalMap: woodN(), normalScale: new THREE.Vector2(0.4, 0.4) }),
+    olive: std({ color: 0x5c6647, metalness: 0.05, roughness: 0.78, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
+    tan: std({ color: 0xb29868, metalness: 0.05, roughness: 0.76, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
+    gray: std({ color: 0x7a828b, metalness: 0.25, roughness: 0.6, normalMap: br(), normalScale: ns }),
+    accent: std({ color: 0xc8372d, metalness: 0.2, roughness: 0.5 }),
+  };
+}
+
+// ───────────── 스킨 무늬 (512 × 512, 0.5m 마다 반복) ─────────────
+const blob = (g, x, y, r, col) => { g.fillStyle = col; g.beginPath(); for (let i = 0; i < 9; i++) { const a = (i / 9) * 6.283, rr = r * (0.6 + rnd() * 0.6); g[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.7); } g.closePath(); g.fill(); };
+const PAT = {
+  forest: (g, s) => { g.fillStyle = '#4c5a36'; g.fillRect(0, 0, s, s); wrap(g, s, () => { for (let i = 0; i < 26; i++) blob(g, rnd() * s, rnd() * s, 26 + rnd() * 44, ['#2f3a24', '#6d7248', '#3b2f22', '#7f8a5a'][i % 4]); }); },
+  gold: (g, s) => { // 금판에 새긴 덩굴무늬
+    g.fillStyle = '#d8a93a'; g.fillRect(0, 0, s, s);
+    wrap(g, s, () => { g.lineCap = 'round'; for (let i = 0; i < 26; i++) { let x = rnd() * s, y = rnd() * s, a = rnd() * 6.28; g.strokeStyle = i % 3 ? 'rgba(120,78,10,.75)' : 'rgba(255,238,170,.8)'; g.lineWidth = 2 + rnd() * 2.5; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 26; k++) { a += 0.34 + k * 0.012; x += Math.cos(a) * 7; y += Math.sin(a) * 7; g.lineTo(x, y); } g.stroke(); } });
+  },
+  neon: (g, s, em) => { // 검은 판에 흐르는 회로
+    g.fillStyle = em ? '#000' : '#0b0e14'; g.fillRect(0, 0, s, s);
+    const seed = [];
+    for (let i = 0; i < 34; i++) seed.push([Math.round(rnd() * 16) * 32, Math.round(rnd() * 16) * 32, rnd() < 0.5, 2 + Math.floor(rnd() * 5), i % 3]);
+    wrap(g, s, () => { g.lineWidth = em ? 4 : 3; g.lineCap = 'square'; for (const [x, y, hz, n, c] of seed) { g.strokeStyle = ['#19e3ff', '#ff3df0', '#7dff5a'][c]; g.beginPath(); g.moveTo(x, y); let px = x, py = y; for (let k = 0; k < n; k++) { if ((k % 2 === 0) === hz) px += 64; else py += 32; g.lineTo(px, py); } g.stroke(); g.fillStyle = g.strokeStyle; g.fillRect(px - 5, py - 5, 10, 10); } });
+  },
+  lava: (g, s, em) => { // 갈라진 바위 틈의 용암
+    g.fillStyle = em ? '#000' : '#17110f'; g.fillRect(0, 0, s, s);
+    if (!em) for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${40 + rnd() * 30 | 0},${28 + rnd() * 16 | 0},22,.5)`; g.fillRect(rnd() * s, rnd() * s, 2 + rnd() * 5, 2 + rnd() * 5); }
+    const cr = []; for (let i = 0; i < 20; i++) { const p = [[rnd() * s, rnd() * s]]; let a = rnd() * 6.28; for (let k = 0; k < 9; k++) { a += (rnd() - 0.5) * 1.5; const q = p[p.length - 1]; p.push([q[0] + Math.cos(a) * 26, q[1] + Math.sin(a) * 26]); } cr.push(p); }
+    wrap(g, s, () => { for (const [w, col] of em ? [[9, 'rgba(255,90,0,.5)'], [3.5, '#ffd27a']] : [[9, '#7a1f06'], [4, '#ff7a1a'], [1.6, '#ffe9a8']]) { g.strokeStyle = col; g.lineWidth = w; g.lineJoin = 'round'; for (const p of cr) { g.beginPath(); p.forEach((q, i) => g[i ? 'lineTo' : 'moveTo'](q[0], q[1])); g.stroke(); } } });
+  },
+  ice: (g, s) => { // 얼음 결정
+    const lg = g.createLinearGradient(0, 0, s, s); lg.addColorStop(0, '#bfeaff'); lg.addColorStop(0.5, '#6fb7ea'); lg.addColorStop(1, '#cdf3ff'); g.fillStyle = lg; g.fillRect(0, 0, s, s);
+    wrap(g, s, () => { for (let i = 0; i < 60; i++) { const x = rnd() * s, y = rnd() * s, r = 14 + rnd() * 46, a = rnd() * 6.28; g.fillStyle = `rgba(${200 + rnd() * 55 | 0},${235 + rnd() * 20 | 0},255,${0.12 + rnd() * 0.3})`; g.beginPath(); g.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r); g.lineTo(x + Math.cos(a + 2.2) * r * 0.5, y + Math.sin(a + 2.2) * r * 0.5); g.lineTo(x + Math.cos(a + 3.6) * r * 0.9, y + Math.sin(a + 3.6) * r * 0.9); g.closePath(); g.fill(); g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1; g.stroke(); } });
+  },
+  galaxy: (g, s, em) => { // 성운과 별
+    g.fillStyle = em ? '#000' : '#0a0822'; g.fillRect(0, 0, s, s);
+    wrap(g, s, () => { for (let i = 0; i < 16; i++) { const x = rnd() * s, y = rnd() * s, r = 50 + rnd() * 90, rg = g.createRadialGradient(x, y, 0, x, y, r); const c = ['120,60,255', '255,70,190', '40,150,255', '70,30,160'][i % 4]; rg.addColorStop(0, `rgba(${c},${em ? 0.3 : 0.55})`); rg.addColorStop(1, `rgba(${c},0)`); g.fillStyle = rg; g.fillRect(x - r, y - r, r * 2, r * 2); }
+      for (let i = 0; i < 150; i++) { const r = rnd() < 0.08 ? 2.2 : 0.9; g.fillStyle = `rgba(255,255,255,${0.5 + rnd() * 0.5})`; g.beginPath(); g.arc(rnd() * s, rnd() * s, r, 0, 7); g.fill(); } });
+  },
+  tiger: (g, s) => { // 호랑이 줄무늬
+    const lg = g.createLinearGradient(0, 0, 0, s); lg.addColorStop(0, '#f08a1c'); lg.addColorStop(0.55, '#f6a12a'); lg.addColorStop(1, '#f7e3c0'); g.fillStyle = lg; g.fillRect(0, 0, s, s);
+    wrap(g, s, () => { g.fillStyle = '#17110c'; for (let i = 0; i < 22; i++) { const x = i * (s / 22) + (rnd() - 0.5) * 10, y0 = rnd() * s * 0.5, len = s * (0.3 + rnd() * 0.45), w = 6 + rnd() * 9; g.beginPath(); g.moveTo(x, y0); g.bezierCurveTo(x + w * 1.6, y0 + len * 0.3, x - w * 1.4, y0 + len * 0.6, x + (rnd() - 0.5) * 20, y0 + len); g.bezierCurveTo(x - w * 0.6, y0 + len * 0.6, x + w * 0.4, y0 + len * 0.3, x, y0); g.fill(); } });
+  },
+  carbon: (g, s) => { // 탄소 섬유 짜임
+    g.fillStyle = '#121316'; g.fillRect(0, 0, s, s);
+    const c = 8; for (let y = 0; y < s / c; y++) for (let x = 0; x < s / c; x++) { const up = (x + y) % 2 === 0, lg = up ? g.createLinearGradient(x * c, 0, x * c + c, 0) : g.createLinearGradient(0, y * c, 0, y * c + c); lg.addColorStop(0, '#16181c'); lg.addColorStop(0.5, '#4a4f58'); lg.addColorStop(1, '#16181c'); g.fillStyle = lg; g.fillRect(x * c + 1, y * c + 1, c - 2, c - 2); }
+    g.fillStyle = '#d3202a'; g.fillRect(0, s * 0.47, s, 10); g.fillStyle = '#f2f2ee'; g.fillRect(0, s * 0.47 + 14, s, 3);
+  },
+  sakura: (g, s) => { // 벚꽃
+    const lg = g.createLinearGradient(0, 0, s, s); lg.addColorStop(0, '#ffd3e2'); lg.addColorStop(1, '#f291b4'); g.fillStyle = lg; g.fillRect(0, 0, s, s);
+    wrap(g, s, () => { g.strokeStyle = '#5a3a34'; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); g.moveTo(0, s * 0.8); g.bezierCurveTo(s * 0.3, s * 0.6, s * 0.6, s * 0.75, s, s * 0.5); g.stroke(); g.lineWidth = 3; g.beginPath(); g.moveTo(s * 0.4, s * 0.68); g.lineTo(s * 0.52, s * 0.42); g.stroke();
+      for (let i = 0; i < 44; i++) { const x = rnd() * s, y = rnd() * s, r = 9 + rnd() * 12, rot = rnd() * 6.28; for (let p = 0; p < 5; p++) { const a = rot + (p / 5) * 6.283; g.fillStyle = i % 3 ? '#ffffff' : '#ffe1ec'; g.beginPath(); g.ellipse(x + Math.cos(a) * r * 0.6, y + Math.sin(a) * r * 0.6, r * 0.55, r * 0.34, a, 0, 7); g.fill(); } g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(x, y, r * 0.2, 0, 7); g.fill(); } });
+  },
+  aurora: (g, s) => { // 무지개빛 물결
+    for (let x = 0; x < s; x++) { g.fillStyle = `hsl(${(x / s) * 360},85%,62%)`; g.fillRect(x, 0, 1, s); }
+    wrap(g, s, () => { for (let i = 0; i < 12; i++) { const y = rnd() * s; g.strokeStyle = `rgba(255,255,255,${0.15 + rnd() * 0.25})`; g.lineWidth = 6 + rnd() * 18; g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(s * 0.3, y - 60, s * 0.7, y + 60, s, y); g.stroke(); } });
+  },
+  halloween: (g, s, em) => { // 보랏빛 밤에 호박등·박쥐·거미줄 (em = 빛나는 얼굴만)
+    if (em) { g.fillStyle = '#000'; g.fillRect(0, 0, s, s); } else { const lg = g.createLinearGradient(0, 0, s, s); lg.addColorStop(0, '#1b1026'); lg.addColorStop(0.5, '#2e1646'); lg.addColorStop(1, '#140c1c'); g.fillStyle = lg; g.fillRect(0, 0, s, s); }
+    const P = [], Bt = [], el = (x, y, rx, ry) => { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 7); g.fill(); }, poly = (pts) => { g.beginPath(); pts.forEach((q, i) => g[i ? 'lineTo' : 'moveTo'](q[0], q[1])); g.closePath(); g.fill(); };
+    for (let i = 0; i < 9; i++) P.push([((i % 3) + 0.2 + kr(i * 3 + 1) * 0.6) * s / 3, (Math.floor(i / 3) + 0.2 + kr(i * 3 + 2) * 0.6) * s / 3, 26 + kr(i * 3 + 3) * 16, (kr(i + 50) - 0.5) * 0.6]);
+    for (let i = 0; i < 11; i++) Bt.push([kr(i * 5 + 101) * s, kr(i * 5 + 102) * s, 0.9 + kr(i * 5 + 103) * 1.1, (kr(i + 150) - 0.5) * 0.8]);
+    wrap(g, s, () => {
+      if (!em) {
+        g.strokeStyle = 'rgba(214,204,236,.2)'; g.lineWidth = 1.5;
+        for (const [cx, cy] of [[s * 0.12, s * 0.18], [s * 0.72, s * 0.66]]) {
+          for (let a = 0; a < 8; a++) { g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a * 0.7854) * 120, cy + Math.sin(a * 0.7854) * 120); g.stroke(); }
+          for (let r = 26; r <= 116; r += 30) { g.beginPath(); for (let a = 0; a <= 8; a++) { const x = cx + Math.cos(a * 0.7854) * r, y = cy + Math.sin(a * 0.7854) * r; if (a) g.quadraticCurveTo(cx + Math.cos((a - 0.5) * 0.7854) * r * 0.8, cy + Math.sin((a - 0.5) * 0.7854) * r * 0.8, x, y); else g.moveTo(x, y); } g.stroke(); }
+        }
+        g.fillStyle = '#07050a';
+        for (const [x, y, k, rot] of Bt) { g.save(); g.translate(x, y); g.rotate(rot); g.scale(k, k); poly([[0, -2], [-2, -6], [-3.5, -2], [-9, -5], [-16, -1], [-12, 0], [-9, 3], [-6, 1], [-3, 5], [0, 2], [3, 5], [6, 1], [9, 3], [12, 0], [16, -1], [9, -5], [3.5, -2], [2, -6]]); g.restore(); }
+      }
+      for (const [x, y, r, rot] of P) {
+        g.save(); g.translate(x, y); g.rotate(rot);
+        if (!em) { g.fillStyle = '#4d6b2a'; g.fillRect(-r * 0.1, -r * 1.02, r * 0.2, r * 0.34); g.fillStyle = '#c4560a'; el(-r * 0.46, 0, r * 0.52, r * 0.74); el(r * 0.46, 0, r * 0.52, r * 0.74); g.fillStyle = '#f07a12'; el(0, 0, r * 0.6, r * 0.8); }
+        g.fillStyle = em ? '#ffae2e' : '#ffe27a';
+        for (const m of [-1, 1]) poly([[m * r * 0.5, -r * 0.08], [m * r * 0.14, -r * 0.08], [m * r * 0.3, -r * 0.42]]);
+        poly([[-r * 0.08, r * 0.1], [r * 0.08, r * 0.1], [0, -r * 0.04]]);
+        poly([[-r * 0.58, r * 0.2], [-r * 0.36, r * 0.32], [-r * 0.18, r * 0.2], [0, r * 0.34], [r * 0.18, r * 0.2], [r * 0.36, r * 0.32], [r * 0.58, r * 0.2], [r * 0.36, r * 0.56], [r * 0.12, r * 0.5], [0, r * 0.62], [-r * 0.12, r * 0.5], [-r * 0.36, r * 0.56]]);
+        g.restore();
+      }
+    });
+  },
+};
+// 스킨별 재질: body = 몸통 무늬, grip = 손잡이, metal = 총열, bolt, accent. anim = 매 프레임 움직임
+const SKIN_DEF = {
+  desert: () => { const flat = (c) => ({ color: c, metalness: 0.08, roughness: 0.7 }); return { body: flat(0xb89f72), body2: flat(0x8d7a56), grip: { color: 0x3a3630, roughness: 0.85 }, metal: { color: 0x4a443a, metalness: 0.7, roughness: 0.5 } }; },
+  forest: () => { const m = texOf(canvas(512, PAT.forest), true); return { body: { color: 0xffffff, map: m, metalness: 0.05, roughness: 0.75 }, grip: { color: 0x2c3024, roughness: 0.85 }, metal: { color: 0x2b2e28, metalness: 0.8, roughness: 0.45 } }; },
+  gold: () => { const c = canvas(512, PAT.gold); return { body: { color: 0xffffff, map: texOf(c, true), normalMap: normalOf(c, 1.6), metalness: 1, roughness: 0.2 }, grip: { color: 0x1a1612, metalness: 0.2, roughness: 0.6 }, metal: { color: 0xf0c45a, metalness: 1, roughness: 0.16 }, bolt: { color: 0xfff0b8, metalness: 1, roughness: 0.1 }, accent: { color: 0x1a1612 }, envI: 1.5 }; },
+  neon: () => { const mp = texOf(canvas(512, PAT.neon), true); return { body: { color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: mp, emissiveIntensity: 1.1, metalness: 0.6, roughness: 0.35 }, grip: { color: 0x0b0e14, roughness: 0.7 }, metal: { color: 0x10141c, metalness: 0.9, roughness: 0.3 }, bolt: { color: 0x19e3ff, emissive: 0x19e3ff, emissiveIntensity: 0.8 }, accent: { color: 0xff3df0, emissive: 0xff3df0, emissiveIntensity: 1 }, anim: (m, t) => { m.body.emissiveIntensity = 0.75 + Math.sin(t * 3) * 0.45; } }; },
+  lava: () => { const c = canvas(512, PAT.lava); return { body: { color: 0xffffff, map: texOf(c, true), emissive: 0xff6a10, emissiveMap: texOf(c, true), emissiveIntensity: 1.2, normalMap: normalOf(c, 1.2), metalness: 0.2, roughness: 0.8 }, grip: { color: 0x17110f, roughness: 0.9 }, metal: { color: 0x2a1a14, metalness: 0.8, roughness: 0.4 }, bolt: { color: 0xff8a2a, emissive: 0xff5a00, emissiveIntensity: 0.9 }, accent: { color: 0xffd27a, emissive: 0xff7a1a, emissiveIntensity: 1 }, anim: (m, t) => { m.body.emissiveIntensity = 0.9 + Math.sin(t * 1.7) * 0.5 + Math.sin(t * 5.3) * 0.12; } }; },
+  ice: () => { const c = canvas(512, PAT.ice); return { body: { color: 0xffffff, map: texOf(c, true), normalMap: normalOf(c, 1.4), metalness: 0.45, roughness: 0.12 }, grip: { color: 0x2a4a66, roughness: 0.5 }, metal: { color: 0xd8f1ff, metalness: 0.9, roughness: 0.12 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.08 }, accent: { color: 0x2f8fff }, envI: 1.5 }; },
+  galaxy: () => { const mp = texOf(canvas(512, PAT.galaxy), true); return { body: { color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: mp, emissiveIntensity: 0.55, metalness: 0.5, roughness: 0.3 }, grip: { color: 0x120e2c, roughness: 0.6 }, metal: { color: 0x2a1f5e, metalness: 0.95, roughness: 0.25 }, bolt: { color: 0xc59bff, metalness: 1, roughness: 0.15 }, accent: { color: 0xff46be, emissive: 0xff46be, emissiveIntensity: 0.8 }, anim: (m, t) => { mp.offset.x = t * 0.03; mp.offset.y = t * 0.012; } }; },
+  tiger: () => ({ body: { color: 0xffffff, map: texOf(canvas(512, PAT.tiger), true), metalness: 0.15, roughness: 0.5 }, grip: { color: 0x17110c, roughness: 0.8 }, metal: { color: 0x1a1512, metalness: 0.85, roughness: 0.35 }, accent: { color: 0xf7e3c0 } }),
+  carbon: () => { const c = canvas(512, PAT.carbon); return { body: { color: 0xffffff, map: texOf(c, true), normalMap: normalOf(c, 0.8), metalness: 0.55, roughness: 0.32 }, grip: { color: 0x121316, roughness: 0.7 }, metal: { color: 0xb0161e, metalness: 0.9, roughness: 0.28 }, bolt: { color: 0xe0282f, metalness: 1, roughness: 0.2 }, accent: { color: 0xf2f2ee }, envI: 1.3 }; },
+  sakura: () => ({ body: { color: 0xffffff, map: texOf(canvas(512, PAT.sakura), true), metalness: 0.1, roughness: 0.45 }, grip: { color: 0x4a2f3a, roughness: 0.7 }, metal: { color: 0xf2c4d2, metalness: 0.85, roughness: 0.25 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.15 }, accent: { color: 0xff5f95 } }),
+  aurora: () => { const mp = texOf(canvas(512, PAT.aurora), true); return { body: { color: 0xffffff, map: mp, metalness: 1, roughness: 0.14 }, grip: { color: 0x1a1c22, metalness: 0.4, roughness: 0.4 }, metal: { color: 0xe9edf2, metalness: 1, roughness: 0.08 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.05 }, accent: { color: 0xffffff }, envI: 1.7, anim: (m, t) => { mp.offset.x = t * 0.12; } }; },
+  halloween: () => { const mp = texOf(canvas(512, (g, s) => PAT.halloween(g, s, false)), true), em = texOf(canvas(512, (g, s) => PAT.halloween(g, s, true)), true); return { body: { color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.1, metalness: 0.2, roughness: 0.55 }, grip: { color: 0x1a1220, roughness: 0.8 }, metal: { color: 0x2c1d3a, metalness: 0.88, roughness: 0.32 }, bolt: { color: 0xff8a1a, metalness: 0.7, roughness: 0.3, emissive: 0x7a2c00, emissiveIntensity: 0.5 }, accent: { color: 0x9dff3a, emissive: 0x6fd020, emissiveIntensity: 0.9 }, anim: (M, t) => { const k = 1.75 + Math.sin(t * 9.1) * 0.22 + Math.sin(t * 23.7) * 0.16; M.glow.emissiveIntensity = k; M.body.emissiveIntensity = 0.75 + (k - 1.75) * 1.1 + 0.35; } }; }, // 촛불처럼 일렁임
+};
+// 형태 키트가 쓰는 스킨 전용 재질
+const KMATS = {
+  tiger: () => ({ fang: { color: 0xf3ead2, metalness: 0.1, roughness: 0.32 }, eye: { color: 0xb6ff3a, emissive: 0x9dff3a, emissiveIntensity: 1.3, roughness: 0.2 } }),
+  sakura: () => ({ petal: { color: 0xfff6fa, metalness: 0, roughness: 0.45, emissive: 0x4a1024, emissiveIntensity: 0.25 }, twig: { color: 0x5a3a34, metalness: 0, roughness: 0.8 } }),
+  ice: () => ({ crystal: { color: 0xcdefff, metalness: 0.1, roughness: 0.04, transparent: true, opacity: 0.74, emissive: 0x3a8fd0, emissiveIntensity: 0.4, flatShading: true } }),
+  neon: () => ({ glow: { color: 0x19e3ff, emissive: 0x19e3ff, emissiveIntensity: 1.7, roughness: 0.3 }, glow2: { color: 0xff3df0, emissive: 0xff3df0, emissiveIntensity: 1.5, roughness: 0.3 } }),
+  lava: () => ({ core: { color: 0xffb040, emissive: 0xff5a00, emissiveIntensity: 1.9, roughness: 0.6 }, horn: { color: 0x241a16, metalness: 0.25, roughness: 0.55, flatShading: true } }),
+  gold: () => ({ gem: { color: 0xe0102c, metalness: 0.3, roughness: 0.04, emissive: 0x80000e, emissiveIntensity: 0.6, flatShading: true } }),
+  galaxy: () => ({ star: { color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 1.6 }, planet: { color: 0xff9ad8, emissive: 0x8030ff, emissiveIntensity: 0.5, roughness: 0.4 }, portal: { color: 0xb060ff, emissive: 0xa040ff, emissiveIntensity: 1.6, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false } }),
+  aurora: (M) => ({ prism: { color: 0xffffff, map: M.body.map, metalness: 0.55, roughness: 0.05, transparent: true, opacity: 0.66, emissive: 0xffffff, emissiveMap: M.body.map, emissiveIntensity: 0.4, side: THREE.DoubleSide } }),
+  halloween: () => ({ pumpkin: { color: 0xc94f08, metalness: 0.05, roughness: 0.6 }, glow: { color: 0xffe070, emissive: 0xffc030, emissiveIntensity: 1.8, roughness: 0.6 }, wing: { color: 0x17101f, metalness: 0.35, roughness: 0.45, side: THREE.DoubleSide }, stem: { color: 0x4d6b2a, metalness: 0, roughness: 0.8 }, eye: { color: 0xb6ff3a, emissive: 0x9dff3a, emissiveIntensity: 1.5, roughness: 0.3 } }),
+};
+const SETS = new Map(), animated = [];
+function matsFor(skin) {
+  if (SETS.has(skin)) return SETS.get(skin);
+  const M = { ...FIX, ...baseMats() }, id = SKINS[skin] ? SKINS[skin].id : 'std', def = SKIN_DEF[id] ? SKIN_DEF[id]() : null;
+  if (def) {
+    const mk = (o) => { const m = std(o); if (def.envI) m.envMapIntensity = def.envI; return m; };
+    const body = mk(def.body), body2 = def.body2 ? mk(def.body2) : body, grip = mk(def.grip), metal = mk(def.metal);
+    Object.assign(M, { recv: body, slide: body, gray: body, mag: body2, olive: body2, tan: body2, wood: body2, woodDark: body2, furn: body2, poly: grip, steel: metal, bolt: mk(def.bolt || { color: 0xc2c7ce, metalness: 1, roughness: 0.22 }) });
+    if (def.accent) M.accent = mk(def.accent);
+    M.body = body;
+    if (KMATS[id]) for (const [k, o] of Object.entries(KMATS[id](M))) M[k] = mk(o);
+    if (def.anim) animated.push({ M, f: def.anim });
+  }
+  SETS.set(skin, M);
+  return M;
+}
+// 움직이는 스킨(빛나는 맥박, 흐르는 무늬)
+export function tickSkins(t) { for (const a of animated) a.f(a.M, t); }
+
+// ───────────── 형태 도구 ─────────────
+const labelMats = new Map();
+function labelMat(text) {
+  if (!labelMats.has(text)) {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+    const g = cv.getContext('2d'); g.fillStyle = '#e9ebee'; g.font = '700 30px "Arial Narrow", Arial, sans-serif'; g.textBaseline = 'middle'; g.fillText(text, 4, 34);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    labelMats.set(text, new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+  }
+  return labelMats.get(text);
+}
+const V3 = (p) => new THREE.Vector3(p[2] || 0, p[1], -p[0]);
+const dist = (a, c) => V3(a).distanceTo(V3(c));
+function roundPts(pts, r) { // 꼭짓점을 둥글게
+  const out = [], n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p = pts[i], a = pts[(i + n - 1) % n], c = pts[(i + 1) % n];
+    const la = Math.hypot(a[0] - p[0], a[1] - p[1]), lc = Math.hypot(c[0] - p[0], c[1] - p[1]), d = Math.min(r, la * 0.45, lc * 0.45);
+    const p0 = [p[0] + ((a[0] - p[0]) / la) * d, p[1] + ((a[1] - p[1]) / la) * d], p1 = [p[0] + ((c[0] - p[0]) / lc) * d, p[1] + ((c[1] - p[1]) / lc) * d];
+    for (const t of [0, 0.5, 1]) { const u = 1 - t; out.push([u * u * p0[0] + 2 * u * t * p[0] + t * t * p1[0], u * u * p0[1] + 2 * u * t * p[1] + t * t * p1[1]]); }
+  }
+  return out;
+}
+class Builder {
+  constructor() { this.parts = []; this.cur = ''; this.shift = 0; this.pivots = {}; }
+  // 이후에 넣는 부품은 이 이름의 움직이는 묶음에 들어감. pivot 을 주면 그 점을 중심으로 도는 묶음(spin…)이 됨
+  part(name = '', pivot, speed) { this.cur = name; if (pivot) this.pivots[name] = { p: pivot, speed: speed || 1 }; return this; }
+  add(geo, mat, m, keepUV) {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    if (m) g.applyMatrix4(m);
+    if (this.shift) g.translate(this.shift, 0, 0);
+    this.parts.push({ g, mat, part: this.cur, keepUV });
+    return this;
+  }
+  // 옆모습 윤곽 [[앞, 위], …] 을 두께 w 로 밀어냄. opt.r = 꼭짓점 둥글림, opt.holes = 뚫린 구멍들
+  prof(pts, w, mat, bevel = 0.004, x = 0, opt = {}) {
+    const s = new THREE.Shape(), P = opt.r ? roundPts(pts, opt.r) : pts;
+    if (opt.hr) opt = { ...opt, holes: (opt.holes || []).map((h) => roundPts(h, opt.hr)) };
+    P.forEach((p, i) => (i ? s.lineTo(p[0], p[1]) : s.moveTo(p[0], p[1])));
+    s.closePath();
+    for (const h of opt.holes || []) { const hp = new THREE.Path(); h.forEach((p, i) => (i ? hp.lineTo(p[0], p[1]) : hp.moveTo(p[0], p[1]))); hp.closePath(); s.holes.push(hp); }
+    const depth = Math.max(0.001, w - bevel * 2);
+    const geo = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2, bevelOffset: -bevel, curveSegments: 6 });
+    geo.translate(0, 0, -depth / 2);
+    geo.rotateY(Math.PI / 2);
+    geo.translate(x, 0, 0);
+    if (opt.roll) { const cu = opt.cu || 0; geo.translate(0, -cu, 0); geo.rotateZ(opt.roll); geo.translate(0, cu, 0); } // 총열 축을 중심으로 돌려 세움
+    return this.add(geo, mat);
+  }
+  // ── 스킨 형태용 도구. 점은 [앞, 위, 옆] ──
+  _lay(geo, a, c) { // 세로(Y)로 선 형태를 a→c 방향으로 눕혀 그 사이에 놓음
+    const A = V3(a), C = V3(c), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), C.clone().sub(A).normalize());
+    return geo.applyMatrix4(new THREE.Matrix4().compose(A.add(C).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1)));
+  }
+  spike(a, c, r, mat, seg = 6) { return this.add(this._lay(new THREE.ConeGeometry(r, dist(a, c), seg), a, c), mat); }          // 가시·뿔
+  rod(a, c, rA, rC, mat, seg = 8) { return this.add(this._lay(new THREE.CylinderGeometry(rC, rA, dist(a, c), seg), a, c), mat); } // 두 점을 잇는 막대
+  crys(a, c, r, mat, seg = 5) { const m = [0, 1, 2].map((i) => (a[i] || 0) + ((c[i] || 0) - (a[i] || 0)) * 0.5); return this.rod(a, m, r * 0.62, r, mat, seg).spike(m, c, r, mat, seg); } // 결정
+  lump(r, p, mat, s = [1, 1, 1], rot = 0) { const g = new THREE.DodecahedronGeometry(r, 0); g.rotateX(rot * 1.7); g.rotateY(rot * 2.3); g.scale(s[2], s[1], s[0]); g.translate(p[2] || 0, p[1], -p[0]); return this.add(g, mat); } // 돌덩이
+  gem(r, p, mat, s = [1, 1, 1]) { const g = new THREE.OctahedronGeometry(r, 0); g.scale(s[2], s[1], s[0]); g.translate(p[2] || 0, p[1], -p[0]); return this.add(g, mat); }
+  ball(r, p, mat, s = [1, 1, 1], seg = 12) { const g = new THREE.SphereGeometry(r, seg, Math.max(6, seg - 3)); g.scale(s[2], s[1], s[0]); g.translate(p[2] || 0, p[1], -p[0]); return this.add(g, mat); }
+  tor(R, t, p, mat, rx = 0, ry = 0, arc = 6.2832, seg = 28) { const g = new THREE.TorusGeometry(R, t, 6, seg, arc); if (rx) g.rotateX(rx); if (ry) g.rotateY(ry); g.translate(p[2] || 0, p[1], -p[0]); return this.add(g, mat); } // 고리 (기본: 총열을 감쌈)
+  ecyl(rx, ru, f, len, u, mat, k = 1, seg = 18, x = 0) { const g = new THREE.CylinderGeometry(k, 1, len, seg, 1, false); g.rotateX(-Math.PI / 2); g.scale(rx, ru, 1); g.translate(x, u, -(f + len / 2)); return this.add(g, mat); } // 납작한(타원) 통. k = 앞쪽 굵기 비율
+  radial(n, fn, f, u, mat, a0 = 0) { for (let k = 0; k < n; k++) { const g = fn(k); g.rotateZ(a0 + (k / n) * 6.2832); g.translate(0, u, -f); this.add(g, mat); } return this; } // 총열 둘레로 n 개. fn 은 +Y 가 바깥, -Z 가 앞인 형태를 돌려줌
+  // 앞뒤 방향 원통: f 에서 시작해 앞으로 len. rB = 뒤쪽 반지름, rF = 앞쪽 반지름
+  cyl(rB, rF, f, len, u, mat, x = 0, seg = 16) {
+    const geo = new THREE.CylinderGeometry(rF, rB, len, seg, 1, false);
+    geo.rotateX(-Math.PI / 2);
+    geo.translate(x, u, -(f + len / 2));
+    return this.add(geo, mat);
+  }
+  vcyl(r, h, f, u, mat, x = 0, seg = 12) { // 세로 원통
+    const geo = new THREE.CylinderGeometry(r, r, h, seg);
+    geo.translate(x, u, -f);
+    return this.add(geo, mat);
+  }
+  xcyl(r, w, f, u, mat, x = 0, seg = 10) { // 좌우 방향 원통 (핀·손잡이)
+    const geo = new THREE.CylinderGeometry(r, r, w, seg);
+    geo.rotateZ(Math.PI / 2); geo.translate(x, u, -f);
+    return this.add(geo, mat);
+  }
+  box(w, h, l, f, u, mat, x = 0, rx = 0, rz = 0) {
+    const geo = new THREE.BoxGeometry(w, h, l);
+    if (rx) geo.rotateX(rx);
+    if (rz) geo.rotateZ(rz);
+    geo.translate(x, u, -f);
+    return this.add(geo, mat);
+  }
+  disc(r, f, u, mat, back = false, x = 0) { // 앞(또는 뒤)을 보는 원판
+    const geo = new THREE.CircleGeometry(r, 18);
+    if (!back) geo.rotateY(Math.PI);
+    geo.translate(x, u, -f);
+    return this.add(geo, mat);
+  }
+  sdisc(r, f, u, x, mat) { // 옆을 보는 원판
+    const geo = new THREE.CircleGeometry(r, 12);
+    geo.rotateY(x < 0 ? -Math.PI / 2 : Math.PI / 2); geo.translate(x, u, -f);
+    return this.add(geo, mat);
+  }
+  ring(r, t, f, u, mat) { const geo = new THREE.TorusGeometry(r, t, 6, 16); geo.translate(0, u, -f); return this.add(geo, mat); }
+  label(text, f, u, x, w, h) { // 옆면 각인
+    const geo = new THREE.PlaneGeometry(w, h);
+    geo.rotateY(x < 0 ? -Math.PI / 2 : Math.PI / 2); geo.translate(x, u, -f);
+    return this.add(geo, labelMat(text), null, true);
+  }
+  capsule(r, len, from, to, mat) { // from/to = [x, y, z]
+    const geo = new THREE.CapsuleGeometry(r, len, 4, 10);
+    const a = new THREE.Vector3(...from), b = new THREE.Vector3(...to);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    const m = new THREE.Matrix4().compose(a.clone().add(b).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1));
+    return this.add(geo, mat, m);
+  }
+  build() {
+    const root = new THREE.Group(), groups = new Map([['', root]]);
+    const by = new Map();
+    for (const p of this.parts) { const k = p.part; if (!by.has(k)) by.set(k, new Map()); const m = by.get(k); if (!m.has(p.mat)) m.set(p.mat, []); m.get(p.mat).push(p); }
+    for (const [name, mm] of by) {
+      let grp = groups.get(name);
+      if (!grp) { grp = new THREE.Group(); grp.name = name; root.add(grp); groups.set(name, grp); }
+      const pv = this.pivots[name];
+      if (pv) { grp.position.set(pv.p[2] || 0, pv.p[1], -pv.p[0]); grp.userData.spin = pv.speed; }
+      for (const [mat, list] of mm) {
+        let n = 0;
+        for (const p of list) n += p.g.attributes.position.count;
+        const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+        let o = 0;
+        for (const p of list) {
+          const g = p.g, c = g.attributes.position.count, pa = g.attributes.position.array;
+          pos.set(pa, o * 3); nor.set(g.attributes.normal.array, o * 3);
+          if (p.keepUV) uv.set(g.attributes.uv.array, o * 2);
+          else for (let i = 0; i < c; i++) { uv[(o + i) * 2] = -pa[i * 3 + 2] * 2 + pa[i * 3] * 0.6; uv[(o + i) * 2 + 1] = pa[i * 3 + 1] * 2 + 0.5; } // 옆에서 본 평면으로 무늬를 입힘
+          o += c; g.dispose();
+        }
+        if (pv) for (let i = 0; i < n; i++) { pos[i * 3] -= grp.position.x; pos[i * 3 + 1] -= grp.position.y; pos[i * 3 + 2] -= grp.position.z; }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+        geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        grp.add(new THREE.Mesh(geo, mat));
+      }
+    }
+    return root;
+  }
+}
+
+// ───────────── 공통 부품 ─────────────
+function tguard(b, f, u, M, mat) { // 방아쇠울(고리)과 방아쇠
+  b.prof([[f - 0.04, u + 0.004], [f + 0.046, u + 0.004], [f + 0.041, u - 0.03], [f + 0.022, u - 0.044], [f - 0.026, u - 0.044], [f - 0.04, u - 0.03]], 0.012, mat || M.recv, 0.0015, 0,
+    { holes: [[[f - 0.034, u - 0.001], [f + 0.039, u - 0.001], [f + 0.035, u - 0.027], [f + 0.019, u - 0.038], [f - 0.023, u - 0.038], [f - 0.034, u - 0.027]]] });
+  b.prof([[f - 0.003, u], [f + 0.006, u], [f + 0.002, u - 0.014], [f + 0.007, u - 0.028], [f + 0.002, u - 0.029], [f - 0.005, u - 0.015]], 0.006, M.bolt, 0.001);
+}
+function rail(b, f0, f1, u, M, w = 0.021) { // 톱니 레일
+  b.box(w, 0.005, f1 - f0, (f0 + f1) / 2, u + 0.0025, M.recv);
+  for (let i = 0, n = Math.floor((f1 - f0) / 0.0105); i < n; i++) b.box(w, 0.0045, 0.0056, f0 + 0.005 + i * 0.0105, u + 0.007, M.recv);
+}
+function slots(b, f0, n, pitch, u, hw, M, len = 0.028, h = 0.008) { for (let i = 0; i < n; i++) for (const s of [-1, 1]) b.box(0.0014, h, len, f0 + i * pitch, u, M.dark, s * hw); }
+// 테두리 조준기(유리 + 빨간 조준점). 가운데 높이를 돌려줌
+function holo(b, f, u0, M, k = 1) {
+  const cy = u0 + 0.012 + 0.021 * k, hw = 0.019 * k, hh = 0.021 * k;
+  b.box(0.032 * k, 0.012, 0.058 * k, f, u0 + 0.006, M.recv);
+  b.xcyl(0.0055, 0.042 * k, f - 0.014, u0 + 0.006, M.steel);
+  for (const s of [-1, 1]) b.box(0.004, hh * 2 + 0.004, 0.034 * k, f + 0.008, cy, M.recv, s * (hw + 0.002));
+  b.box(hw * 2 + 0.008, 0.004, 0.034 * k, f + 0.008, cy + hh + 0.002, M.recv);
+  b.box(hw * 2 + 0.008, 0.003, 0.012, f + 0.02 * k, cy - hh, M.recv);
+  b.add(new THREE.PlaneGeometry(hw * 2, hh * 2).translate(0, cy, -(f + 0.02 * k)), M.lens, null, true);
+  b.add(new THREE.PlaneGeometry(0.02 * k, 0.02 * k).translate(0, cy, -(f + 0.0195 * k)), M.reticle, null, true);
+  b.vcyl(0.004, 0.006, f - 0.005, cy + hh + 0.006, M.steel);
+  return cy;
+}
+function muzzleBrake(b, f, u, M, r = 0.014, len = 0.05) {
+  b.cyl(r * 0.8, r, f, 0.012, u, M.steel); b.cyl(r, r, f + 0.012, len - 0.012, u, M.steel, 0, 10);
+  for (let i = 0; i < 3; i++) for (const s of [-1, 1]) b.box(0.002, r * 0.9, 0.006, f + 0.02 + i * 0.01, u, M.dark, s * r * 0.93);
+  b.disc(r * 0.55, f + len + 0.0005, u, M.dark);
+  return f + len;
+}
+function suppressor(b, f, len, r, u, M) {
+  b.cyl(r, r, f, len, u, M.steel, 0, 18);
+  for (let i = 0; i < 7; i++) b.cyl(r + 0.0012, r + 0.0012, f + 0.006 + i * 0.006, 0.003, u, M.recv, 0, 18);
+  b.cyl(r + 0.001, r + 0.001, f + len - 0.012, 0.012, u, M.recv, 0, 18);
+  b.disc(r * 0.4, f + len + 0.0005, u, M.dark);
+  return f + len;
+}
+function buttPad(b, f, u, h, M, w = 0.044) { b.prof([[f, u - h / 2], [f, u + h / 2], [f - 0.012, u + h / 2 - 0.004], [f - 0.014, u], [f - 0.012, u - h / 2 + 0.004]], w, M.rubber, 0.004); for (let i = -2; i <= 2; i++) b.box(w + 0.001, 0.003, 0.01, f - 0.007, u + i * h * 0.17, M.dark); }
+function pistolGrip(b, M, f = 0, u = 0) { // 권총형 손잡이 (홈과 밑판)
+  b.prof([[f - 0.076, u - 0.046], [f - 0.03, u - 0.046], [f - 0.044, u - 0.085], [f - 0.064, u - 0.158], [f - 0.114, u - 0.152], [f - 0.101, u - 0.09], [f - 0.088, u - 0.058]], 0.034, M.poly, 0.008, 0, { r: 0.006 });
+  for (let i = 0; i < 5; i++) b.box(0.0345, 0.0026, 0.007, f - 0.096 - i * 0.0035, u - 0.082 - i * 0.014, M.dark, 0, 0.25);
+  b.box(0.03, 0.005, 0.05, f - 0.089, u - 0.1575, M.rubber, 0, 0.12);
+}
+function bipod(b, f, u, M, sp = 0.02) { for (const s of [-1, 1]) { b.cyl(0.0048, 0.0048, f - 0.2, 0.2, u, M.steel, s * sp, 8); b.cyl(0.007, 0.007, f - 0.2, 0.03, u, M.rubber, s * sp, 8); } b.box(sp * 2 + 0.012, 0.014, 0.022, f, u, M.recv); }
+
+// ───────────── 스킨별 형태 키트 ─────────────
+// 유료 스킨은 무늬만이 아니라 형태가 바뀐다: hg 총열덮개 · stock 개머리판 · muzzle 총구 · orn 몸통 장식 · blade 칼날.
+// 구역 값: hg {f0,f1,u0,u1,w,uc} · stock {f,end,top,bot,j0,w} · muzzle (f,u,r,len) → 총구 끝 · orn {f0,f1,top,u,hw,small}
+const kr = (i) => { const v = Math.sin(i * 12.9898 + 4.1) * 43758.5453; return v - Math.floor(v); };
+let spinN = 0;
+function flower(b, M, f, u, x, r) { // 옆면에 붙는 다섯 잎 꽃
+  const s = Math.sign(x) || 1;
+  for (let k = 0; k < 5; k++) { const a = (k / 5) * 6.2832 + 0.3; b.ball(r * 0.5, [f + Math.cos(a) * r * 0.55, u + Math.sin(a) * r * 0.55, x + s * r * 0.06], M.petal, [1, 1, 0.3], 7); }
+  b.ball(r * 0.24, [f, u, x + s * r * 0.18], M.brass, [1, 1, 0.7], 8);
+}
+const KITS = {
+  // 탄소 섬유 — 경주차: 삼각 뼈대, 날개, 빨간 속통
+  carbon: {
+    fx: { tracer: 0xff5a4a, flash: 0xff9a80 },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, n = Math.max(2, Math.round(L / 0.055)), st = (L - 0.024) / n, m = 0.011, holes = [], uc = R.uc ?? (u0 + u1) / 2;
+      for (let i = 0; i < n; i++) { const a = f0 + 0.012 + i * st, c = a + st - 0.008; holes.push([[a, u0 + m], [c, u0 + m], [(a + c) / 2, u1 - m]]); if (i < n - 1) holes.push([[a + st / 2, u1 - m], [c + st / 2, u1 - m], [(a + c + st) / 2, u0 + m]]); }
+      for (const s of [-1, 1]) b.prof([[f0, u0], [f0, u1], [f1 + 0.03, u1], [f1 + 0.008, (u0 + u1) / 2], [f1 - 0.012, u0]], 0.0045, M.recv, 0.0012, s * (hw - 0.00225), { holes });
+      b.box(w, 0.007, L, (f0 + f1) / 2, u1 - 0.0035, M.recv); b.box(w * 0.7, 0.006, L - 0.02, (f0 + f1) / 2 - 0.01, u0 + 0.003, M.recv);
+      const rr = Math.max(0.006, Math.min(0.017, Math.min(u1 - uc, uc - u0) - 0.012));
+      b.cyl(rr, rr, f0, L, uc, M.steel, 0, 10);
+      for (let i = 0; i < n; i++) b.cyl(rr + 0.002, rr + 0.002, f0 + 0.03 + i * st, 0.006, uc, M.dark, 0, 10);
+      for (const s of [-1, 1]) { b.box(0.022, 0.0025, L * 0.42, f1 - L * 0.25, u0 + 0.014, M.bolt, s * (hw + 0.008), 0, s * -0.35); b.box(0.0016, 0.005, L * 0.8, (f0 + f1) / 2, u1 - 0.004, M.accent, s * (hw + 0.0006)); }
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, k = f - L * 0.35;
+      b.prof([[f, top], [end + 0.02, top], [end, top - 0.02], [end, bot], [end + 0.028, bot], [k, j0], [f, j0]], w * 0.8, M.recv, 0.004, 0,
+        { holes: [[[f - 0.035, top - 0.013], [end + 0.035, top - 0.013], [end + 0.016, top - 0.03], [end + 0.016, bot + 0.016], [end + 0.034, bot + 0.014], [k - 0.006, j0 + 0.013], [f - 0.035, j0 + 0.013]]] });
+      b.rod([f - 0.035, j0 + 0.013, 0], [end + 0.016, top - 0.03, 0], 0.005, 0.005, M.steel, 6);
+      b.box(w + 0.03, 0.003, 0.05, end + 0.05, top + 0.012, M.recv); for (const s of [-1, 1]) b.box(0.003, 0.014, 0.03, end + 0.05, top + 0.005, M.bolt, s * (w / 2 - 0.006));
+      buttPad(b, end, (top + bot) / 2, top - bot, M, w);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 0.8, r * 1.15, f, len * 0.2, u, M.steel, 0, 8);
+      b.prof([[f + len * 0.2, u - r * 1.15], [f + len * 0.2, u + r * 1.15], [f + len * 0.78, u + r * 1.15], [f + len, u - r * 0.1], [f + len * 0.9, u - r * 1.15]], r * 2.3, M.recv, 0.003, 0,
+        { holes: [[[f + len * 0.3, u - r * 0.5], [f + len * 0.3, u + r * 0.5], [f + len * 0.45, u + r * 0.5], [f + len * 0.45, u - r * 0.5]], [[f + len * 0.55, u - r * 0.5], [f + len * 0.55, u + r * 0.5], [f + len * 0.7, u + r * 0.5], [f + len * 0.76, u - r * 0.5]]] });
+      b.cyl(r * 0.5, r * 0.5, f + len * 0.2, len * 0.6, u, M.steel, 0, 8);
+      for (const s of [-1, 1]) b.box(r * 1.3, 0.002, len * 0.5, f + len * 0.5, u, M.bolt, s * r * 1.7);
+      return f + len;
+    },
+    orn(b, M, R) {
+      const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.6 : 1;
+      for (const s of [-1, 1]) { b.box(0.0014, 0.005 * k, L * 0.8, (f0 + f1) / 2, u + 0.016 * k, M.accent, s * (hw + 0.0006)); for (let i = 0; i < 3; i++) b.box(0.003, 0.016 * k, 0.004, f0 + L * 0.12 + i * 0.012, u, M.bolt, s * (hw + 0.001), 0.5); }
+    },
+    blade(b, M) {
+      b.prof([[0.03, -0.016], [0.2, -0.016], [0.25, 0.008], [0.238, 0.022], [0.03, 0.022]], 0.005, M.recv, 0.0015, 0, { holes: [0.075, 0.115, 0.155].map((f) => [[f - 0.012, -0.002], [f + 0.012, -0.002], [f + 0.018, 0.012], [f - 0.006, 0.012]]) });
+      b.prof([[0.035, -0.0165], [0.2, -0.0165], [0.249, 0.007], [0.2, -0.008], [0.035, -0.008]], 0.0056, M.bolt, 0.0005);
+    },
+  },
+  // 호랑이 — 맹수: 갈기, 발톱, 송곳니 총구, 빛나는 눈
+  tiger: {
+    fx: { tracer: 0xffa02a, flash: 0xffb040 },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2;
+      b.prof([[f0, u0], [f0, u1], [f1 - 0.03, u1], [f1 + 0.014, um + 0.012], [f1 + 0.014, um - 0.01], [f1 - 0.02, u0]], w, M.recv, 0.009, 0, { r: 0.008 });
+      const n = Math.max(3, Math.round(L / 0.036));
+      for (let i = 0; i < n; i++) for (const s of [-1, 1]) { const f = f0 + 0.03 + (i * (L - 0.05)) / (n - 1), k = 1 - i * 0.05; b.spike([f, u1 - 0.008, s * (hw - 0.004)], [f - 0.04 * k, u1 + 0.016 * k, s * (hw + 0.013 * k)], 0.0075, i % 2 ? M.fang : M.poly, 5); }
+      for (const x of [-0.015, 0, 0.015]) { b.rod([f1 - 0.06, u0 + 0.004, x], [f1 - 0.032, u0 - 0.02, x], 0.007, 0.0052, M.fang, 6); b.spike([f1 - 0.033, u0 - 0.019, x], [f1 - 0.002, u0 - 0.03, x], 0.0054, M.fang, 6); }
+      for (const s of [-1, 1]) { b.ball(0.0075, [f1 - 0.035, um + 0.012, s * (hw - 0.002)], M.eye, [1.5, 0.75, 0.5], 10); b.box(0.002, 0.008, 0.0026, f1 - 0.035, um + 0.012, M.dark, s * (hw + 0.0016)); b.box(0.003, 0.004, 0.028, f1 - 0.036, um + 0.021, M.poly, s * (hw + 0.0005), 0.25); }
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end;
+      b.prof([[f, top], [end + 0.045, top], [end, top - 0.03], [end, bot + 0.02], [end + 0.022, bot], [end + 0.075, bot + 0.022], [f - L * 0.4, j0 - 0.004], [f, j0]], w, M.recv, 0.008, 0, { r: 0.008 });
+      for (let i = 0; i < 3; i++) for (const s of [-1, 1]) b.box(0.002, 0.05, 0.007, end + 0.06 + i * 0.022, (top + bot) / 2 + 0.012, M.dark, s * (w / 2), 0.5);
+      for (let i = 0; i < 3; i++) b.spike([end + 0.05 + i * 0.04, top - 0.006, 0], [end + 0.02 + i * 0.04, top + 0.016, 0], 0.008, i % 2 ? M.poly : M.fang, 5);
+      buttPad(b, end, (top + bot) / 2 - 0.005, top - bot - 0.045, M, w);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.25, r * 1.25, f, len * 0.3, u, M.recv, 0, 10);
+      b.cyl(r * 0.55, r * 0.55, f, len * 0.86, u, M.steel, 0, 10); b.disc(r * 0.36, f + len * 0.862, u, M.dark);
+      b.prof([[f + len * 0.1, u + r * 0.62], [f + len * 0.1, u + r * 1.5], [f + len * 0.75, u + r * 1.5], [f + len * 1.1, u + r * 1.0], [f + len * 1.1, u + r * 0.62]], r * 2.5, M.recv, 0.003, 0, { r: 0.003 });
+      b.prof([[f + len * 0.1, u - r * 0.62], [f + len * 0.1, u - r * 1.4], [f + len * 0.6, u - r * 1.4], [f + len * 0.95, u - r * 1.0], [f + len * 0.95, u - r * 0.62]], r * 2.3, M.recv, 0.003, 0, { r: 0.003 });
+      for (const s of [-1, 1]) {
+        b.spike([f + len * 1.02, u + r * 0.66, s * r * 0.85], [f + len * 1.04, u - r * 0.5, s * r * 0.85], r * 0.26, M.fang, 5); b.spike([f + len * 0.84, u - r * 0.66, s * r * 0.75], [f + len * 0.86, u + r * 0.3, s * r * 0.75], r * 0.22, M.fang, 5);
+        for (let i = 0; i < 3; i++) b.spike([f + len * (0.45 + i * 0.16), u + r * 0.66, s * r * 1.05], [f + len * (0.45 + i * 0.16), u + r * 0.1, s * r * 1.05], r * 0.14, M.fang, 4);
+      }
+      return f + len * 0.9;
+    },
+    orn(b, M, R) {
+      const { f0, top, hw } = R, k = R.small ? 0.6 : 1;
+      for (let i = 0; i < 3; i++) for (const s of [-1, 1]) b.spike([f0 + (0.035 + i * 0.03) * k, top - 0.008 * k, s * (hw - 0.002)], [f0 + (0.008 + i * 0.03) * k, top + 0.012 * k, s * (hw + 0.008 * k)], 0.006 * k, i % 2 ? M.fang : M.poly, 5);
+    },
+    blade(b, M) {
+      b.prof([[0.03, -0.012], [0.1, -0.02], [0.17, -0.014], [0.222, 0.016], [0.24, 0.062], [0.2, 0.032], [0.15, 0.016], [0.09, 0.014], [0.03, 0.02]], 0.0055, M.fang, 0.002, 0, { r: 0.006 });
+      b.prof([[0.04, -0.013], [0.1, -0.0205], [0.17, -0.0145], [0.222, 0.016], [0.239, 0.06], [0.214, 0.022], [0.165, -0.004], [0.1, -0.011], [0.04, -0.005]], 0.006, M.recv, 0.0005);
+      for (let i = 0; i < 3; i++) b.box(0.0062, 0.003, 0.02, 0.07 + i * 0.03, 0.006, M.dark, 0, 0.5);
+    },
+  },
+  // 벚꽃 — 둥근 몸, 꽃 장식, 꽃잎 총구, 술
+  sakura: {
+    fx: { tracer: 0xff8fc0, flash: 0xffa6cf },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2;
+      const kf = (f) => 1 - 0.2 * ((f - f0) / L), sx = (f, du) => hw * kf(f) * Math.sqrt(Math.max(0.05, 1 - (du / (hh * kf(f))) ** 2));
+      b.ecyl(hw, hh, f0, L, um, M.recv, 0.8, 20); b.ball(1, [f1, um, 0], M.recv, [0.022, hh * 0.8, hw * 0.8], 14);
+      for (const f of [f0 + 0.004, f1 - 0.032]) b.ecyl(hw * kf(f) + 0.0022, hh * kf(f) + 0.0022, f, 0.012, um, M.petal, 0.99, 20);
+      for (const s of [-1, 1]) {
+        const p = (t, v) => [f0 + L * t, um + hh * v, s * (sx(f0 + L * t, hh * v) + 0.001)];
+        b.rod(p(0.1, -0.5), p(0.55, 0.1), 0.003, 0.0022, M.twig, 6); b.rod(p(0.55, 0.1), p(0.85, 0.35), 0.0022, 0.0015, M.twig, 6);
+        for (const [t, v, r] of [[0.3, -0.1, 0.02], [0.62, 0.25, 0.014], [0.84, -0.15, 0.011]]) { const q = p(t, v); flower(b, M, q[0], q[1], q[2], r); }
+      }
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2;
+      b.prof([[f, top], [f - L * 0.5, top + 0.004], [end + 0.012, top - 0.01], [end, top - 0.04], [end, bot + 0.012], [end + 0.03, bot], [f - L * 0.5, j0 - 0.016], [f, j0]], w, M.recv, 0.01, 0,
+        { r: 0.016, holes: [[[f - L * 0.28, top - 0.016], [f - L * 0.7, top - 0.02], [f - L * 0.76, bot + 0.05], [f - L * 0.45, j0 + 0.004]]], hr: 0.012 });
+      for (const s of [-1, 1]) { flower(b, M, end + 0.04, um + 0.004, s * (w / 2 + 0.001), 0.02); flower(b, M, f - L * 0.14, (top + j0) / 2, s * (w / 2 + 0.001), 0.012); }
+      b.rod([end + 0.085, bot + 0.036, 0], [end + 0.09, bot - 0.02, 0], 0.0016, 0.0016, M.accent, 5); b.ball(0.007, [end + 0.09, bot - 0.024, 0], M.brass); b.spike([end + 0.09, bot - 0.064, 0], [end + 0.09, bot - 0.026, 0], 0.008, M.accent, 8);
+      buttPad(b, end, um - 0.012, top - bot - 0.05, M, w);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.1, r * 1.1, f, len * 0.35, u, M.steel, 0, 12); b.cyl(r * 1.25, r * 1.25, f + len * 0.1, len * 0.1, u, M.petal, 0, 12);
+      b.cyl(r * 0.6, r * 0.6, f, len * 0.8, u, M.steel, 0, 10); b.disc(r * 0.4, f + len * 0.802, u, M.dark);
+      b.radial(5, () => new THREE.SphereGeometry(1, 10, 7).scale(r * 0.8, r * 0.2, len * 0.42).rotateX(0.42).translate(0, r * 1.2, -len * 0.38), f + len * 0.3, u, M.petal, 0.63);
+      b.radial(5, () => new THREE.SphereGeometry(1, 8, 6).scale(r * 0.5, r * 0.16, len * 0.3).rotateX(0.75).translate(0, r * 1.1, -len * 0.22), f + len * 0.28, u, M.accent, 0);
+      return f + len * 0.85;
+    },
+    orn(b, M, R) { const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1; for (const s of [-1, 1]) { flower(b, M, f0 + L * 0.22, u + 0.004 * k, s * (hw + 0.001), 0.016 * k); flower(b, M, f0 + L * 0.42, u - 0.008 * k, s * (hw + 0.001), 0.01 * k); } },
+    blade(b, M) {
+      b.prof([[0.03, -0.01], [0.12, -0.015], [0.2, -0.008], [0.255, 0.02], [0.2, 0.013], [0.12, 0.008], [0.03, 0.014]], 0.0046, M.bolt, 0.0018, 0, { r: 0.004 });
+      b.prof([[0.04, -0.0105], [0.12, -0.0155], [0.2, -0.0085], [0.254, 0.0195], [0.2, 0.002], [0.12, -0.006], [0.04, -0.003]], 0.0052, M.recv, 0.0005);
+      for (const s of [-1, 1]) flower(b, M, 0.026, 0.002, s * 0.0075, 0.016);
+    },
+  },
+  // 빙결 — 반투명 얼음 결정이 돋아남
+  ice: {
+    fx: { tracer: 0x9fe6ff, flash: 0xbfeeff },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2;
+      b.prof([[f0, u0 + 0.008], [f0, u1], [f1, u1], [f1 + 0.022, um + 0.008], [f1, u0 + 0.014], [f0 + L * 0.5, u0]], w * 0.84, M.recv, 0.008);
+      const n = Math.max(3, Math.round(L / 0.04));
+      for (let i = 0; i < n; i++) for (const s of [-1, 1]) {
+        const q = i * 2 + (s > 0 ? 1 : 0), f = f0 + 0.01 + (i * (L - 0.06)) / (n - 1), du = (kr(q) - 0.5) * hh * 1.1;
+        b.crys([f, um + du, s * hw * 0.5], [f + 0.05 + kr(q + 9) * 0.035, um + du * 1.5 + (kr(q + 5) - 0.5) * 0.02, s * (hw + 0.012 + kr(q + 3) * 0.014)], 0.008 + kr(q + 7) * 0.005, M.crystal);
+      }
+      for (let i = 0; i < 3; i++) b.crys([f0 + L * (0.3 + i * 0.22), u0 + 0.008, (i - 1) * 0.008], [f0 + L * (0.3 + i * 0.22) + 0.06, u0 - 0.022 - i * 0.004, (i - 1) * 0.014], 0.011, M.crystal);
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2;
+      b.prof([[f, top], [end + 0.06, top + 0.004], [end, top - 0.03], [end, bot + 0.03], [end + 0.045, bot], [f - L * 0.5, j0 - 0.03], [f - L * 0.22, j0 - 0.002], [f, j0]], w, M.recv, 0.012, 0, { holes: [[[f - L * 0.3, top - 0.018], [end + 0.05, top - 0.022], [end + 0.03, um - 0.012], [f - L * 0.42, j0 + 0.008]]] });
+      b.crys([end + 0.07, um, 0], [end + 0.012, bot - 0.02, 0], 0.014, M.crystal); b.crys([end + 0.1, um - 0.01, 0.006], [end + 0.07, bot - 0.012, 0.012], 0.01, M.crystal); b.crys([f - L * 0.36, (top + j0) / 2, 0], [end + 0.06, um + 0.004, 0], 0.012, M.crystal, 6);
+      for (const s of [-1, 1]) b.crys([end + 0.05, top - 0.02, s * w * 0.3], [end + 0.015, top + 0.012, s * (w / 2 + 0.01)], 0.008, M.crystal);
+      buttPad(b, end, um, top - bot - 0.07, M, w);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.15, r * 1.15, f, len * 0.3, u, M.steel, 0, 6); b.cyl(r * 0.6, r * 0.6, f, len * 0.8, u, M.steel, 0, 8); b.disc(r * 0.4, f + len * 0.802, u, M.dark);
+      b.radial(6, (k) => { const l = len * (k % 2 ? 0.75 : 1.05); return new THREE.ConeGeometry(r * 0.48, l, 5).rotateX(-Math.PI / 2 + 0.2).translate(0, r * 1.05 + l * 0.1, -l * 0.5); }, f + len * 0.12, u, M.crystal, 0.52);
+      return f + len * 0.85;
+    },
+    orn(b, M, R) { const { f0, top, u, hw } = R, k = R.small ? 0.55 : 1; for (let i = 0; i < 3; i++) for (const s of [-1, 1]) b.crys([f0 + (0.05 + i * 0.022) * k, u + (0.01 - i * 0.008) * k, s * hw * 0.6], [f0 + (0.012 + i * 0.03) * k, Math.min(top + 0.012 * k, u + (0.04 - i * 0.02) * k), s * (hw + (0.016 - i * 0.003) * k)], 0.0075 * k, M.crystal); },
+    blade(b, M) {
+      b.prof([[0.03, -0.016], [0.1, -0.024], [0.13, -0.014], [0.2, -0.02], [0.262, 0.004], [0.21, 0.014], [0.17, 0.028], [0.12, 0.018], [0.07, 0.028], [0.03, 0.02]], 0.011, M.crystal, 0.0045);
+      b.prof([[0.03, -0.004], [0.2, -0.004], [0.245, 0.003], [0.2, 0.009], [0.03, 0.009]], 0.004, M.bolt, 0.001);
+    },
+  },
+  // 네온 — 뼈대만 남긴 틀 속에 빛나는 에너지 관
+  neon: {
+    fx: { tracer: 0x19e3ff, flash: 0x7af4ff },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, uc = R.uc ?? (u0 + u1) / 2, rr = Math.max(0.006, Math.min(0.0125, Math.min(u1 - uc, uc - u0) - 0.012));
+      for (const s of [-1, 1]) for (const u of [u0 + 0.004, u1 - 0.004]) b.box(0.007, 0.008, L, (f0 + f1) / 2, u, M.recv, s * (hw - 0.0035));
+      const nf = Math.max(2, Math.round(L / 0.09));
+      for (let i = 0; i <= nf; i++) { const f = f0 + 0.006 + (i * (L - 0.012)) / nf; b.box(w, 0.008, 0.012, f, u1 - 0.004, M.recv); b.box(w, 0.008, 0.012, f, u0 + 0.004, M.recv); for (const s of [-1, 1]) b.box(0.007, u1 - u0, 0.012, f, (u0 + u1) / 2, M.recv, s * (hw - 0.0035)); }
+      b.cyl(rr, rr, f0, L, uc, M.glow, 0, 12);
+      const nr = Math.round(L / 0.03); for (let i = 1; i < nr; i++) b.tor(rr + 0.006, 0.0022, [f0 + (i * L) / nr, uc, 0], M.glow2, 0, 0, 6.2832, 16);
+      b.box(w * 0.5, 0.004, L, (f0 + f1) / 2, u1 - 0.002, M.recv);
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2, k = f - L * 0.4, uj = (top + j0) / 2;
+      b.prof([[f, top], [end + 0.015, top], [end, top - 0.015], [end, bot + 0.01], [end + 0.03, bot], [k, j0], [f, j0]], w * 0.7, M.recv, 0.0025, 0,
+        { holes: [[[f - 0.012, top - 0.01], [end + 0.022, top - 0.01], [end + 0.012, top - 0.022], [end + 0.012, bot + 0.022], [end + 0.034, bot + 0.016], [k - 0.006, j0 + 0.012], [f - 0.012, j0 + 0.012]]] });
+      b.rod([f - 0.012, uj, 0], [end + 0.011, uj - 0.004, 0], 0.006, 0.006, M.glow, 10);
+      for (let i = 1; i < 6; i++) b.tor(0.0105, 0.002, [f - 0.012 - (i * (L - 0.03)) / 6, uj - 0.0007 * i, 0], M.glow2, 0, 0, 6.2832, 14);
+      b.rod([end + 0.02, bot + 0.014, 0], [k - 0.02, j0 + 0.012, 0], 0.003, 0.003, M.glow2, 6);
+      buttPad(b, end, um, top - bot, M, w * 0.8);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.2, r * 1.2, f, len * 0.3, u, M.recv, 0, 8); b.tor(r * 1.3, r * 0.14, [f + len * 0.12, u, 0], M.glow2, 0, 0, 6.2832, 16); b.tor(r * 1.3, r * 0.14, [f + len * 0.24, u, 0], M.glow, 0, 0, 6.2832, 16);
+      for (const s of [-1, 1]) { b.box(r * 0.5, r * 1.2, len * 0.9, f + len * 0.65, u, M.steel, s * r * 1.25); b.box(r * 0.2, r * 0.3, len * 0.7, f + len * 0.7, u, M.glow, s * r * 0.98); }
+      b.ball(r * 0.55, [f + len * 0.62, u, 0], M.glow, [1.3, 1, 1], 10);
+      return f + len * 0.7;
+    },
+    orn(b, M, R) { const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.6 : 1; for (const s of [-1, 1]) { b.box(0.0016, 0.004 * k, L * 0.5, f0 + L * 0.33, u + 0.016 * k, M.glow, s * (hw + 0.0008)); b.box(0.0016, 0.003 * k, L * 0.3, f0 + L * 0.2, u + 0.006 * k, M.glow2, s * (hw + 0.0008)); for (let i = 0; i < 3; i++) b.box(0.0016, 0.006 * k, 0.006 * k, f0 + L * 0.42 + i * 0.012 * k, u + 0.006 * k, M.glow, s * (hw + 0.0008)); } },
+    blade(b, M) {
+      const inner = [[0.045, -0.008], [0.195, -0.008], [0.228, 0.004], [0.205, 0.014], [0.045, 0.014]];
+      b.prof([[0.03, -0.016], [0.2, -0.016], [0.25, 0.004], [0.215, 0.022], [0.03, 0.022]], 0.006, M.recv, 0.0015, 0, { holes: [inner] });
+      b.prof(inner, 0.0028, M.glow, 0.0005);
+      b.prof([[0.2, -0.0165], [0.251, 0.004], [0.24, 0.006], [0.2, -0.011]], 0.0064, M.glow2, 0.0005);
+    },
+  },
+  // 용암 — 갈라진 바위 덩어리와 빛나는 속, 뿔
+  lava: {
+    fx: { tracer: 0xff7a1a, flash: 0xff6a20 },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2;
+      b.ecyl(hw * 0.62, hh * 0.72, f0, L, um, M.core, 1, 10);
+      const n = Math.max(3, Math.round(L / 0.038));
+      for (let i = 0; i < n; i++) { const f = f0 + 0.016 + (i * (L - 0.03)) / (n - 1);
+        [[1, 0.52], [-1, 0.52], [1, -0.5], [-1, -0.5]].forEach(([s, v], j) => { const q = i * 4 + j, rr = Math.min(0.019 + kr(q) * 0.007, hh * 0.75 + 0.004); b.lump(rr, [f + (kr(q + 2) - 0.5) * 0.014 + (j > 1 ? 0.018 : 0), Math.min(um + v * hh, u1 - rr * 0.78), s * hw * 0.56], M.recv, [1.25, 1, 0.95], q); }); }
+      const hk = Math.min(1, L / 0.2);
+      for (const s of [-1, 1]) { b.rod([f1 - 0.075 * hk, u1 - 0.012 * hk, s * hw * 0.9], [f1 - 0.03 * hk, u1 + 0.014 * hk, s * (hw + 0.018 * hk)], 0.01 * hk, 0.007 * hk, M.horn, 6); b.spike([f1 - 0.032 * hk, u1 + 0.013 * hk, s * (hw + 0.0175 * hk)], [f1 + 0.03 * hk, u1 + 0.026 * hk, s * (hw + 0.008 * hk)], 0.0072 * hk, M.horn, 6); }
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2;
+      const out = [[f, top], [f - L * 0.3, top + 0.006], [f - L * 0.5, top - 0.004], [end + 0.03, top + 0.003], [end, top - 0.03], [end, bot + 0.02], [end + 0.04, bot], [f - L * 0.55, j0 - 0.034], [f - L * 0.4, j0 - 0.01], [f - L * 0.15, j0 - 0.014], [f, j0]];
+      const holes = [[[f - L * 0.2, top - 0.016], [f - L * 0.45, top - 0.022], [f - L * 0.62, um + 0.01], [f - L * 0.5, um + 0.004], [f - L * 0.4, top - 0.036], [f - L * 0.22, top - 0.026]], [[f - L * 0.66, um - 0.004], [f - L * 0.85, um + 0.012], [f - L * 0.88, um - 0.02], [f - L * 0.72, um - 0.018]]];
+      b.prof(out, w, M.recv, 0.011, 0, { holes }); b.prof(out, w * 0.3, M.core, 0);
+      b.lump(0.02, [end + 0.05, top - 0.012, 0], M.recv, [1.3, 0.8, 1.1], 3); b.lump(0.017, [f - L * 0.3, j0 - 0.012, 0], M.recv, [1.2, 0.9, 1.2], 5);
+      b.spike([end + 0.05, top - 0.004, 0], [end + 0.005, top + 0.02, 0], 0.009, M.horn, 6);
+      buttPad(b, end, um, top - bot - 0.06, M, w);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 0.85, r * 1.5, f, len * 0.75, u, M.recv, 0, 7); b.disc(r * 1.28, f + len * 0.752, u, M.core);
+      b.radial(6, (k) => new THREE.DodecahedronGeometry(r * (0.42 + kr(k) * 0.2), 0).translate(0, r * 1.38, 0), f + len * 0.72, u, M.recv, 0.5);
+      b.radial(3, () => new THREE.ConeGeometry(r * 0.3, len * 0.5, 5).rotateX(-Math.PI / 2 + 0.35).translate(0, r * 1.5, -len * 0.2), f + len * 0.6, u, M.horn, 1.05);
+      return f + len * 0.8;
+    },
+    orn(b, M, R) { const { f0, top, u, hw } = R, k = R.small ? 0.5 : 1; for (const s of [-1, 1]) { b.lump(0.014 * k, [f0 + 0.03 * k, u + 0.012 * k, s * (hw - 0.002)], M.recv, [1.4, 1, 0.8], 2); b.lump(0.011 * k, [f0 + 0.058 * k, u - 0.002, s * (hw - 0.002)], M.recv, [1.2, 1, 0.8], 7); b.spike([f0 + 0.03 * k, u + 0.016 * k, s * hw], [f0 - 0.012 * k, Math.min(top + 0.014 * k, u + 0.04 * k), s * (hw + 0.012 * k)], 0.0065 * k, M.horn, 5); } },
+    blade(b, M) {
+      const out = [[0.03, -0.016], [0.09, -0.021], [0.12, -0.012], [0.19, -0.019], [0.252, 0.01], [0.2, 0.018], [0.16, 0.031], [0.11, 0.02], [0.06, 0.029], [0.03, 0.02]];
+      b.prof(out, 0.0075, M.horn, 0.003, 0, { holes: [[[0.05, 0.002], [0.1, -0.004], [0.15, 0.006], [0.2, 0.0], [0.215, 0.006], [0.15, 0.012], [0.1, 0.003], [0.05, 0.009]]] });
+      b.prof(out, 0.0026, M.core, 0);
+    },
+  },
+  // 황금 — 왕실: 둥근 통과 띠, 깃털 날개, 붉은 보석, 왕관 총구
+  gold: {
+    fx: { tracer: 0xffd84a, flash: 0xffe27a },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2;
+      b.ecyl(hw * 0.96, hh, f0, L, um, M.recv, 0.86, 12); b.ecyl(hw * 0.83, hh * 0.86, f1 - 0.001, 0.02, um, M.bolt, 0.6, 12);
+      const kf = (f) => 1 - 0.14 * ((f - f0) / L);
+      for (const f of [f0 + 0.004, f0 + L * 0.56, f1 - 0.02]) { const k = kf(f); b.ecyl(hw * 0.96 * k + 0.003, hh * k + 0.003, f, 0.012, um, M.bolt, 0.99, 20); for (const s of [-1, 1]) b.gem(0.0065, [f + 0.006, um, s * (hw * 0.96 * k + 0.004)], M.gem, [1.3, 1.3, 0.7]); }
+      const fk = Math.min(1, L / 0.16);
+      for (const s of [-1, 1]) for (let i = 0; i < 3; i++) { const fa = f0 + L * 0.3 + (0.012 - i * 0.018) * fk, ua = um + (-0.012 + i * 0.012) * fk;
+        b.prof([[fa + 0.03 * fk, ua - 0.006 * fk], [fa - 0.02 * fk, ua + 0.002 * fk], [fa - (0.062 + i * 0.008) * fk, ua + (0.022 + i * 0.004) * fk], [fa - 0.02 * fk, ua + 0.014 * fk], [fa + 0.024 * fk, ua + 0.004 * fk]], 0.003, M.bolt, 0.001, s * (hw + 0.003 + i * 0.0022), { r: 0.004 * fk }); }
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2;
+      b.prof([[f, top], [end + 0.05, top + 0.004], [end, top - 0.022], [end, bot + 0.012], [end + 0.03, bot], [f - L * 0.5, j0 - 0.012], [f, j0]], w, M.recv, 0.009, 0, { r: 0.012, holes: [[[f - L * 0.25, top - 0.016], [f - L * 0.62, top - 0.02], [f - L * 0.7, um], [f - L * 0.4, j0 + 0.006]]], hr: 0.01 });
+      for (const s of [-1, 1]) { const x = s * (w / 2 + 0.001); b.tor(0.02, 0.0035, [end + 0.045, um, x], M.bolt, 0, Math.PI / 2, 6.2832, 20); b.gem(0.011, [end + 0.045, um, x], M.gem, [1, 1, 0.6]); for (const d of [-1, 1]) b.tor(0.011, 0.0028, [end + 0.075, um + d * 0.026, x], M.bolt, 0, Math.PI / 2, 4.4, 14); }
+      b.prof([[end + 0.003, bot + 0.004], [end + 0.003, top - 0.012], [end + 0.012, top - 0.006], [end + 0.012, bot + 0.002]], w + 0.004, M.bolt, 0.002);
+      buttPad(b, end, um, top - bot - 0.03, M, w);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.25, r * 1.25, f, len * 0.36, u, M.bolt, 0, 14); b.cyl(r * 1.35, r * 1.35, f + len * 0.04, len * 0.07, u, M.recv, 0, 14); b.cyl(r * 1.35, r * 1.35, f + len * 0.26, len * 0.07, u, M.recv, 0, 14);
+      b.radial(4, () => new THREE.OctahedronGeometry(r * 0.3, 0).translate(0, r * 1.3, 0), f + len * 0.18, u, M.gem, 0.785);
+      b.cyl(r * 0.6, r * 0.6, f, len * 0.8, u, M.steel, 0, 10); b.disc(r * 0.4, f + len * 0.802, u, M.dark);
+      b.radial(6, () => new THREE.ConeGeometry(r * 0.3, len * 0.6, 4).rotateX(-Math.PI / 2 + 0.16).translate(0, r * 1.12, -len * 0.3), f + len * 0.36, u, M.bolt, 0.52);
+      b.radial(6, () => new THREE.SphereGeometry(r * 0.2, 8, 6).translate(0, r * 1.12 + len * 0.1, -len * 0.62), f + len * 0.36, u, M.bolt, 0.52);
+      return f + len * 0.85;
+    },
+    orn(b, M, R) { const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1; for (const s of [-1, 1]) { const x = s * (hw + 0.001), f = f0 + L * 0.2; b.tor(0.011 * k, 0.0026 * k, [f, u, x], M.bolt, 0, Math.PI / 2, 6.2832, 16); b.gem(0.008 * k, [f, u, x], M.gem, [1, 1, 0.6]); for (const d of [-1, 1]) b.prof([[f + d * 0.014 * k, u - 0.003 * k], [f + d * 0.04 * k, u + 0.008 * k], [f + d * 0.03 * k, u - 0.0005], [f + d * 0.014 * k, u + 0.003 * k]], 0.0026, M.bolt, 0.0008, x); } },
+    blade(b, M) {
+      b.prof([[0.03, -0.014], [0.07, -0.021], [0.11, -0.012], [0.15, -0.021], [0.19, -0.012], [0.255, 0.004], [0.19, 0.018], [0.15, 0.025], [0.11, 0.016], [0.07, 0.025], [0.03, 0.018]], 0.0055, M.bolt, 0.0022, 0, { r: 0.01 });
+      b.prof([[0.04, 0.0005], [0.2, 0.0005], [0.225, 0.003], [0.2, 0.0055], [0.04, 0.0055]], 0.0062, M.recv, 0.0008);
+      for (const s of [-1, 1]) b.gem(0.009, [0.026, 0.002, s * 0.0075], M.gem, [1, 1, 0.6]);
+    },
+  },
+  // 은하 — 도는 궤도 고리, 초승달 개머리판, 차원문 총구, 별
+  galaxy: {
+    fx: { tracer: 0xc08cff, flash: 0xd0a0ff },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, fm = (f0 + f1) / 2;
+      b.ecyl(hw, hh, f0 + 0.012, L - 0.03, um, M.recv, 1, 20); b.ball(1, [f1 - 0.018, um, 0], M.recv, [0.034, hh, hw], 16); b.ball(1, [f0 + 0.012, um, 0], M.recv, [0.016, hh, hw], 16);
+      const RR = Math.max(hw, hh) + 0.014, prev = b.cur, spin = prev === '';
+      if (spin) b.part('spin' + ++spinN, [fm, um, b.shift], 0.9);
+      b.tor(RR, 0.0022, [fm, um, 0], M.bolt, 0.5, 0, 6.2832, 36); b.ball(0.0065, [fm, um, RR], M.planet);
+      if (spin) b.part('spin' + ++spinN, [fm, um, b.shift], -0.6);
+      b.tor(RR + 0.006, 0.0016, [fm, um, 0], M.star, -0.55, 0, 6.2832, 36); b.ball(0.0045, [fm, um, -(RR + 0.006)], M.bolt);
+      b.cur = prev;
+      for (let i = 0; i < 10; i++) b.gem(0.0034, [f0 + L * (0.06 + kr(i) * 0.9), Math.min(um + (kr(i + 3) - 0.55) * hh * 2.4, u1 + 0.008), (i % 2 ? 1 : -1) * (hw + 0.008 + kr(i + 6) * 0.012)], M.star);
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, um = (top + bot) / 2, Ro = (top - bot) / 2, cx = end + Ro * 0.92, pts = [];
+      for (let i = 0; i <= 14; i++) { const a = 0.7 + (i / 14) * (6.2832 - 1.4); pts.push([cx + Math.cos(a) * Ro, um + Math.sin(a) * Ro]); }
+      for (let i = 14; i >= 0; i--) { const a = 1.0 + (i / 14) * (6.2832 - 2.0); pts.push([cx + Ro * 0.36 + Math.cos(a) * Ro * 0.74, um + Math.sin(a) * Ro * 0.74]); }
+      b.prof(pts, w * 0.8, M.recv, 0.006);
+      b.prof([[f, top - 0.004], [cx - Ro * 0.3, um + 0.011], [cx - Ro * 0.3, um - 0.011], [f, j0 + 0.004]], w * 0.5, M.steel, 0.004);
+      b.ball(Ro * 0.27, [cx + Ro * 0.3, um, 0], M.planet); b.tor(Ro * 0.42, 0.002, [cx + Ro * 0.3, um, 0], M.bolt, 1.25, 0, 6.2832, 28);
+      for (let i = 0; i < 5; i++) b.gem(0.0036, [cx + (kr(i + 20) - 0.3) * Ro * 1.2, um + (kr(i + 30) - 0.5) * Ro * 1.5, (i % 2 ? 1 : -1) * (w * 0.4 + 0.008)], M.star);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.1, r * 1.1, f, len * 0.3, u, M.steel, 0, 12); b.cyl(r * 0.6, r * 0.6, f, len * 0.62, u, M.steel, 0, 10); b.disc(r * 0.4, f + len * 0.622, u, M.dark);
+      b.tor(r * 1.85, r * 0.26, [f + len * 0.85, u, 0], M.bolt, 0, 0, 6.2832, 24);
+      for (const a of [1.047, 3.1416, 5.236]) b.rod([f + len * 0.15, u + Math.cos(a) * r, Math.sin(a) * r], [f + len * 0.85, u + Math.cos(a) * r * 1.85, Math.sin(a) * r * 1.85], r * 0.16, r * 0.12, M.steel, 5);
+      b.disc(r * 1.7, f + len * 0.85, u, M.portal);
+      const prev = b.cur; b.part('spin' + ++spinN, [f + len * 0.85, u, b.shift], 2.4);
+      for (let k = 0; k < 3; k++) { const a = (k / 3) * 6.2832; b.gem(r * 0.24, [f + len * 0.85, u + Math.cos(a) * r * 1.3, Math.sin(a) * r * 1.3], M.star, [2, 1, 1]); }
+      b.cur = prev;
+      return f + len * 0.9;
+    },
+    orn(b, M, R) { const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1; for (const s of [-1, 1]) { const x = s * (hw + 0.004 * k), f = f0 + L * 0.2; b.ball(0.009 * k, [f, u + 0.004 * k, x], M.planet, [1, 1, 0.6]); b.tor(0.015 * k, 0.0014, [f, u + 0.004 * k, x], M.bolt, 1.25, 0, 6.2832, 20); for (let i = 0; i < 4; i++) b.gem(0.003 * k + 0.001, [f0 + L * (0.34 + i * 0.1), u + (kr(i + (s > 0 ? 5 : 0)) - 0.3) * 0.03 * k, s * (hw + 0.003)], M.star); } },
+    blade(b, M) {
+      const pts = [[0.03, -0.014]];
+      for (let i = 0; i <= 9; i++) { const a = ((-98 + i * 8.6) * Math.PI) / 180; pts.push([0.062 + Math.cos(a) * 0.185, 0.168 + Math.sin(a) * 0.185]); }
+      pts.push([0.24, 0.122]);
+      for (let i = 9; i >= 0; i--) { const a = ((-96 + i * 7.6) * Math.PI) / 180; pts.push([0.075 + Math.cos(a) * 0.15, 0.158 + Math.sin(a) * 0.15]); }
+      pts.push([0.03, 0.02]);
+      b.prof(pts, 0.005, M.recv, 0.002);
+      for (let i = 0; i < 4; i++) { const a = ((-80 + i * 16) * Math.PI) / 180; for (const s of [-1, 1]) b.gem(0.0034, [0.068 + Math.cos(a) * 0.168, 0.163 + Math.sin(a) * 0.168, s * 0.0045], M.star); }
+    },
+  },
+  // 오로라 — 반투명 프리즘 날이 감싼 크롬 몸
+  aurora: {
+    fx: { tracer: 0xffffff, flash: 0xd8f4ff, rainbow: true },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, hh = (u1 - u0) / 2, uc = R.uc ?? (u0 + u1) / 2, rc = Math.max(0.008, Math.min(0.019, Math.min(u1 - uc, uc - u0) - 0.004));
+      b.cyl(rc, rc, f0, L, uc, M.steel, 0, 16); b.cyl(rc + 0.004, rc + 0.004, f0, 0.014, uc, M.bolt, 0, 16); b.cyl(rc + 0.004, rc + 0.003, f1 - 0.014, 0.014, uc, M.bolt, 0, 16);
+      const r0 = rc * 0.6, r1 = Math.max(hw, hh) + 0.012;
+      for (const [a, k] of [[1.05, 1], [-1.05, 1], [Math.PI, 0.9], [2.2, 0.72], [-2.2, 0.72]])
+        b.prof([[f0 + 0.006, uc + r0], [f0 + 0.03, uc + r1 * k], [f1 - 0.04, uc + r1 * k * 0.86], [f1 + 0.05 * k, uc + r0 + 0.003], [f1 - 0.02, uc + r0]], 0.0045, M.prism, 0.0015, 0, { roll: a, cu: uc });
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2, uj = (top + j0) / 2;
+      b.prof([[f, top], [end, top], [end, top - 0.014], [f - L * 0.3, top - 0.016], [f, j0]], w * 0.6, M.steel, 0.004);
+      for (let i = 0; i < 4; i++) { const t = i / 3, tu = top - 0.024 - t * (top - bot - 0.04), tf = end + 0.014 + t * 0.03;
+        b.prof([[f - 0.01, uj + 0.008 - t * 0.02], [tf, tu + 0.012], [tf - 0.008, tu], [f - 0.03, uj - 0.014 - t * 0.012]], 0.004, M.prism, 0.0012, (i % 2 ? 1 : -1) * 0.005); }
+      b.prof([[end, top], [end, bot + 0.03], [end + 0.012, bot + 0.036], [end + 0.012, top - 0.014]], w * 0.7, M.steel, 0.003);
+      buttPad(b, end, um + 0.012, top - bot - 0.03, M, w * 0.8);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.15, r * 1.15, f, len * 0.3, u, M.bolt, 0, 14); b.cyl(r * 0.6, r * 0.6, f, len * 0.85, u, M.steel, 0, 10); b.disc(r * 0.4, f + len * 0.852, u, M.dark);
+      for (const a of [1.05, -1.05, Math.PI]) b.prof([[f + len * 0.05, u + r * 0.7], [f + len * 0.3, u + r * 2.0], [f + len * 1.25, u + r * 0.62], [f + len * 0.9, u + r * 0.5], [f + len * 0.05, u + r * 0.5]], r * 0.3, M.prism, r * 0.08, 0, { roll: a, cu: u });
+      return f + len * 0.9;
+    },
+    orn(b, M, R) { const { f0, f1, top, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1; for (const s of [-1, 1]) for (let i = 0; i < 2; i++) b.prof([[f0 + L * 0.42 - i * 0.03 * k, u - 0.004 * k], [f0 + L * 0.42 + (0.03 - i * 0.03) * k, u + 0.004 * k], [f0 + 0.004 - i * 0.008 * k, Math.min(top + 0.016 * k, u + 0.044 * k) - i * 0.012 * k], [f0 + L * 0.25 - i * 0.03 * k, u + 0.002 * k]], 0.003, M.prism, 0.001, s * (hw + 0.002 + i * 0.003)); },
+    blade(b, M) {
+      b.prof([[0.03, -0.015], [0.19, -0.022], [0.265, 0.003], [0.19, 0.028], [0.03, 0.021]], 0.009, M.prism, 0.004);
+      b.prof([[0.03, -0.002], [0.2, 0.0], [0.245, 0.003], [0.2, 0.006], [0.03, 0.008]], 0.0035, M.bolt, 0.001);
+      for (const s of [-1, 1]) b.prof([[0.034, 0.02], [0.07, 0.022], [0.02, 0.05]], 0.003, M.prism, 0.001, s * 0.006);
+    },
+  },
+  // 할로윈 — 속에서 불빛이 새는 호박등 총열덮개, 박쥐 날개 개머리판, 호박 총구, 낫 모양 칼
+  halloween: {
+    fx: { tracer: 0xa64dff, flash: 0xff8a1a },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, bv = Math.min(0.005, hh * 0.22);
+      const out = [[f0, u0 + hh * 0.3], [f0, u1 - hh * 0.3], [f0 + L * 0.06, u1], [f1 - L * 0.06, u1], [f1, u1 - hh * 0.3], [f1, u0 + hh * 0.3], [f1 - L * 0.06, u0], [f0 + L * 0.06, u0]];
+      const eye = (c) => [[f0 + L * (c - 0.12), um + hh * 0.06], [f0 + L * (c + 0.12), um + hh * 0.06], [f0 + L * c, um + hh * 0.66]];
+      const mouth = [[0.18, -0.1], [0.31, -0.34], [0.4, -0.12], [0.5, -0.34], [0.6, -0.12], [0.69, -0.34], [0.82, -0.1], [0.7, -0.7], [0.57, -0.56], [0.5, -0.72], [0.43, -0.56], [0.3, -0.7]].map(([a, v]) => [f0 + L * a, um + hh * v]);
+      b.prof(out, w, M.pumpkin, bv, 0, { holes: [eye(0.33), eye(0.67), mouth] }); b.prof(out, w * 0.34, M.glow, 0);
+      for (const a of [0.14, 0.5, 0.86]) b.box(w * 0.5, 0.0016, 0.004, f0 + L * a, u1 + 0.0004, M.stem);                          // 호박 골
+      b.rod([f0 + L * 0.5, u1 - 0.002, 0], [f0 + L * 0.5 - 0.01, u1 + 0.014, 0], 0.0062, 0.0042, M.stem, 6);                  // 꼭지
+      const k = Math.min(1, L / 0.2), a = f0 + L * 0.2;
+      for (const s of [-1, 1]) b.prof([[a, u1 - 0.006], [a + 0.05 * k, u1 - 0.006], [a + 0.032 * k, u1 + 0.01 * k], [a + 0.014 * k, u1 + 0.004 * k], [a - 0.002 * k, u1 + 0.026 * k], [a - 0.014 * k, u1 + 0.01 * k], [a - 0.032 * k, u1 + 0.03 * k], [a - 0.024 * k, u1 - 0.002]], 0.0022, M.wing, 0, s * (hw + 0.0016)); // 박쥐 날개
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2;
+      const out = [[f, top], [end + 0.035, top], [end, top - 0.03], [end, bot + 0.02], [end + 0.03, bot], [end + L * 0.3, bot + 0.034], [end + L * 0.42, bot + 0.012], [end + L * 0.6, j0 - 0.014], [end + L * 0.72, j0 - 0.032], [f - L * 0.12, j0 - 0.006], [f, j0]];
+      const cx = end + L * 0.38, cy = top - 0.03, r0 = 0.013, moon = [];
+      for (let i = 0; i <= 6; i++) { const t = 1.0 + (i / 6) * 4.28; moon.push([cx + Math.cos(t) * r0, cy + Math.sin(t) * r0]); }
+      for (let i = 0; i <= 4; i++) { const t = 5.0 - (i / 4) * 3.72; moon.push([cx + 0.007 + Math.cos(t) * r0 * 0.78, cy + Math.sin(t) * r0 * 0.78]); }
+      b.prof(out, w, M.recv, 0.008, 0, { holes: [moon] }); b.prof(out, w * 0.3, M.glow, 0);
+      for (const s of [-1, 1]) { b.ball(0.012, [end + L * 0.72, top - 0.026, s * (w / 2)], M.pumpkin, [1.1, 0.9, 0.55], 9); for (const d of [-0.004, 0.004]) b.box(0.002, 0.004, 0.003, end + L * 0.72 + d, top - 0.023, M.glow, s * (w / 2 + 0.0064)); }
+      buttPad(b, end, um, top - bot - 0.06, M, w);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 0.62, r * 0.62, f, len * 1.0, u, M.steel, 0, 10); b.disc(r * 0.4, f + len * 1.002, u, M.dark);
+      b.cyl(r * 1.1, r * 1.1, f + len * 0.1, len * 0.78, u, M.glow, 0, 10);
+      b.radial(7, () => { const g = new THREE.SphereGeometry(r * 0.72, 8, 6); g.scale(0.8, 0.8, (len * 0.47) / (r * 0.72)); g.translate(0, r * 1.12, -len * 0.5); return g; }, f, u, M.pumpkin, 0.22);
+      b.rod([f + len * 0.5, u + r * 1.7, 0], [f + len * 0.36, u + r * 2.5, 0], r * 0.3, r * 0.2, M.stem, 6);
+      return f + len;
+    },
+    orn(b, M, R) {
+      const { f0, u, hw } = R, k = R.small ? 0.55 : 1, fc = f0 + 0.042 * k, uc = u + 0.004;
+      const bat = [[-28, 8], [-16, 2], [-8, 9], [-4, 4], [-2.5, 12], [0, 6], [2.5, 12], [4, 4], [8, 9], [16, 2], [28, 8], [20, -6], [12, -2], [6, -8], [0, -4], [-6, -8], [-12, -2], [-20, -6]].map(([a, v]) => [fc + a * 0.001 * k, uc + v * 0.001 * k]);
+      for (const s of [-1, 1]) { b.prof(bat, 0.0024, M.wing, 0, s * (hw + 0.0016)); for (const d of [-0.0022, 0.0022]) b.ball(0.0013 * k + 0.0004, [fc + d * k, uc + 0.004 * k, s * (hw + 0.003)], M.eye, [1, 1, 0.6], 6); }
+    },
+    blade(b, M) {
+      const out = [[0.03, -0.014], [0.1, -0.02], [0.17, -0.016], [0.222, -0.002], [0.248, 0.028], [0.254, 0.064], [0.232, 0.038], [0.2, 0.022], [0.15, 0.015], [0.09, 0.017], [0.03, 0.02]];
+      const tri = (c) => [[c - 0.01, 0.0], [c + 0.01, 0.0], [c, 0.009]];
+      b.prof(out, 0.007, M.wing, 0.0028, 0, { holes: [tri(0.075), tri(0.115), [[0.06, -0.006], [0.078, -0.011], [0.095, -0.006], [0.112, -0.011], [0.13, -0.006], [0.112, -0.0145], [0.095, -0.012], [0.078, -0.0145]]] });
+      b.prof(out, 0.0024, M.glow, 0);
+      b.prof([[0.15, -0.0165], [0.222, -0.002], [0.248, 0.028], [0.254, 0.064], [0.25, 0.03], [0.228, 0.004], [0.17, -0.012]], 0.0074, M.pumpkin, 0.0004); // 주황 날
+    },
+  },
+};
+export function skinFx(skin) { const k = SKINS[skin] && KITS[SKINS[skin].id]; return k ? k.fx : null; }
+
+// ───────────── 소총 계열: 돌격소총 / 소음소총(supp) / 점사소총(burst) / 지정사수소총(dmr) / 경기관총(lmg) / 중기관총(hmg) ─────────────
+function rifle(M, o = {}) {
+  const b = new Builder(), F = M[o.furn || 'furn'], heavy = o.lmg || o.hmg, K = o.kit || {};
+  // 총몸 (위·아래)
+  b.prof([[-0.105, -0.006], [-0.105, 0.03], [-0.09, 0.042], [0.135, 0.042], [0.135, -0.006]], 0.044, M.recv, 0.004);
+  b.prof([[-0.105, -0.006], [0.112, -0.006], [0.112, -0.034], [0.118, -0.07], [0.03, -0.07], [0.022, -0.05], [-0.078, -0.05], [-0.105, -0.04]], 0.04, M.recv, 0.004);
+  b.box(0.0446, 0.0016, 0.236, 0.015, -0.006, M.dark);
+  b.xcyl(0.0042, 0.0464, -0.088, -0.022, M.bolt); b.xcyl(0.0042, 0.0464, 0.098, -0.02, M.bolt); b.xcyl(0.003, 0.042, -0.01, -0.03, M.steel);
+  b.box(0.002, 0.02, 0.06, 0.045, 0.016, M.dark, 0.0222); b.box(0.002, 0.012, 0.05, 0.045, 0.017, M.bolt, 0.0226); b.box(0.003, 0.006, 0.064, 0.045, 0.002, M.steel, 0.0225); // 탄피 배출구와 먼지덮개
+  b.box(0.004, 0.006, 0.022, -0.022, -0.017, M.steel, -0.0218, -0.5); b.sdisc(0.0046, -0.03, -0.018, -0.0224, M.steel); b.sdisc(0.0022, -0.014, -0.01, -0.0206, M.accent); b.sdisc(0.0016, -0.014, -0.026, -0.0206, M.white); // 조정간
+  b.box(0.004, 0.018, 0.01, 0.066, -0.014, M.steel, -0.0212); b.box(0.004, 0.008, 0.014, 0.1, -0.03, M.steel, 0.0212);
+  if (o.label) b.label(o.label, 0.075, 0.024, -0.0228, 0.076, 0.019);
+  b.box(0.002, 0.007, 0.1, 0.035, 0.008, M.dark, -0.0222);                                   // 왼쪽 장전손잡이 홈
+  b.part('slide'); b.box(0.012, 0.01, 0.012, 0.075, 0.008, M.bolt, -0.027); b.xcyl(0.006, 0.014, 0.075, 0.008, M.bolt, -0.036); b.part();
+  b.box(0.05, 0.007, 0.02, -0.1, 0.0355, M.steel); b.box(0.012, 0.009, 0.03, -0.092, 0.036, M.steel);
+  // 탄창
+  b.part('mag');
+  if (heavy) {                                                    // 상자형 탄통과 탄띠
+    const k = o.hmg ? 1.3 : 1;
+    b.prof([[0.005, -0.07], [0.135, -0.07], [0.135, -0.07 - 0.11 * k], [0.005, -0.07 - 0.11 * k]], 0.08 * k, M.olive, 0.006);
+    b.box(0.084 * k, 0.012, 0.134, 0.07, -0.07 - 0.028 * k, M.recv); b.box(0.084 * k, 0.006, 0.134, 0.07, -0.07 - 0.085 * k, M.recv);
+    b.box(0.03, 0.012, 0.03, 0.07, -0.07 - 0.055 * k, M.steel, 0.041 * k);
+    for (let i = 0; i < 6; i++) b.cyl(0.0042, 0.0042, 0.05, 0.04, -0.062 + i * 0.011, M.brass, -0.026 - i * 0.0012, 8); // 탄띠
+  } else if (o.dmr || o.burst) {
+    b.prof([[0.038, -0.06], [0.1, -0.06], [0.106, -0.168], [0.046, -0.168]], 0.026, M.mag, 0.003);
+    b.prof([[0.044, -0.164], [0.108, -0.164], [0.109, -0.174], [0.045, -0.174]], 0.03, M.rubber, 0.002);
+    for (const s of [-1, 1]) b.box(0.0012, 0.08, 0.008, 0.074, -0.11, M.dark, s * 0.0132, 0.055);
+  } else {
+    b.prof([[0.036, -0.06], [0.098, -0.06], [0.106, -0.12], [0.124, -0.2], [0.12, -0.232], [0.066, -0.238], [0.056, -0.2], [0.042, -0.125]], 0.026, M.mag, 0.003, 0, { r: 0.004 });
+    for (const u of [-0.1, -0.13, -0.16, -0.19]) b.box(0.0285, 0.004, 0.05, 0.078 + (-0.06 - u) * 0.12, u, M.steel, 0, 0.12);
+    b.prof([[0.062, -0.228], [0.124, -0.222], [0.125, -0.234], [0.064, -0.242]], 0.03, M.rubber, 0.002);
+    if (o.supp) for (const s of [-1, 1]) b.box(0.0012, 0.07, 0.007, 0.082, -0.125, M.bolt, s * 0.0134, 0.1);
+  }
+  b.part();
+  pistolGrip(b, M);
+  tguard(b, 0, -0.05, M);
+  // 총열덮개
+  const hg = o.dmr || heavy ? 0.45 : 0.405, hw = o.hmg ? 0.058 : 0.05;
+  b.cyl(0.0235, 0.0235, 0.128, 0.012, 0, M.steel, 0, 12);
+  if (K.hg) K.hg(b, M, { f0: 0.135, f1: hg, u0: -0.038, u1: 0.041, w: hw, uc: 0 });
+  else {
+    b.prof([[0.135, -0.038], [0.135, 0.041], [hg, 0.041], [hg, -0.024], [hg - 0.017, -0.038]], hw, F, 0.007);
+    const ns = Math.floor((hg - 0.175) / 0.042);
+    slots(b, 0.172, ns, 0.042, 0.014, hw / 2 + 0.0002, M); slots(b, 0.172, ns, 0.042, -0.014, hw / 2 + 0.0002, M);
+    for (let i = 0; i < ns; i++) b.box(0.01, 0.0014, 0.028, 0.172 + i * 0.042, -0.0384, M.dark);
+    b.cyl(0.019, 0.019, hg - 0.003, 0.005, 0, M.steel, 0, 12);
+  }
+  if (heavy && !K.hg) for (let i = 0; i < 6; i++) for (const s of [-1, 1]) b.sdisc(0.005, 0.19 + i * 0.04, 0.028, s * (hw / 2 + 0.0004), M.dark);
+  if (o.burst) { b.prof([[0.2, -0.038], [0.3, -0.038], [0.238, -0.104], [0.204, -0.104]], 0.03, M.poly, 0.007, 0, { r: 0.006 }); for (let i = 0; i < 3; i++) b.box(0.0305, 0.003, 0.03, 0.222, -0.06 - i * 0.012, M.dark); }  // 각진 앞손잡이
+  if (o.supp && !K.hg) { b.prof([[0.21, -0.038], [0.3, -0.038], [0.275, -0.066], [0.225, -0.066]], 0.026, M.poly, 0.006, 0, { r: 0.005 }); b.box(0.02, 0.02, 0.05, 0.36, -0.048, M.steel); b.disc(0.0085, 0.3855, -0.048, M.glass); } // 손멈치와 전등
+  if (o.hmg) { b.prof([[-0.07, 0.042], [-0.07, 0.074], [0.13, 0.074], [0.13, 0.042]], 0.052, M.recv, 0.005); b.box(0.054, 0.004, 0.012, 0.118, 0.06, M.steel); }  // 급탄 덮개
+  if (heavy) { b.prof([[0.15, 0.05], [0.16, 0.085], [0.27, 0.085], [0.28, 0.05], [0.268, 0.05], [0.262, 0.073], [0.168, 0.073], [0.162, 0.05]], 0.014, M.steel, 0.003, o.hmg ? 0 : 0.03); } // 운반 손잡이
+  // 레일과 조준기
+  if (!o.hmg) rail(b, -0.087, hg - 0.005, 0.042, M); else rail(b, 0.14, hg - 0.005, 0.042, M);
+  let sight = 0.0905;
+  if (o.dmr) sight = holo(b, -0.01, 0.051, M, 1.25);
+  else if (o.lmg || o.supp) sight = holo(b, -0.02, 0.051, M);
+  else if (o.burst) {                                              // 운반 손잡이형 가늠자 + 세모 가늠쇠
+    for (const s of [-1, 1]) b.prof([[-0.09, 0.05], [-0.082, 0.082], [0.03, 0.082], [0.085, 0.05], [0.07, 0.05], [0.022, 0.071], [-0.07, 0.071], [-0.074, 0.05]], 0.005, M.recv, 0.0015, s * 0.0125);
+    b.ring(0.0062, 0.0018, -0.07, 0.0905, M.steel); b.box(0.03, 0.006, 0.012, -0.07, 0.0815, M.recv);
+    b.prof([[0.35, 0.05], [0.372, 0.092], [0.38, 0.092], [0.4, 0.05]], 0.03, M.recv, 0.003, 0, { holes: [[[0.362, 0.056], [0.374, 0.08], [0.378, 0.08], [0.388, 0.056]]] });
+    b.box(0.003, 0.012, 0.004, 0.376, 0.086, M.bolt);
+  } else if (!o.hmg) {                                             // 접이식 가늠자·가늠쇠
+    b.box(0.03, 0.01, 0.034, -0.06, 0.056, M.recv); for (const s of [-1, 1]) b.box(0.005, 0.03, 0.012, -0.06, 0.076, M.recv, s * 0.0125);
+    b.ring(0.0062, 0.0018, -0.06, 0.0905, M.steel); b.xcyl(0.004, 0.036, -0.06, 0.063, M.steel);
+    b.box(0.026, 0.01, 0.03, 0.375, 0.056, M.recv); b.box(0.0035, 0.03, 0.005, 0.375, 0.076, M.bolt);
+    for (const s of [-1, 1]) b.box(0.004, 0.032, 0.018, 0.375, 0.074, M.recv, s * 0.011, 0, s * 0.2);
+  } else { sight = 0.105; b.box(0.022, 0.02, 0.02, -0.06, 0.084, M.recv); b.ring(0.006, 0.0018, -0.06, 0.105, M.steel); b.box(0.004, 0.05, 0.006, 0.44, 0.08, M.bolt); b.box(0.018, 0.012, 0.02, 0.44, 0.058, M.recv); }
+  // 총열 · 총구
+  const end = o.dmr ? 0.66 : o.lmg ? 0.62 : o.hmg ? 0.68 : o.burst ? 0.5 : 0.54, br = heavy ? 0.0125 : o.dmr ? 0.011 : 0.0095;
+  b.cyl(br, br, hg - 0.005, end - hg + 0.005, 0, M.steel);
+  b.cyl(0.015, 0.015, hg + 0.005, 0.028, 0, M.recv, 0, 10);
+  if (o.dmr || heavy) for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.283; b.box(0.0025, 0.0025, end - hg - 0.06, (hg + end) / 2 + 0.01, Math.cos(a) * br, M.dark, Math.sin(a) * br); } // 총열 홈
+  let tip;
+  if (o.supp) { tip = suppressor(b, end - 0.03, 0.185, 0.02, 0, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.01, 0, 0.017, 0.045); }
+  else if (K.muzzle) tip = K.muzzle(b, M, end - 0.005, 0, heavy ? 0.017 : 0.014, heavy ? 0.06 : 0.05);
+  else tip = muzzleBrake(b, end - 0.005, 0, M, heavy ? 0.017 : 0.014, heavy ? 0.06 : 0.05);
+  if (heavy || o.dmr) bipod(b, hg - 0.02, -0.044, M);
+  // 개머리판
+  if (K.orn) K.orn(b, M, { f0: -0.1, f1: 0.13, top: 0.042, u: 0.012, hw: 0.0222 });
+  if (K.stock) K.stock(b, M, { f: -0.105, end: -0.352, top: 0.032, bot: -0.108, j0: -0.04, w: 0.042 });
+  else if (o.dmr || heavy) {
+    b.prof([[-0.105, 0.03], [-0.33, 0.03], [-0.35, 0.012], [-0.35, -0.105], [-0.325, -0.11], [-0.2, -0.05], [-0.105, -0.04]], 0.04, F, 0.007, 0, { r: 0.006, holes: o.dmr ? [[[-0.22, -0.02], [-0.31, -0.02], [-0.31, -0.07], [-0.24, -0.04]]] : [] });
+    b.prof([[-0.19, 0.03], [-0.2, 0.046], [-0.3, 0.046], [-0.31, 0.03]], 0.036, M.poly, 0.005);
+    buttPad(b, -0.35, -0.045, 0.118, M);
+  } else {
+    b.cyl(0.0145, 0.0145, -0.3, 0.195, 0.006, M.steel); b.cyl(0.0185, 0.0185, -0.114, 0.01, 0.006, M.steel, 0, 8);
+    b.prof([[-0.19, 0.032], [-0.335, 0.032], [-0.352, 0.016], [-0.352, -0.1], [-0.326, -0.108], [-0.272, -0.036], [-0.19, -0.024]], 0.042, F, 0.006, 0, { r: 0.005, holes: [[[-0.305, -0.03], [-0.338, -0.03], [-0.338, -0.082], [-0.322, -0.086]]] });
+    b.box(0.014, 0.012, 0.04, -0.235, -0.03, M.steel); for (const s of [-1, 1]) b.sdisc(0.006, -0.3, 0.012, s * 0.0214, M.dark);
+    buttPad(b, -0.352, -0.042, 0.118, M);
+  }
+  return { group: b.build(), muzzle: [0, 0, -(tip + 0.015)], grip: [0, -0.1, 0.085], fore: o.burst ? [0, -0.08, -0.235] : [0, -0.04, -0.27], sight, travel: 0.055 };
+}
+
+// ───────────── 샷건: 펌프(나무) / 자동(auto: 상자 탄창, 권총손잡이) ─────────────
+function shotgun(M, o = {}) {
+  const b = new Builder(), W = o.auto ? M.furn : M.wood, W2 = o.auto ? M.dark : M.woodDark, K = o.kit || {};
+  b.prof([[-0.115, -0.038], [-0.125, 0.018], [-0.105, 0.036], [0.125, 0.036], [0.125, -0.048], [-0.03, -0.048]], 0.046, M.recv, 0.005, 0, { r: 0.004 });
+  b.box(0.002, 0.02, 0.07, 0.04, 0.008, M.dark, 0.0234); b.box(0.002, 0.013, 0.06, 0.04, 0.009, M.bolt, 0.0238);
+  b.xcyl(0.0035, 0.048, -0.07, -0.02, M.bolt); b.xcyl(0.0035, 0.048, 0.09, -0.03, M.bolt); b.sdisc(0.005, -0.09, 0.012, -0.0234, M.accent);
+  if (o.label) b.label(o.label, 0.03, 0.016, -0.0238, 0.07, 0.018);
+  tguard(b, -0.045, -0.046, M);
+  b.cyl(0.0135, 0.0125, 0.125, o.auto ? 0.44 : 0.52, 0.016, M.steel);
+  let tip = o.auto ? 0.565 : 0.645;
+  if (K.muzzle) tip = K.muzzle(b, M, tip - 0.006, 0.016, 0.0145, 0.045);
+  else { b.cyl(0.0145, 0.0145, tip - 0.02, 0.02, 0.016, M.recv); b.disc(0.0098, tip + 0.0005, 0.016, M.dark); }
+  if (K.orn) K.orn(b, M, { f0: -0.115, f1: 0.12, top: 0.036, u: 0, hw: 0.0232 });
+  b.box(0.01, 0.0035, 0.36, 0.3, 0.0312, M.steel); for (let i = 0; i < 9; i++) b.box(0.006, 0.006, 0.006, 0.14 + i * 0.04, 0.0275, M.steel); // 뜬 가늠대
+  if (o.auto) {
+    b.part('mag'); b.prof([[0.02, -0.048], [0.1, -0.048], [0.106, -0.17], [0.03, -0.17]], 0.034, M.mag, 0.004); for (const u of [-0.09, -0.12, -0.15]) b.box(0.036, 0.004, 0.07, 0.066, u, M.steel); b.box(0.038, 0.008, 0.082, 0.068, -0.172, M.rubber); b.part();
+    if (K.hg) K.hg(b, M, { f0: 0.125, f1: 0.4, u0: -0.045, u1: 0.008, w: 0.05 });
+    else { b.prof([[0.125, -0.045], [0.125, 0.008], [0.4, 0.008], [0.4, -0.03], [0.38, -0.045]], 0.05, W, 0.006); slots(b, 0.165, 5, 0.045, -0.018, 0.0252, M); }
+    b.cyl(0.011, 0.011, 0.4, 0.1, -0.014, M.steel); b.cyl(0.013, 0.013, 0.49, 0.012, -0.014, M.recv, 0, 10);
+    b.box(0.002, 0.007, 0.08, 0.03, 0.02, M.dark, -0.0234); b.part('slide'); b.box(0.012, 0.01, 0.012, 0.06, 0.02, M.bolt, -0.028); b.xcyl(0.0055, 0.012, 0.06, 0.02, M.bolt, -0.036); b.part();
+    pistolGrip(b, M, -0.02, 0.002);
+    if (K.stock) K.stock(b, M, { f: -0.115, end: -0.38, top: 0.03, bot: -0.108, j0: -0.03, w: 0.04 });
+    else {
+      b.prof([[-0.115, 0.03], [-0.36, 0.03], [-0.38, 0.012], [-0.38, -0.105], [-0.355, -0.11], [-0.22, -0.04], [-0.115, -0.03]], 0.04, W, 0.007, 0, { r: 0.006, holes: [[[-0.24, -0.015], [-0.34, -0.015], [-0.34, -0.07], [-0.26, -0.035]]] });
+      buttPad(b, -0.38, -0.04, 0.118, M);
+    }
+    rail(b, -0.09, 0.11, 0.036, M);
+    const sg = holo(b, 0.02, 0.045, M);
+    return { group: b.build(), muzzle: [0, 0.016, -(tip + 0.015)], grip: [0, -0.1, 0.1], fore: [0, -0.05, -0.28], sight: sg, travel: 0.05 };
+  }
+  b.box(0.03, 0.006, 0.09, 0.05, -0.05, M.steel);
+  b.cyl(0.012, 0.012, 0.125, 0.4, -0.016, M.steel); b.cyl(0.0135, 0.0135, 0.525, 0.016, -0.016, M.recv, 0, 10);
+  b.box(0.012, 0.05, 0.014, 0.5, 0, M.recv);
+  if (!K.muzzle) b.vcyl(0.003, 0.008, 0.635, 0.035, M.brass);
+  b.part('slide');                                                // 펌프 손잡이 (쏘고 나면 당겨짐)
+  if (K.hg) K.hg(b, M, { f0: 0.2, f1: 0.38, u0: -0.043, u1: 0.007, w: 0.05 });
+  else { b.cyl(0.0245, 0.0245, 0.2, 0.18, -0.018, W, 0, 14); for (let i = 0; i < 8; i++) b.cyl(0.0258, 0.0258, 0.21 + i * 0.021, 0.008, -0.018, W2, 0, 14); }
+  b.box(0.008, 0.008, 0.2, 0.2, 0.004, M.steel, -0.02);
+  b.part();
+  if (K.stock) { // 손목 부분은 남기고 그 뒤를 바꿈
+    b.prof([[-0.105, 0.024], [-0.17, 0.014], [-0.205, 0.011], [-0.215, -0.072], [-0.165, -0.082], [-0.13, -0.06], [-0.11, -0.04]], 0.042, W, 0.009, 0, { r: 0.008 });
+    K.stock(b, M, { f: -0.2, end: -0.404, top: 0.011, bot: -0.13, j0: -0.07, w: 0.042 });
+  } else {
+    b.prof([[-0.105, 0.024], [-0.17, 0.014], [-0.4, -0.006], [-0.408, -0.128], [-0.39, -0.134], [-0.215, -0.072], [-0.165, -0.082], [-0.13, -0.06], [-0.11, -0.04]], 0.042, W, 0.009, 0, { r: 0.008 });
+    buttPad(b, -0.404, -0.068, 0.124, M, 0.042);
+    for (const s of [-1, 1]) b.sdisc(0.007, -0.3, -0.06, s * 0.0214, M.brass);
+  }
+  return { group: b.build(), muzzle: [0, 0.016, -(tip + 0.015)], grip: [0, -0.07, 0.15], fore: [0, -0.05, -0.28], sight: 0.06, travel: 0.075, rack: true, pump: true };
+}
+
+// ───────────── 저격총: 중저격총 / 경저격총(light: 짧은 총열, 나무 총몸) ─────────────
+function sniper(M, o = {}) {
+  const b = new Builder(), S = o.light ? M.wood : M.olive, K = o.kit || {};
+  if (K.stock) { // 가운데 몸통만 남기고 앞(총열덮개)과 뒤(개머리판)를 스킨 형태로
+    b.prof([[0.1, -0.014], [0.1, -0.054], [0.02, -0.052], [-0.022, -0.062], [-0.06, -0.135], [-0.102, -0.14], [-0.108, -0.085], [-0.165, -0.062], [-0.165, 0.0], [-0.11, -0.006], [-0.11, -0.014]], 0.046, S, 0.008, 0, { r: 0.006 });
+    K.hg(b, M, { f0: 0.1, f1: 0.37, u0: -0.056, u1: 0.018, w: 0.046 });
+    K.stock(b, M, { f: -0.165, end: -0.405, top: 0.03, bot: -0.105, j0: -0.062, w: 0.046 });
+    K.orn(b, M, { f0: -0.1, f1: 0.1, top: -0.004, u: -0.034, hw: 0.0232 });
+  } else {
+  b.prof([[0.37, -0.014], [0.37, -0.04], [0.1, -0.054], [0.02, -0.052], [-0.022, -0.062], [-0.06, -0.135], [-0.102, -0.14], [-0.108, -0.085], [-0.165, -0.062], [-0.385, -0.105], [-0.405, -0.1], [-0.405, 0.012], [-0.39, 0.03], [-0.215, 0.03], [-0.18, 0.004], [-0.11, -0.006], [-0.11, -0.014]], 0.046, S, 0.008, 0,
+    { r: 0.006, holes: o.light ? [] : [[[-0.2, -0.03], [-0.34, -0.03], [-0.34, -0.07], [-0.22, -0.05]]] });
+  buttPad(b, -0.405, -0.042, 0.118, M, 0.046);
+  for (const s of [-1, 1]) b.sdisc(0.005, -0.37, -0.02, s * 0.0234, M.steel);
+  for (let i = 0; i < 4; i++) for (const s of [-1, 1]) b.box(0.0014, 0.006, 0.03, 0.16 + i * 0.05, -0.034, M.dark, s * 0.0234);
+  }
+  if (!o.light && !K.stock) { b.prof([[-0.22, 0.03], [-0.23, 0.05], [-0.34, 0.05], [-0.35, 0.03]], 0.038, M.poly, 0.006); for (const f of [-0.25, -0.32]) b.xcyl(0.005, 0.05, f, 0.02, M.steel); } // 높이 조절 뺨받침
+  b.cyl(0.0175, 0.0175, -0.115, 0.26, 0, M.recv);                  // 노리쇠 집
+  b.box(0.002, 0.012, 0.07, 0.03, 0.004, M.dark, 0.0176); b.box(0.002, 0.007, 0.062, 0.03, 0.004, M.bolt, 0.018);
+  if (o.label) b.label(o.label, 0.085, 0.004, -0.0178, 0.06, 0.015);
+  b.cyl(0.0175, 0.013, 0.145, 0.03, 0, M.recv);
+  const bl = o.light ? 0.36 : 0.5;
+  b.cyl(0.013, 0.0098, 0.175, bl, 0, M.steel);
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.283; b.box(0.0028, 0.0028, bl * 0.6, 0.2 + bl * 0.36, Math.cos(a) * 0.0112, M.dark, Math.sin(a) * 0.0112); }
+  let tip = 0.175 + bl;
+  if (K.muzzle) tip = o.light ? K.muzzle(b, M, tip - 0.01, 0, 0.0115, 0.04) : K.muzzle(b, M, 0.67, 0, 0.016, 0.07);
+  else if (!o.light) { b.cyl(0.011, 0.016, 0.67, 0.012, 0, M.steel); b.prof([[0.682, -0.014], [0.682, 0.014], [0.74, 0.014], [0.74, -0.014]], 0.034, M.steel, 0.004, 0, { holes: [[[0.69, -0.008], [0.69, 0.008], [0.704, 0.008], [0.704, -0.008]], [[0.712, -0.008], [0.712, 0.008], [0.728, 0.008], [0.728, -0.008]]] }); tip = 0.74; } // 큰 제퇴기
+  else { b.cyl(0.0115, 0.0115, tip - 0.014, 0.014, 0, M.recv, 0, 10); b.box(0.004, 0.014, 0.006, tip - 0.02, 0.016, M.bolt); }
+  if (!K.muzzle) b.disc(0.006, tip + 0.0005, 0, M.dark);
+  b.part('slide');                                                // 노리쇠 손잡이
+  b.cyl(0.012, 0.012, -0.14, 0.03, 0, M.bolt, 0, 10);
+  b.capsule(0.005, 0.04, [0.018, 0, 0.07], [0.052, -0.022, 0.078], M.bolt);
+  b.add(new THREE.SphereGeometry(0.0115, 12, 9).translate(0.056, -0.025, 0.079), M.recv);
+  b.part();
+  b.part('mag'); b.prof([[0.0, -0.052], [0.085, -0.054], [0.082, -0.102], [0.004, -0.1]], 0.03, M.mag, 0.004); b.box(0.032, 0.006, 0.082, 0.043, -0.103, M.rubber); b.part();
+  tguard(b, -0.045, -0.056, M, M.steel);
+  // 조준경
+  const su = 0.062, k = o.light ? 0.8 : 1;
+  b.cyl(0.0155 * k, 0.0155 * k, -0.07, 0.25, su, M.recv);
+  b.cyl(0.0155 * k, 0.027 * k, 0.18, 0.045, su, M.recv);
+  b.cyl(0.027 * k, 0.027 * k, 0.225, 0.055, su, M.recv, 0, 20); b.cyl(0.0285 * k, 0.0285 * k, 0.266, 0.016, su, M.steel, 0, 20);
+  b.disc(0.0235 * k, 0.272, su, M.glass);
+  b.cyl(0.022 * k, 0.0155 * k, -0.115, 0.045, su, M.recv);
+  b.cyl(0.022 * k, 0.022 * k, -0.15, 0.036, su, M.recv, 0, 20); b.cyl(0.0235 * k, 0.0235 * k, -0.152, 0.012, su, M.rubber, 0, 20);
+  b.disc(0.019 * k, -0.146, su, M.glass, true);
+  b.vcyl(0.011, 0.022, 0.05, su + 0.022 * k, M.steel); b.vcyl(0.012, 0.005, 0.05, su + 0.033 * k, M.recv, 0, 16);
+  b.xcyl(0.011, 0.022, 0.05, su, M.steel, 0.024, 12); b.xcyl(0.012, 0.005, 0.05, su, M.recv, 0.036, 16);
+  b.xcyl(0.008, 0.012, 0.05, su, M.steel, -0.02, 12);
+  for (const f of [-0.03, 0.125]) { b.box(0.016, 0.03, 0.018, f, su - 0.03, M.steel); b.cyl(0.0188 * k, 0.0188 * k, f - 0.009, 0.018, su, M.steel, 0, 16); for (const s of [-1, 1]) b.sdisc(0.003, f, su - 0.012, s * 0.0192 * k, M.bolt); }
+  rail(b, -0.06, 0.16, 0.014, M, 0.016);
+  if (!o.light) bipod(b, 0.345, -0.05, M, 0.017);
+  return { group: b.build(), muzzle: [0, 0, -(tip + 0.015)], grip: [0, -0.1, 0.08], fore: [0, -0.055, -0.22], sight: su, travel: 0.06, rack: true };
+}
+
+// ───────────── 권총: 기본 / 소음(supp) / 자동(ext: 긴 탄창) ─────────────
+function pistol(M, o = {}) {
+  const b = new Builder(), SL = o.ext ? M.gray : M.slide, K = o.kit || {};
+  b.prof([[-0.088, -0.012], [0.078, -0.012], [0.078, -0.03], [0.03, -0.036], [-0.02, -0.036], [-0.088, -0.03]], 0.026, M.recv, 0.003);      // 몸통
+  if (K.hg) K.hg(b, M, { f0: 0.05, f1: 0.1, u0: -0.06, u1: -0.03, w: 0.028 });                                                           // 총열 아래 덧몸
+  else for (let i = 0; i < 3; i++) b.box(0.0265, 0.003, 0.005, 0.045 + i * 0.011, -0.031, M.dark);                                         // 아래 레일
+  b.prof([[-0.088, -0.03], [-0.03, -0.034], [-0.046, -0.08], [-0.058, -0.132], [-0.11, -0.128], [-0.102, -0.07], [-0.094, -0.04]], 0.03, M.poly, 0.007, 0, { r: 0.005 });
+  for (let i = 0; i < 5; i++) b.box(0.0305, 0.0024, 0.006, -0.1 - i * 0.002, -0.06 - i * 0.013, M.dark, 0, 0.12);
+  for (const s of [-1, 1]) b.sdisc(0.006, -0.075, -0.085, s * 0.0152, M.accent);
+  b.xcyl(0.003, 0.028, -0.01, -0.018, M.bolt); b.box(0.004, 0.006, 0.018, -0.045, -0.014, M.steel, -0.014); b.box(0.004, 0.005, 0.03, 0.02, -0.014, M.steel, -0.014); // 분해 핀, 안전장치, 멈치
+  tguard(b, 0.002, -0.034, M, M.recv);
+  b.part('mag');
+  if (o.ext) { b.prof([[-0.064, -0.128], [-0.106, -0.124], [-0.122, -0.2], [-0.078, -0.204]], 0.024, M.mag, 0.003); b.box(0.027, 0.006, 0.05, -0.1, -0.203, M.rubber, 0, 0.08); }
+  else b.box(0.031, 0.009, 0.052, -0.084, -0.134, M.rubber, 0, 0.07);
+  b.part();
+  b.cyl(0.0068, 0.0068, 0.06, 0.036, 0.008, M.bolt);                                                                                         // 총열
+  let tip = 0.096;
+  if (o.supp) { tip = suppressor(b, 0.094, 0.13, 0.0145, 0.008, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.008, 0.008, 0.012, 0.032); }
+  else if (K.muzzle) tip = K.muzzle(b, M, 0.093, 0.008, 0.0095, 0.036);
+  else b.disc(0.0045, tip + 0.0005, 0.008, M.dark);
+  b.part('slide');                                                                                                                         // 윗몸 (쏘면 뒤로 밀림)
+  b.prof([[-0.092, -0.012], [-0.092, 0.02], [-0.085, 0.027], [0.084, 0.027], [0.092, 0.016], [0.092, -0.012]], 0.028, SL, 0.003);
+  for (let i = 0; i < 6; i++) for (const s of [-1, 1]) b.box(0.0012, 0.022, 0.004, -0.082 + i * 0.008, 0.006, M.dark, s * 0.0142);
+  for (let i = 0; i < 3; i++) for (const s of [-1, 1]) b.box(0.0012, 0.018, 0.004, 0.062 + i * 0.008, 0.008, M.dark, s * 0.0142);
+  b.box(0.0016, 0.012, 0.03, 0.025, 0.015, M.dark, 0.0142); b.box(0.0016, 0.007, 0.026, 0.025, 0.015, M.bolt, 0.0146);
+  if (o.label) b.label(o.label, 0.02, 0.008, -0.0146, 0.05, 0.0125);
+  b.box(0.018, 0.008, 0.012, -0.08, 0.031, M.steel); for (const s of [-1, 1]) b.disc(0.0014, -0.0862, 0.031, M.white, true, s * 0.0055);
+  b.box(0.004, 0.008, 0.008, 0.08, 0.031, M.steel); b.disc(0.0014, 0.0758, 0.032, M.white, true);
+  if (o.ext) for (let i = 0; i < 2; i++) b.box(0.012, 0.0016, 0.02, 0.02 + i * 0.03, 0.0274, M.dark);
+  if (K.orn) K.orn(b, M, { f0: -0.092, f1: 0.092, top: 0.027, u: 0.004, hw: 0.0142, small: true });
+  b.part();
+  b.box(0.008, 0.014, 0.008, -0.094, 0.004, M.steel, 0, 0.3);                                                                                // 공이치기
+  return { group: b.build(), muzzle: [0, 0.008, -(tip + 0.015)], grip: [0, -0.085, 0.072], fore: [0.012, -0.075, 0.035], sight: 0.037, travel: 0.034 };
+}
+
+function revolver(M, o = {}) {
+  const b = new Builder(), K = o.kit || {};
+  let tip = 0.2;
+  if (K.muzzle) { tip = K.muzzle(b, M, 0.198, 0.012, 0.009, 0.034); K.orn(b, M, { f0: 0.06, f1: 0.2, top: 0.03, u: 0.006, hw: 0.0102, small: true }); }
+  b.prof([[-0.06, -0.022], [-0.07, 0.01], [-0.05, 0.03], [0.06, 0.03], [0.06, -0.022], [0.02, -0.03], [-0.03, -0.03]], 0.026, M.slide, 0.003, 0, { r: 0.004 });
+  b.cyl(0.0235, 0.0235, -0.012, 0.05, 0.002, M.gray, 0, 18);                                                                                // 탄창(회전식)
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.283 + 0.52; b.cyl(0.0045, 0.0045, -0.006, 0.03, 0.002 + Math.cos(a) * 0.0225, M.dark, Math.sin(a) * 0.0225, 8); const a2 = (i / 6) * 6.283; b.disc(0.0045, 0.0385, 0.002 + Math.cos(a2) * 0.014, M.brass, false, Math.sin(a2) * 0.014); }
+  b.prof([[0.06, -0.012], [0.06, 0.03], [0.2, 0.03], [0.2, 0.0], [0.19, -0.012]], 0.02, M.slide, 0.003);                                    // 긴 총열
+  b.cyl(0.005, 0.005, 0.062, 0.1, -0.014, M.steel, 0, 8);                                                                                  // 탄피 밀대
+  b.box(0.007, 0.005, 0.13, 0.13, 0.034, M.steel); for (let i = 0; i < 6; i++) b.box(0.0072, 0.0016, 0.012, 0.075 + i * 0.022, 0.0362, M.dark);
+  b.box(0.004, 0.012, 0.01, 0.19, 0.04, M.accent); b.box(0.014, 0.01, 0.01, -0.05, 0.036, M.steel);
+  b.disc(0.006, 0.2005, 0.012, M.dark);
+  if (o.label) b.label(o.label, 0.13, 0.012, -0.0106, 0.05, 0.0125);
+  b.part('slide'); b.prof([[-0.064, 0.014], [-0.08, 0.036], [-0.092, 0.04], [-0.09, 0.03], [-0.076, 0.012]], 0.008, M.steel, 0.0015); b.part();   // 공이치기
+  b.prof([[-0.062, -0.022], [-0.02, -0.03], [-0.04, -0.075], [-0.06, -0.135], [-0.112, -0.125], [-0.1, -0.06], [-0.075, -0.01]], 0.03, M.wood, 0.008, 0, { r: 0.008 });
+  for (const s of [-1, 1]) b.sdisc(0.006, -0.072, -0.07, s * 0.0152, M.brass);
+  b.xcyl(0.003, 0.031, -0.096, -0.118, M.bolt);
+  tguard(b, 0.004, -0.028, M, M.slide);
+  return { group: b.build(), muzzle: [0, 0.012, -(tip + 0.015)], grip: [0, -0.085, 0.07], fore: [0.012, -0.075, 0.035], sight: 0.047, travel: 0.008 };
+}
+
+// 짧게 자른 쌍열 산탄총
+function sawed(M, o = {}) {
+  const b = new Builder(), K = o.kit || {};
+  let tip = 0.25;
+  if (K.muzzle) { tip = K.muzzle(b, M, 0.24, 0.012, 0.018, 0.04); K.orn(b, M, { f0: -0.06, f1: 0.05, top: 0.03, u: 0, hw: 0.0222, small: true }); }
+  b.prof([[-0.06, -0.03], [-0.07, 0.012], [-0.05, 0.03], [0.05, 0.03], [0.05, -0.03]], 0.044, M.slide, 0.004, 0, { r: 0.005 });
+  for (const s of [-1, 1]) { b.cyl(0.0128, 0.0128, 0.05, 0.2, 0.012, M.steel, s * 0.0128, 14); b.disc(0.0095, 0.2505, 0.012, M.dark, false, s * 0.0128); b.cyl(0.0138, 0.0138, 0.236, 0.014, 0.012, M.recv, s * 0.0128, 14); }
+  b.box(0.008, 0.005, 0.2, 0.15, 0.0265, M.steel); b.vcyl(0.003, 0.008, 0.24, 0.032, M.brass);
+  b.box(0.01, 0.006, 0.03, -0.03, 0.033, M.steel); b.xcyl(0.004, 0.046, 0.045, -0.018, M.bolt);                                              // 꺾음 손잡이와 축
+  for (const s of [-1, 1]) { b.sdisc(0.012, -0.01, 0.004, s * 0.0224, M.steel); b.sdisc(0.005, -0.01, 0.004, s * 0.0228, M.brass); }
+  if (o.label) b.label(o.label, 0.035, -0.018, -0.0228, 0.045, 0.0115);
+  b.part('slide'); for (const s of [-1, 1]) b.prof([[-0.058, 0.02], [-0.072, 0.04], [-0.082, 0.042], [-0.08, 0.032], [-0.068, 0.018]], 0.007, M.steel, 0.0015, s * 0.011); b.part();
+  if (K.hg) K.hg(b, M, { f0: 0.05, f1: 0.19, u0: -0.034, u1: -0.002, w: 0.046 });
+  else { b.prof([[0.05, -0.03], [0.05, -0.002], [0.19, -0.002], [0.19, -0.022], [0.17, -0.03]], 0.046, M.wood, 0.007, 0, { r: 0.005 }); for (let i = 0; i < 4; i++) b.box(0.047, 0.002, 0.014, 0.08 + i * 0.026, -0.022, M.dark, 0, 0.6); }
+  b.prof([[-0.06, -0.03], [-0.02, -0.03], [-0.045, -0.075], [-0.075, -0.13], [-0.125, -0.115], [-0.105, -0.055], [-0.07, 0.0]], 0.034, M.wood, 0.009, 0, { r: 0.008 });
+  tguard(b, 0.0, -0.028, M, M.slide);
+  return { group: b.build(), muzzle: [0, 0.012, -(tip + 0.015)], grip: [0, -0.085, 0.075], fore: [0, -0.04, -0.12], sight: K.muzzle ? 0.054 : 0.036, travel: 0.008 };
+}
+
+// ───────────── 기관단총: 소음형(기본) / 소형 속사형(compact) ─────────────
+function smg(M, o = {}) {
+  const b = new Builder(), c = o.compact, R = c ? M.gray : M.recv, K = o.kit || {};
+  b.prof([[-0.1, -0.03], [-0.1, 0.03], [-0.088, 0.04], [0.16, 0.04], [0.16, -0.03]], 0.042, R, 0.004);
+  b.prof([[-0.1, -0.03], [0.105, -0.03], [0.105, -0.06], [0.02, -0.06], [0.012, -0.048], [-0.072, -0.048], [-0.1, -0.04]], 0.038, M.recv, 0.004);
+  b.box(0.002, 0.018, 0.05, 0.05, 0.012, M.dark, 0.0212); b.box(0.002, 0.011, 0.042, 0.05, 0.012, M.bolt, 0.0216);
+  b.xcyl(0.0038, 0.044, -0.085, -0.02, M.bolt); b.xcyl(0.0038, 0.044, 0.09, -0.018, M.bolt);
+  b.box(0.004, 0.006, 0.02, -0.025, -0.014, M.steel, -0.021, -0.5); b.sdisc(0.002, -0.012, -0.006, -0.0214, M.accent);
+  if (o.label) b.label(o.label, 0.08, 0.02, -0.0218, 0.064, 0.016);
+  b.box(0.002, 0.007, 0.09, 0.06, 0.004, M.dark, -0.0212); b.part('slide'); b.box(0.012, 0.01, 0.012, 0.095, 0.004, M.bolt, -0.026); b.xcyl(0.0055, 0.012, 0.095, 0.004, M.bolt, -0.034); b.part();
+  const hg = c ? 0.215 : 0.275;
+  if (K.hg) K.hg(b, M, { f0: 0.16, f1: hg, u0: -0.032, u1: 0.036, w: 0.046, uc: 0 });
+  else { b.prof([[0.16, -0.032], [0.16, 0.036], [hg, 0.036], [hg, -0.022], [hg - 0.013, -0.032]], 0.046, M.furn, 0.005); slots(b, 0.185, c ? 1 : 3, 0.032, 0.004, 0.0232, M, 0.022); }
+  if (K.orn) K.orn(b, M, { f0: -0.095, f1: 0.155, top: 0.04, u: 0.008, hw: 0.0212 });
+  if (!c) { b.prof([[0.2, -0.032], [0.238, -0.032], [0.232, -0.105], [0.202, -0.105]], 0.03, M.poly, 0.007, 0, { r: 0.006 }); for (let i = 0; i < 3; i++) b.box(0.0305, 0.003, 0.03, 0.218, -0.055 - i * 0.014, M.dark); }
+  else b.prof([[0.165, -0.032], [0.205, -0.032], [0.195, -0.05], [0.172, -0.05]], 0.03, M.poly, 0.005);
+  b.part('mag');
+  if (c) { b.prof([[0.032, -0.055], [0.078, -0.055], [0.084, -0.15], [0.04, -0.15]], 0.024, M.mag, 0.003); b.box(0.027, 0.006, 0.05, 0.062, -0.151, M.rubber); }
+  else { b.prof([[0.032, -0.055], [0.078, -0.055], [0.09, -0.215], [0.046, -0.215]], 0.024, M.mag, 0.003); b.box(0.027, 0.006, 0.05, 0.068, -0.216, M.rubber); for (const s of [-1, 1]) b.box(0.0012, 0.1, 0.006, 0.062, -0.13, M.dark, s * 0.0122, 0.075); }
+  b.part();
+  pistolGrip(b, M, 0, 0.002);
+  tguard(b, 0, -0.048, M);
+  rail(b, -0.085, c ? 0.195 : 0.255, 0.04, M);
+  b.box(0.028, 0.012, 0.02, -0.06, 0.055, M.recv); for (const s of [-1, 1]) b.box(0.004, 0.02, 0.01, -0.06, 0.07, M.recv, s * 0.011); b.ring(0.0055, 0.0016, -0.06, 0.082, M.steel);
+  const fs = c ? 0.19 : 0.25;
+  b.box(0.022, 0.012, 0.022, fs, 0.055, M.recv); b.box(0.0035, 0.024, 0.005, fs, 0.071, M.bolt); for (const s of [-1, 1]) b.box(0.0035, 0.026, 0.014, fs, 0.07, M.recv, s * 0.0095, 0, s * 0.2);
+  let tip;
+  if (c) { b.cyl(0.009, 0.009, hg, 0.05, 0, M.steel); tip = K.muzzle ? K.muzzle(b, M, hg + 0.035, 0, 0.013, 0.04) : muzzleBrake(b, hg + 0.035, 0, M, 0.013, 0.032); }
+  else { b.cyl(0.009, 0.009, 0.275, 0.05, 0, M.steel); tip = suppressor(b, 0.305, 0.095, 0.0175, 0, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.01, 0, 0.015, 0.04); }
+  if (K.stock) K.stock(b, M, c ? { f: -0.1, end: -0.25, top: 0.03, bot: -0.062, j0: -0.04, w: 0.034 } : { f: -0.1, end: -0.312, top: 0.03, bot: -0.07, j0: -0.04, w: 0.036 });
+  else if (!c) { for (const u of [0.022, -0.022]) b.cyl(0.0055, 0.0055, -0.3, 0.2, u, M.steel, 0, 8); b.prof([[-0.298, 0.04], [-0.298, -0.05], [-0.312, -0.05], [-0.312, 0.04]], 0.032, M.rubber, 0.004); b.box(0.034, 0.012, 0.02, -0.11, 0.0, M.steel); }
+  else { b.box(0.03, 0.06, 0.012, -0.106, 0.0, M.rubber); for (const s of [-1, 1]) b.box(0.004, 0.008, 0.12, -0.04, 0.03, M.steel, s * 0.0232); }
+  return { group: b.build(), muzzle: [0, 0, -(tip + 0.015)], grip: [0, -0.1, 0.085], fore: c ? [0, -0.05, -0.17] : [0, -0.07, -0.218], sight: 0.082, travel: 0.045 };
+}
+
+function knife(M, o = {}) {
+  const b = new Builder(), K = o.kit || {};
+  if (K.blade) K.blade(b, M); else {
+  b.prof([[0.03, -0.014], [0.2, -0.014], [0.245, 0.006], [0.215, 0.02], [0.03, 0.02]], 0.005, M.bolt, 0.0018);                               // 칼날
+  b.prof([[0.035, -0.0145], [0.2, -0.0145], [0.243, 0.005], [0.2, -0.006], [0.035, -0.006]], 0.0056, M.slide, 0.0005);                       // 날 (간 면)
+  b.prof([[0.05, 0.004], [0.19, 0.004], [0.19, 0.011], [0.05, 0.011]], 0.0062, M.steel, 0.001);                                             // 홈
+  for (let i = 0; i < 7; i++) b.box(0.0054, 0.004, 0.005, 0.05 + i * 0.011, 0.02, M.dark);                                                  // 등 톱니
+  }
+  b.prof([[0.018, -0.03], [0.034, -0.03], [0.034, 0.03], [0.018, 0.03]], 0.014, M.recv, 0.003, 0, { r: 0.004 });                              // 코등이
+  b.prof([[-0.105, -0.016], [0.02, -0.016], [0.02, 0.022], [-0.105, 0.022], [-0.115, 0.003]], 0.026, M.poly, 0.008, 0, { r: 0.006 });
+  for (let i = 0; i < 6; i++) b.box(0.0268, 0.04, 0.004, -0.09 + i * 0.018, 0.003, M.dark);
+  b.prof([[-0.105, -0.018], [-0.105, 0.024], [-0.125, 0.018], [-0.128, 0.003], [-0.122, -0.012]], 0.022, M.recv, 0.003, 0, { holes: [[[-0.112, -0.004], [-0.112, 0.008], [-0.12, 0.006], [-0.12, -0.002]]] }); // 손잡이 끝과 끈 구멍
+  return { group: b.build(), muzzle: [0, 0, -0.25], grip: [0, -0.02, 0.045], fore: [0, 0, 0], sight: 0, oneHand: true, travel: 0 };
+}
+
+const builders = { rifle, shotgun, sniper, pistol, revolver, sawed, smg, knife };
+const LABELS = ['', 'P-12', 'DB-2', 'AP-15', 'SP-13', 'RV-6', 'VX-22', 'SD-30', 'M-6', 'AS-7', 'BR-24', 'DM-12', 'SR-30', 'AR-25', 'LS-5', 'HS-5', 'LM-50', 'HM-100'];
+const cache = new Map();
+// 같은 모양·같은 스킨을 여러 번 써도 형태 데이터는 한 번만 만든다
+export function makeGun(wi, skin = 0) {
+  if (!SKINS[skin]) skin = 0;
+  const key = wi + ':' + skin;
+  if (!cache.has(key)) { const [fn, opt] = WEAPONS[wi].model; cache.set(key, builders[fn](matsFor(skin), { ...(opt || {}), label: LABELS[wi] ? 'SC ' + LABELS[wi] : '', kit: KITS[SKINS[skin].id] })); }
+  const src = cache.get(key), group = src.group.clone();
+  for (const c of group.children) if (c.userData.spin) { const sp = c.userData.spin; for (const m of c.children) m.onBeforeRender = () => { c.rotation.z = performance.now() * 0.001 * sp; }; } // 도는 장식
+  return { group, muzzle: src.muzzle, grip: src.grip, fore: src.fore, sight: src.sight, oneHand: src.oneHand, travel: src.travel || 0, rack: !!src.rack, pump: !!src.pump, slide: group.getObjectByName('slide') || null, mag: group.getObjectByName('mag') || null };
+}
+
+// 1인칭용 팔 (장갑 낀 손 + 소매). sleeveMat = 팀 색. 왼손은 'lh' 묶음 (펌프 샷건에서 함께 움직임)
+export function makeArms(info, sleeveMat) {
+  const b = new Builder();
+  const [gx, gy, gz] = info.grip, [fx, fy, fz] = info.fore;
+  b.capsule(0.03, 0.05, [gx + 0.004, gy + 0.035, gz - 0.008], [gx + 0.012, gy - 0.03, gz + 0.02], FIX.glove);       // 오른손
+  b.capsule(0.011, 0.03, [gx - 0.02, gy + 0.05, gz - 0.03], [gx - 0.014, gy + 0.045, gz - 0.07], FIX.glove);          // 엄지
+  b.box(0.05, 0.02, 0.03, -gz + 0.012, gy + 0.03, FIX.gloveHard, gx + 0.026, 0.3);                                   // 손등 보호대
+  b.capsule(0.032, 0.3, [gx + 0.02, gy - 0.035, gz + 0.04], [gx + 0.12, gy - 0.24, gz + 0.3], sleeveMat);            // 오른팔
+  b.capsule(0.036, 0.02, [gx + 0.018, gy - 0.032, gz + 0.036], [gx + 0.03, gy - 0.056, gz + 0.066], FIX.gloveHard);   // 손목 조임
+  if (!info.oneHand) {
+    b.part('lh');
+    b.capsule(0.03, 0.06, [fx - 0.012, fy - 0.004, fz - 0.035], [fx - 0.012, fy - 0.004, fz + 0.035], FIX.glove);    // 왼손
+    b.capsule(0.011, 0.03, [fx - 0.02, fy + 0.026, fz - 0.02], [fx + 0.012, fy + 0.034, fz - 0.03], FIX.glove);
+    b.capsule(0.032, 0.34, [fx - 0.03, fy - 0.025, fz + 0.03], [fx - 0.26, fy - 0.3, fz + 0.24], sleeveMat);         // 왼팔
+    b.capsule(0.036, 0.02, [fx - 0.028, fy - 0.022, fz + 0.028], [fx - 0.048, fy - 0.046, fz + 0.046], FIX.gloveHard);
+    b.part();
+  }
+  const g = b.build();
+  g.userData.lh = g.getObjectByName('lh') || null;
+  return g;
+}

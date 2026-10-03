@@ -1,0 +1,10 @@
+{
+  "name": "squad-clash",
+  "version": "1.0.0",
+  "description": "SQUAD CLASH - 모바일 브라우저 멀티플레이 FPS: 폭탄전·팀 데스매치·생존전 (Cloud Run용)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": { "ws": "^8.18.0" }
+}
