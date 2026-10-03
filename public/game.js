@@ -266,7 +266,7 @@ function makePts(n, size, add) {
   pts.frustumCulled = false; scene.add(pts);
   return { geo, pos, col, n, i: 0, live: 0, p: Array.from({ length: n }, () => ({ life: 0, max: 1, v: [0, 0, 0], g: 9 })) };
 }
-const sparkPts = makePts(96, 0.085, true), chipPts = makePts(96, 0.06, false);
+const sparkPts = makePts(96, 0.05, true), chipPts = makePts(96, 0.05, false);
 // p 에서 n 방향으로 cnt 개를 흩뿌림 (speed 빠르기, spread 퍼짐, g 중력)
 function emit(S, p, n, cnt, speed, hex, life, g = 9, spread = 0.8) {
   _pc.setHex(hex);
@@ -1684,7 +1684,7 @@ const setXhair = (c) => { document.documentElement.style.setProperty('--xh', c);
 $('xhair').value = store.get('xh', '#ffffff'); setXhair($('xhair').value || '#ffffff'); $('xhair').onchange = (e) => setXhair(e.target.value);
 
 // ───────────── 무기고: 스킨 미리 보기·장착·코드 등록 ─────────────
-const SWATCH = { std: 'linear-gradient(90deg,#4a505a,#22252a)', desert: 'linear-gradient(90deg,#c9b083,#8d7a56)', forest: 'linear-gradient(90deg,#4c5a36,#2f3a24 40%,#7f8a5a)', carbon: 'repeating-linear-gradient(45deg,#16181c 0 4px,#4a4f58 4px 8px)', tiger: 'repeating-linear-gradient(100deg,#f6a12a 0 9px,#17110c 9px 14px)', sakura: 'linear-gradient(90deg,#ffd3e2,#f291b4)', ice: 'linear-gradient(120deg,#cdf3ff,#6fb7ea,#e8fbff)', neon: 'linear-gradient(90deg,#0b0e14,#19e3ff 45%,#ff3df0 55%,#0b0e14)', lava: 'linear-gradient(90deg,#17110f,#ff7a1a 50%,#17110f)', gold: 'linear-gradient(110deg,#a8780f,#ffe9a0 45%,#d8a93a)', galaxy: 'linear-gradient(110deg,#0a0822,#7a3cff 50%,#ff46be)', aurora: 'linear-gradient(90deg,#ff5a5a,#ffd23f,#5aff8a,#5ab8ff,#c08bff)' };
+const SWATCH = { std: 'linear-gradient(90deg,#4a505a,#22252a)', desert: 'linear-gradient(90deg,#c9b083,#8d7a56)', forest: 'linear-gradient(90deg,#4c5a36,#2f3a24 40%,#7f8a5a)', carbon: 'repeating-linear-gradient(45deg,#16181c 0 4px,#4a4f58 4px 8px)', tiger: 'repeating-linear-gradient(100deg,#f6a12a 0 9px,#17110c 9px 14px)', sakura: 'linear-gradient(90deg,#ffd3e2,#f291b4)', ice: 'linear-gradient(120deg,#cdf3ff,#6fb7ea,#e8fbff)', neon: 'linear-gradient(90deg,#0b0e14,#19e3ff 45%,#ff3df0 55%,#0b0e14)', lava: 'linear-gradient(90deg,#17110f,#ff7a1a 50%,#17110f)', gold: 'linear-gradient(110deg,#a8780f,#ffe9a0 45%,#d8a93a)', galaxy: 'linear-gradient(110deg,#0a0822,#7a3cff 50%,#ff46be)', aurora: 'linear-gradient(90deg,#ff5a5a,#ffd23f,#5aff8a,#5ab8ff,#c08bff)', halloween: 'linear-gradient(90deg,#2e1646,#f07a12 50%,#2e1646)' };
 const TIERN = { 희귀: 1, 영웅: 2, 전설: 3, 한정: 4 };
 const CATN = { melee: '근접', side: '보조', smg: '기관단총', sg: '샷건', ar: '소총', sr: '저격총', mg: '기관총' };
 let lockerOpen = false, lkW = 13, lkSkin = 0, lkYaw = 0.7, lkDrag = null, lkGun = null, lkKey = '', lkSpin = true, lkTab = 'skin';
