@@ -554,7 +554,7 @@ function onMsg(m) {
       attack = m.attack; phase = mode === 'bomb' ? 'over' : mode === 'br' ? 'wait' : 'tdm'; me.alive = false; me.drop = false; bomb.st = 'none'; siteMarks.visible = mode === 'bomb'; applySides(); $('dead').classList.add('hide');
       document.body.classList.toggle('br', mode === 'br'); zone.on = false; clearLoot(); clearVehs(); airdrop = null; myRank = 0; healEnd = 0; openShop(false);
       $('mini').height = mode === 'br' ? 300 : 216; $('mini').style.height = ''; document.body.classList.toggle('sqmini', mode === 'br');
-      $('menu').classList.add('hide'); $('hud').classList.remove('hide'); $('net').classList.add('hide'); $('board').classList.add('hide');
+      $('menu').classList.add('hide'); $('hud').classList.remove('hide'); $('net').classList.add('hide'); $('board').classList.add('hide'); applyLayout();
       document.body.classList.add('playing');
       $('roomTxt').textContent = m.pub ? '공개방' : '방 ' + m.code;
       $('sR').classList.toggle('mine', myTeam === 0); $('sB').classList.toggle('mine', myTeam === 1);
@@ -1156,7 +1156,7 @@ function showBoard(on) {
   if (on) { input.fire = false; if (document.pointerLockElement) document.exitPointerLock(); }
 }
 setInterval(() => { if (joined && !matchEnded && !$('board').classList.contains('hide')) drawBoard(); }, 1000);
-const modalOpen = () => shopOpen || !$('leave').classList.contains('hide') || !$('board').classList.contains('hide'); // 창이 떠 있는 동안은 화면을 눌러도 쏘거나 돌지 않음
+const modalOpen = () => ctlOpen || layEdit || shopOpen || !$('leave').classList.contains('hide') || !$('board').classList.contains('hide'); // 창이 떠 있는 동안은 화면을 눌러도 쏘거나 돌지 않음
 // 나가기: 물어보고 → 메뉴로
 function askLeave(on) {
   $('leave').classList.toggle('hide', !on);
@@ -1181,17 +1181,122 @@ function leaveGame() {
   $('menu').classList.remove('hide'); $('menuMsg').textContent = '게임에서 나왔어요.'; loadRooms();
   setMode(selMode);
 }
+// ───────────── 조작 설정 (감도 · 사격 방식 · 조준 보정 · 자이로 · 버튼 배치) ─────────────
+const CTL_DEF = { adsFire: false, adsHold: false, alwaysSprint: false, assist: true, sAds: 1, sScope: 1, sFire: 1, gyro: 0, gyroInv: false, opacity: 1, layout: {} };
+let ctl = { ...CTL_DEF };
+try { ctl = { ...CTL_DEF, ...JSON.parse(store.get('ctl', '{}')) }; if (!ctl.layout || typeof ctl.layout !== 'object') ctl.layout = {}; } catch {}
+let ctlOpen = false, layEdit = false, adsByFire = false, assistSlow = 1;
+const saveCtl = () => store.set('ctl', JSON.stringify(ctl));
+const PADS = () => [...document.querySelectorAll('#hud .pad')];
+function applyLayout() { // 저장해 둔 버튼 자리·크기 (화면 크기에 대한 비율)
+  document.documentElement.style.setProperty('--padOp', ctl.opacity);
+  for (const el of PADS()) {
+    const L = ctl.layout[el.id];
+    if (!L) { el.style.left = el.style.top = el.style.right = el.style.bottom = el.style.scale = ''; continue; }
+    el.style.right = el.style.bottom = 'auto'; el.style.scale = L.s || 1;
+    el.style.left = clamp(L.x * window.innerWidth - el.offsetWidth / 2, 0, window.innerWidth - el.offsetWidth) + 'px';
+    el.style.top = clamp(L.y * window.innerHeight - el.offsetHeight / 2, 0, window.innerHeight - el.offsetHeight) + 'px';
+  }
+}
+function syncCtl() {
+  for (const b of $('ctlMode').children) b.classList.toggle('on', (b.dataset.v === 'simple') === autoFire);
+  for (const b of $('ctlGyro').children) b.classList.toggle('on', +b.dataset.v === ctl.gyro);
+  $('ctlAdsFire').checked = ctl.adsFire; $('ctlAdsHold').checked = ctl.adsHold; $('ctlSprint').checked = ctl.alwaysSprint; $('ctlAssist').checked = ctl.assist; $('ctlGyroInv').checked = ctl.gyroInv;
+  for (const [id, v] of [['ctlSens', sens], ['ctlSAds', ctl.sAds], ['ctlSScope', ctl.sScope], ['ctlSFire', ctl.sFire], ['ctlOp', ctl.opacity]]) { $(id).value = v; $(id + 'V').textContent = Math.round(v * 100) + '%'; }
+  $('sens').value = sens;
+}
+function openCtl(on) {
+  ctlOpen = on; $('ctl').classList.toggle('hide', !on);
+  if (on) { syncCtl(); input.fire = false; input.jx = input.jy = 0; input.sprint = false; touches.clear(); $('stick').classList.add('hide'); if (document.pointerLockElement) document.exitPointerLock(); }
+}
+for (const b of $('ctlMode').children) b.onclick = () => { setAuto(b.dataset.v === 'simple'); syncCtl(); };
+for (const b of $('ctlGyro').children) b.onclick = () => { ctl.gyro = +b.dataset.v; saveCtl(); syncCtl(); if (ctl.gyro) startGyro(); };
+for (const [id, key] of [['ctlAdsFire', 'adsFire'], ['ctlAdsHold', 'adsHold'], ['ctlSprint', 'alwaysSprint'], ['ctlAssist', 'assist'], ['ctlGyroInv', 'gyroInv']]) $(id).onchange = (e) => { ctl[key] = e.target.checked; saveCtl(); };
+$('ctlSens').oninput = (e) => { sens = parseFloat(e.target.value) || 1; store.set('sens', sens); syncCtl(); };
+for (const [id, key] of [['ctlSAds', 'sAds'], ['ctlSScope', 'sScope'], ['ctlSFire', 'sFire'], ['ctlOp', 'opacity']]) $(id).oninput = (e) => { ctl[key] = parseFloat(e.target.value) || 1; saveCtl(); syncCtl(); applyLayout(); };
+$('ctlX').onclick = () => openCtl(false);
+$('ctl').addEventListener('click', (e) => { if (e.target === $('ctl')) openCtl(false); });
+$('ctlReset').onclick = () => { ctl = { ...CTL_DEF, layout: {} }; saveCtl(); sens = 1; store.set('sens', sens); applyLayout(); syncCtl(); };
+$('openCtl').onclick = () => openCtl(true);
+document.addEventListener('keydown', (e) => { if (e.code === 'Escape' && ctlOpen) openCtl(false); });
+// 버튼 배치 바꾸기: 버튼을 끌어 옮기고, 고른 버튼의 크기를 바꿈
+let laySel = null, layDrag = null;
+function setLayEdit(on) {
+  layEdit = on; document.body.classList.toggle('layedit', on); $('layBar').classList.toggle('hide', !on);
+  if (on) { openCtl(false); $('hud').classList.remove('hide'); if (!joined) $('menu').classList.add('hide'); laySel = null; $('layMsg').textContent = '버튼을 끌어서 옮기세요'; }
+  else { for (const el of PADS()) el.classList.remove('sel'); saveCtl(); if (!joined) { $('hud').classList.add('hide'); $('menu').classList.remove('hide'); openCtl(true); } }
+  applyLayout();
+}
+const laySave = (el) => { const r = el.getBoundingClientRect(), s = (ctl.layout[el.id] && ctl.layout[el.id].s) || 1; ctl.layout[el.id] = { x: (r.left + r.width / 2) / window.innerWidth, y: (r.top + r.height / 2) / window.innerHeight, s }; };
+document.addEventListener('pointerdown', (e) => {
+  if (!layEdit) return;
+  const el = e.target.closest ? e.target.closest('#hud .pad') : null; if (!el) return;
+  e.preventDefault(); for (const p of PADS()) p.classList.toggle('sel', p === el);
+  laySel = el; laySave(el); layDrag = { id: e.pointerId, dx: e.clientX - ctl.layout[el.id].x * window.innerWidth, dy: e.clientY - ctl.layout[el.id].y * window.innerHeight };
+  $('layMsg').textContent = `[${el.textContent}] 고름 · 크기 ${Math.round(ctl.layout[el.id].s * 100)}%`;
+});
+document.addEventListener('pointermove', (e) => { if (!layEdit || !layDrag || e.pointerId !== layDrag.id || !laySel) return; const L = ctl.layout[laySel.id]; L.x = clamp((e.clientX - layDrag.dx) / window.innerWidth, 0.03, 0.97); L.y = clamp((e.clientY - layDrag.dy) / window.innerHeight, 0.05, 0.95); applyLayout(); });
+const layEnd = (e) => { if (layDrag && e.pointerId === layDrag.id) { layDrag = null; saveCtl(); } };
+document.addEventListener('pointerup', layEnd); document.addEventListener('pointercancel', layEnd);
+const laySize = (k) => { if (!laySel) { $('layMsg').textContent = '먼저 버튼을 눌러 고르세요'; return; } const L = ctl.layout[laySel.id]; L.s = clamp(Math.round((L.s + k) * 20) / 20, 0.6, 1.8); applyLayout(); saveCtl(); $('layMsg').textContent = `[${laySel.textContent}] 고름 · 크기 ${Math.round(L.s * 100)}%`; };
+$('laySm').onclick = () => laySize(-0.1); $('layBig').onclick = () => laySize(0.1);
+$('layReset').onclick = () => { ctl.layout = {}; laySel = null; for (const el of PADS()) el.classList.remove('sel'); applyLayout(); saveCtl(); $('layMsg').textContent = '처음 배치로 돌렸어요'; };
+$('layDone').onclick = () => setLayEdit(false);
+$('ctlLayout').onclick = () => setLayEdit(true);
+window.addEventListener('resize', applyLayout);
+applyLayout();
+// 조준 보정 (터치): 조준점 가까이에 보이는 적이 있으면 시점이 느려지고, 쏘거나 조준·이동 중이면 살짝 따라감
+const _ad = [0, 0, 0];
+function aimAssist(dt) {
+  assistSlow = 1;
+  if (!isTouch || !ctl.assist || !me.alive || me.drop || modalOpen()) return;
+  const f = dirFrom(me.yaw, me.pitch);
+  let best = null, ba = 0.12, bd = 0;
+  for (const o of others.values()) {
+    if (!o.alive || o.team === myTeam || !o.g.visible) continue;
+    const dx = o.x - eye[0], dy = o.y + (o.c ? 0.7 : 1.05) - eye[1], dz = o.z - eye[2], d = Math.hypot(dx, dy, dz);
+    if (d < 1.5 || d > 55) continue;
+    const a = Math.acos(clamp((dx * f[0] + dy * f[1] + dz * f[2]) / d, -1, 1));
+    if (a < ba) { ba = a; best = o; bd = d; _ad[0] = dx / d; _ad[1] = dy / d; _ad[2] = dz / d; }
+  }
+  if (!best || rayWorld(eye, _ad, bd) < bd - 0.6 || smoked(eye, [best.x, best.y + 1.05, best.z])) return; // 벽·연막 뒤는 보정하지 않음
+  assistSlow = ba < 0.045 ? 0.5 : ba < 0.08 ? 0.72 : 0.9;
+  if (ba < 0.085 && ba > 0.004 && (input.fire || me.scoped || Math.abs(input.jx) + Math.abs(input.jy) > 0.25)) {
+    const wy = Math.atan2(-_ad[0], -_ad[2]), wp = Math.asin(clamp(_ad[1], -1, 1)), k = Math.min(1, dt * (me.scoped ? 3.2 : 2.2));
+    let dyaw = wy - me.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+    me.yaw += dyaw * k; me.pitch = clamp(me.pitch + (wp - me.pitch) * k, -1.45, 1.45);
+  }
+}
+// 자이로: 기기를 기울여 시점을 돌림 (가로로 쥔 방향에 맞춰 축을 고름)
+let gyroOn = false, gyroT = 0;
+function onGyro(e) {
+  const r = e.rotationRate, now = performance.now(), dt = Math.min(0.05, (now - gyroT) / 1000); gyroT = now;
+  if (!r || !joined || !me.alive || modalOpen() || !(ctl.gyro === 2 || (ctl.gyro === 1 && me.scoped))) return;
+  const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0, D = Math.PI / 180, inv = ctl.gyroInv ? -1 : 1;
+  let yr, pr; // 왼쪽으로 도는 속도, 위로 드는 속도 (rad/s)
+  if (ang === 90) { yr = (r.beta || 0) * D; pr = -(r.gamma || 0) * D; } else if (ang === 270 || ang === -90) { yr = -(r.beta || 0) * D; pr = (r.gamma || 0) * D; } else { yr = (r.gamma || 0) * D; pr = (r.beta || 0) * D; }
+  if (Math.abs(yr) < 0.012) yr = 0; if (Math.abs(pr) < 0.012) pr = 0; // 손떨림은 무시
+  const k = (me.scoped ? 0.7 : 1) * inv * dt;
+  me.yaw += yr * k; me.pitch = clamp(me.pitch + pr * k, -1.45, 1.45);
+}
+function startGyro() {
+  if (gyroOn || typeof DeviceMotionEvent === 'undefined') return;
+  const go = () => { gyroOn = true; window.addEventListener('devicemotion', onGyro); };
+  if (typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().then((s) => { if (s === 'granted') go(); }).catch(() => {}); else go();
+}
+if (ctl.gyro && typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission !== 'function') startGyro();
 // ───────────── 입력 ─────────────
 function pressBtn(b, down, el) {
   if (el && el.classList.contains('pad')) el.classList.toggle('down', down);
   const now = performance.now();
-  if (b === 'fire') input.fire = down && !shopOpen;
+  if (b === 'fire') { input.fire = down && !shopOpen; if (ctl.adsFire && !WEAPONS[me.w].melee) { if (down && !shopOpen && !me.scoped) { setScope(true); adsByFire = me.scoped; } else if (!down && adsByFire) { adsByFire = false; setScope(false); } } } // 1탭 조준 사격
   else if (b === 'jump') input.jump = down;
   else if (b === 'act') { input.act = down; if (down && mode === 'br') useOrRide(); }
   else if (b === 'heal') { if (down) useMed(); }
   else if (b === 'crouch') { if (down) toggleCrouch(); }
   else if (b === 'reload') { if (down) startReload(now); }
-  else if (b === 'scope') { if (down) setScope(!me.scoped); }
+  else if (b === 'scope') { if (ctl.adsHold) setScope(down); else if (down) setScope(!me.scoped); }
+  else if (b === 'ctl') { if (!down) openCtl(true); }
   else if (b === 'score') { if (down) showBoard($('board').classList.contains('hide')); }      // 버튼: 누를 때마다 열고 닫음
   else if (b === 'scoreHold') { if (!matchEnded) showBoard(down); }                               // Tab: 누르는 동안만
   else if (b === 'boardClose') { if (down) showBoard(false); }
@@ -1222,12 +1327,12 @@ function goFullscreen(toggle) {
 const touches = new Map();
 const STICK_R = 52;
 function look(dx, dy, base) {
-  const k = base * sens * (me.scoped ? (WEAPONS[me.w].scope ? 0.3 : WEAPONS[me.w].zoom ? 0.45 : 0.6) : 1);
+  const k = base * sens * (me.scoped ? (WEAPONS[me.w].scope ? 0.3 * ctl.sScope : (WEAPONS[me.w].zoom ? 0.45 : 0.6) * ctl.sAds) : 1) * (input.fire && isTouch ? ctl.sFire : 1) * assistSlow;
   me.yaw -= dx * k; me.pitch = clamp(me.pitch - dy * k, -1.45, 1.45);
   me.swx = clamp(me.swx + dx * k * 0.25, -0.07, 0.07); me.swy = clamp(me.swy + dy * k * 0.25, -0.05, 0.05);
 }
 document.addEventListener('touchstart', (e) => {
-  if (!joined) return;
+  if (!joined || ctlOpen || layEdit) return; // 설정 창과 버튼 배치 편집은 브라우저 기본 조작 그대로
   e.preventDefault();
   initAudio();
   for (const t of e.changedTouches) {
@@ -1245,7 +1350,7 @@ document.addEventListener('touchstart', (e) => {
   }
 }, { passive: false });
 document.addEventListener('touchmove', (e) => {
-  if (!joined) return;
+  if (!joined || ctlOpen || layEdit) return;
   e.preventDefault();
   for (const t of e.changedTouches) {
     const r = touches.get(t.identifier);
@@ -1254,6 +1359,7 @@ document.addEventListener('touchmove', (e) => {
       let dx = t.clientX - r.sx, dy = t.clientY - r.sy;
       const len = Math.hypot(dx, dy);
       if (len > STICK_R * 1.5 && dy < 0 && Math.abs(dx) < -dy * 0.8) input.sprint = true; // 위로 끝까지 밀면 달리기 고정
+      else if (ctl.alwaysSprint && dy < -STICK_R * 0.55 && Math.abs(dx) < -dy) input.sprint = true; // 항상 달리기
       else if (dy > -STICK_R * 0.5) input.sprint = false;
       if (len > STICK_R) { dx *= STICK_R / len; dy *= STICK_R / len; }
       input.jx = dx / STICK_R; input.jy = dy / STICK_R;
@@ -1733,6 +1839,7 @@ function frame(now) {
     me.shake = Math.max(0, me.shake - dt * 2.2);
     camera.rotation.set(me.pitch + (Math.random() - 0.5) * me.shake * 0.05, me.yaw + (Math.random() - 0.5) * me.shake * 0.05, 0);
     if (me.reloadEnd && now >= me.reloadEnd) { me.reloadEnd = 0; me.ammo[me.w] = WEAPONS[me.w].mag; sfxTone(420, 0.06, 0.1, 'square', 640); }
+    aimAssist(dt);
     const W = WEAPONS[me.w];
     let want = input.fire && !shopOpen;
     if (!want && autoFire && !shopOpen && !me.reloadEnd && !me.drop && now - me.lastShot >= W.interval && (!W.scope || me.scoped)) want = aimedEnemy(W.falloff ? 14 : Math.min(W.range, mode === 'br' ? 90 : 999));

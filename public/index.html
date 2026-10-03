@@ -59,6 +59,20 @@ button.big:active{transform:translateY(1px);filter:brightness(.92)}
 #ptDone{height:44px;border:0;border-radius:9px;font-size:16px;font-weight:800;background:var(--acc);color:#12151a;cursor:pointer}
 #ptX{height:30px;border:1px solid rgba(255,120,120,.6);border-radius:8px;font-size:13px;font-weight:800;padding:0 12px;cursor:pointer;background:rgba(190,40,48,.85);color:#fff}
 @media (max-height:420px){#ptTools{flex-basis:150px;padding:6px;gap:3px}#ptPal button{min-height:20px}#ptSize button,#ptAct button{height:28px}#ptRight{flex-basis:170px}}
+#ctl{position:fixed;inset:0;z-index:30;background:rgba(8,10,14,.72);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:calc(10px + var(--st)) 12px calc(10px + var(--sb))}
+#ctlBox{margin:auto;width:min(560px,100%);background:rgba(18,22,28,.96);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.ctlHead{display:flex;justify-content:space-between;align-items:center}.ctlHead b{font-size:16px}
+#ctlX{height:32px;border:1px solid rgba(255,120,120,.6);border-radius:8px;font-size:13px;font-weight:800;padding:0 12px;cursor:pointer;background:rgba(190,40,48,.85);color:#fff}
+.ctlRow{display:flex;align-items:center;gap:10px;font-size:13px}.ctlRow>span{flex:0 0 96px;color:var(--dim)}.ctlRow input[type=range]{flex:1;min-width:0;height:28px}.ctlRow em{flex:0 0 38px;text-align:right;font-style:normal;font-variant-numeric:tabular-nums;color:var(--txt)}
+.seg{flex:1;display:flex;gap:5px}.seg button{flex:1;min-height:36px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.07);color:var(--dim);font-size:12.5px;font-weight:700;cursor:pointer;padding:2px 6px}
+.seg button.on{border-color:var(--acc);color:var(--acc);background:rgba(255,210,63,.12)}
+.ctlChk{display:flex;align-items:center;gap:9px;font-size:13px;min-height:30px;cursor:pointer}.ctlChk input{width:20px;height:20px;flex:0 0 auto;accent-color:var(--acc)}
+.ctlBtns{display:flex;gap:8px;margin-top:2px}.ctlBtns button{flex:1;height:40px;border:0;border-radius:9px;font-size:14px;font-weight:800;background:var(--acc);color:#12151a;cursor:pointer}.ctlBtns button.alt{background:rgba(255,255,255,.12);color:var(--txt);border:1px solid var(--line)}
+body:not(.touch) #ctl .touchOnly{display:none}
+.pad{opacity:var(--padOp,1)}
+#layBar{position:fixed;z-index:31;top:calc(8px + var(--st));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;background:rgba(18,22,28,.94);border:1px solid var(--acc);border-radius:10px;padding:6px 8px;font-size:12.5px;white-space:nowrap}
+#layBar button{height:32px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.09);color:var(--txt);font-size:12.5px;font-weight:700;padding:0 10px;cursor:pointer}#layDone{background:var(--acc)!important;color:#12151a!important;border:0!important}
+body.layedit .pad{outline:2px dashed rgba(255,255,255,.55);outline-offset:3px;touch-action:none;display:flex!important;opacity:1}body.layedit .pad.sel{outline-color:var(--acc)}
 #roomBox{border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:rgba(0,0,0,.18)}
 #roomHead{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;font-size:13px}
 #roomHead b{color:var(--txt)}#roomInfo{flex:1;color:var(--dim);font-size:12px}
@@ -267,6 +281,7 @@ body:not(.touch) .pad,body:not(.touch) #stickHint{display:none}
     <span class="chip brHide" data-btn="shop">상점</span>
     <span class="chip brHide" data-btn="radioOpen">무전</span>
     <span class="chip" data-btn="fs">전체화면</span>
+    <span class="chip" data-btn="ctl">조작 설정</span>
     <span id="money"></span>
     <span id="roomTxt"></span><span id="pingTxt"></span>
   </div>
@@ -330,6 +345,7 @@ body:not(.touch) .pad,body:not(.touch) #stickHint{display:none}
     <div class="modes"><button id="modeBomb">폭탄전</button><button id="modeTdm">팀 데스매치</button><button id="modeBr">생존전</button></div>
     <div class="row"><input id="name" type="text" maxlength="12" placeholder="닉네임" autocomplete="off"></div>
     <div class="row"><button class="big" id="quick">빠른 참가</button><button class="big alt" id="openLocker" style="flex:0 0 84px">무기고</button><button class="big alt" id="openPaint" style="flex:0 0 118px">캐릭터 그리기</button></div>
+    <div class="row"><button class="big alt" id="openCtl" style="height:38px;font-size:14px">조작 설정 (감도 · 조준 보정 · 버튼 배치)</button></div>
     <div class="row"><input id="code" type="text" maxlength="8" placeholder="방 코드 (친구와 같은 코드 입력)" autocomplete="off" autocapitalize="characters"><button class="big alt" id="joinCode" style="flex:0 0 112px">코드로 참가</button></div>
     <div id="roomBox"><div id="roomHead"><b>방 목록</b><span id="roomInfo"></span><button id="roomRef">새로고침</button></div><div id="roomList"></div></div>
     <div class="opt"><span>시점 감도</span><input id="sens" type="range" min="0.4" max="2.5" step="0.1" value="1"><label class="touchOnly"><input id="autoFire" type="checkbox">자동 사격</label></div>
@@ -367,6 +383,23 @@ body:not(.touch) .pad,body:not(.touch) #stickHint{display:none}
   <div id="ptMid"><div class="ptC"><b>앞</b><canvas id="ptF"></canvas></div><div class="ptC"><b>뒤</b><canvas id="ptB"></canvas></div></div>
   <div id="ptRight"><div class="lkHead"><h4>내 캐릭터</h4><button id="ptX">닫기 ✕</button></div><div id="ptPrev"><span>끌어서 돌려 보기</span></div><button id="ptDone">완료</button></div>
 </div>
+<div id="ctl" class="hide"><div id="ctlBox">
+  <div class="ctlHead"><b>조작 설정</b><button id="ctlX">닫기 ✕</button></div>
+  <div class="ctlRow touchOnly"><span>사격 방식</span><div class="seg" id="ctlMode"><button data-v="simple">심플 · 조준하면 자동 사격</button><button data-v="adv">고급 · 직접 사격</button></div></div>
+  <label class="ctlChk touchOnly"><input type="checkbox" id="ctlAdsFire"><span>사격 버튼을 누르면 바로 정조준 (1탭 조준 사격)</span></label>
+  <label class="ctlChk touchOnly"><input type="checkbox" id="ctlAdsHold"><span>조준 버튼을 누르는 동안만 정조준</span></label>
+  <label class="ctlChk touchOnly"><input type="checkbox" id="ctlSprint"><span>항상 달리기 (스틱을 앞으로 밀면 바로 달림)</span></label>
+  <label class="ctlChk touchOnly"><input type="checkbox" id="ctlAssist"><span>조준 보정 (적 근처에서 시점이 느려지고 살짝 따라감)</span></label>
+  <div class="ctlRow"><span>기본 감도</span><input type="range" id="ctlSens" min="0.4" max="2.5" step="0.05"><em id="ctlSensV"></em></div>
+  <div class="ctlRow"><span>정조준 감도</span><input type="range" id="ctlSAds" min="0.3" max="2" step="0.05"><em id="ctlSAdsV"></em></div>
+  <div class="ctlRow"><span>스코프 감도</span><input type="range" id="ctlSScope" min="0.3" max="2" step="0.05"><em id="ctlSScopeV"></em></div>
+  <div class="ctlRow touchOnly"><span>사격 중 감도</span><input type="range" id="ctlSFire" min="0.3" max="1.5" step="0.05"><em id="ctlSFireV"></em></div>
+  <div class="ctlRow touchOnly"><span>자이로 (실험)</span><div class="seg" id="ctlGyro"><button data-v="0">끔</button><button data-v="1">정조준 때만</button><button data-v="2">항상</button></div></div>
+  <label class="ctlChk touchOnly"><input type="checkbox" id="ctlGyroInv"><span>자이로 방향 반전</span></label>
+  <div class="ctlRow touchOnly"><span>버튼 투명도</span><input type="range" id="ctlOp" min="0.25" max="1" step="0.05"><em id="ctlOpV"></em></div>
+  <div class="ctlBtns"><button id="ctlLayout" class="touchOnly">버튼 배치 바꾸기</button><button id="ctlReset" class="alt">기본값으로</button></div>
+</div></div>
+<div id="layBar" class="hide"><span id="layMsg">버튼을 끌어서 옮기세요</span><button id="laySm">작게</button><button id="layBig">크게</button><button id="layReset">초기화</button><button id="layDone">완료</button></div>
 <div id="rotate"><i>📱</i>화면을 가로로 돌려 주세요</div>
 <script type="module" src="./game.js"></script>
 </body>
