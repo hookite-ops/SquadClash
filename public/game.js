@@ -1188,7 +1188,7 @@ function leaveGame() {
   setMode(selMode);
 }
 // ───────────── 조작 설정 (감도 · 사격 방식 · 조준 보정 · 자이로 · 버튼 배치) ─────────────
-const CTL_DEF = { adsFire: false, adsHold: false, alwaysSprint: false, assist: true, sAds: 1, sScope: 1, sFire: 1, gyro: 0, gyroInv: false, opacity: 1, layout: {} };
+const CTL_DEF = { touchFix: false, adsFire: false, adsHold: false, alwaysSprint: false, assist: true, sAds: 1, sScope: 1, sFire: 1, gyro: 0, gyroInv: false, opacity: 1, layout: {} };
 let ctl = { ...CTL_DEF };
 try { ctl = { ...CTL_DEF, ...JSON.parse(store.get('ctl', '{}')) }; if (!ctl.layout || typeof ctl.layout !== 'object') ctl.layout = {}; } catch {}
 let ctlOpen = false, layEdit = false, adsByFire = false, assistSlow = 1;
@@ -1207,7 +1207,7 @@ function applyLayout() { // 저장해 둔 버튼 자리·크기 (화면 크기�
 function syncCtl() {
   for (const b of $('ctlMode').children) b.classList.toggle('on', (b.dataset.v === 'simple') === autoFire);
   for (const b of $('ctlGyro').children) b.classList.toggle('on', +b.dataset.v === ctl.gyro);
-  $('ctlAdsFire').checked = ctl.adsFire; $('ctlAdsHold').checked = ctl.adsHold; $('ctlSprint').checked = ctl.alwaysSprint; $('ctlAssist').checked = ctl.assist; $('ctlGyroInv').checked = ctl.gyroInv;
+  $('ctlAdsFire').checked = ctl.adsFire; $('ctlAdsHold').checked = ctl.adsHold; $('ctlSprint').checked = ctl.alwaysSprint; $('ctlAssist').checked = ctl.assist; $('ctlGyroInv').checked = ctl.gyroInv; $('ctlTouchFix').checked = ctl.touchFix;
   for (const [id, v] of [['ctlSens', sens], ['ctlSAds', ctl.sAds], ['ctlSScope', ctl.sScope], ['ctlSFire', ctl.sFire], ['ctlOp', ctl.opacity]]) { $(id).value = v; $(id + 'V').textContent = Math.round(v * 100) + '%'; }
   $('sens').value = sens;
 }
@@ -1217,7 +1217,7 @@ function openCtl(on) {
 }
 for (const b of $('ctlMode').children) b.onclick = () => { setAuto(b.dataset.v === 'simple'); syncCtl(); };
 for (const b of $('ctlGyro').children) b.onclick = () => { ctl.gyro = +b.dataset.v; saveCtl(); syncCtl(); if (ctl.gyro) startGyro(); };
-for (const [id, key] of [['ctlAdsFire', 'adsFire'], ['ctlAdsHold', 'adsHold'], ['ctlSprint', 'alwaysSprint'], ['ctlAssist', 'assist'], ['ctlGyroInv', 'gyroInv']]) $(id).onchange = (e) => { ctl[key] = e.target.checked; saveCtl(); };
+for (const [id, key] of [['ctlAdsFire', 'adsFire'], ['ctlAdsHold', 'adsHold'], ['ctlSprint', 'alwaysSprint'], ['ctlAssist', 'assist'], ['ctlGyroInv', 'gyroInv'], ['ctlTouchFix', 'touchFix']]) $(id).onchange = (e) => { ctl[key] = e.target.checked; saveCtl(); };
 $('ctlSens').oninput = (e) => { sens = parseFloat(e.target.value) || 1; store.set('sens', sens); syncCtl(); };
 for (const [id, key] of [['ctlSAds', 'sAds'], ['ctlSScope', 'sScope'], ['ctlSFire', 'sFire'], ['ctlOp', 'opacity']]) $(id).oninput = (e) => { ctl[key] = parseFloat(e.target.value) || 1; saveCtl(); syncCtl(); applyLayout(); };
 $('ctlX').onclick = () => openCtl(false);
@@ -1332,6 +1332,9 @@ function goFullscreen(toggle) {
 }
 const touches = new Map();
 const STICK_R = 52;
+// 터치가 잠깐 끊겼다 다시 잡히는 패드를 위한 여유: 끊긴 뒤 0.16초 안에 같은 자리를 다시 누르면 이어진 것으로 봄
+const GRACE = 160;
+let moveLost = null, fireLostT = 0;
 function look(dx, dy, base) {
   const k = base * sens * (me.scoped ? (WEAPONS[me.w].scope ? 0.3 * ctl.sScope : (WEAPONS[me.w].zoom ? 0.45 : 0.6) * ctl.sAds) : 1) * (input.fire && isTouch ? ctl.sFire : 1) * assistSlow;
   me.yaw -= dx * k; me.pitch = clamp(me.pitch - dy * k, -1.45, 1.45);
@@ -1344,10 +1347,13 @@ document.addEventListener('touchstart', (e) => {
   for (const t of e.changedTouches) {
     const el = t.target.closest ? t.target.closest('[data-btn]') : null;
     const rec = { role: 'look', sx: t.clientX, sy: t.clientY, lx: t.clientX, ly: t.clientY, el, btn: el ? el.dataset.btn : null };
-    if (el) { pressBtn(rec.btn, true, el); rec.role = rec.btn === 'fire' ? 'look' : 'btn'; }
+    if (el) { if (rec.btn === 'fire' && fireLostT) { clearTimeout(fireLostT); fireLostT = 0; } pressBtn(rec.btn, true, el); rec.role = rec.btn === 'fire' ? 'look' : 'btn'; }
     else if (modalOpen()) rec.role = 'btn';
     else if (!me.alive) { specIdx++; rec.role = 'btn'; }
-    else if (t.clientX < VW * 0.42 && ![...touches.values()].some((r) => r.role === 'move')) {
+    else if (moveLost && Math.hypot(t.clientX - moveLost.lx, t.clientY - moveLost.ly) < 110) { // 끊겼던 이동 터치가 다시 잡힘 → 스틱을 그대로 이어 씀
+      clearTimeout(moveLost.timer); rec.role = 'move'; rec.sx = moveLost.sx; rec.sy = moveLost.sy; moveLost = null;
+    }
+    else if (t.clientX < VW * 0.42 && !moveLost && ![...touches.values()].some((r) => r.role === 'move')) {
       rec.role = 'move';
       const s = $('stick'); s.style.left = t.clientX + 'px'; s.style.top = t.clientY - VT + 'px'; s.classList.remove('hide'); $('stickHint').classList.add('hide');
       $('knob').style.transform = '';
@@ -1379,8 +1385,17 @@ function touchEnd(e) {
     const r = touches.get(t.identifier);
     if (!r) continue;
     touches.delete(t.identifier);
-    if (r.btn) pressBtn(r.btn, false, r.el);
-    if (r.role === 'move') { input.jx = input.jy = 0; input.sprint = false; $('stick').classList.add('hide'); }
+    if (r.btn === 'fire' && ctl.touchFix) { // 사격 버튼: 바로 떼지 않고 잠깐 기다렸다가 뗌 (그 사이 다시 눌리면 계속 쏨)
+      if (fireLostT) clearTimeout(fireLostT);
+      const el = r.el; fireLostT = setTimeout(() => { fireLostT = 0; if (![...touches.values()].some((q) => q.btn === 'fire')) pressBtn('fire', false, el); }, GRACE);
+    } else if (r.btn) pressBtn(r.btn, false, r.el);
+    if (r.role === 'move' && !ctl.touchFix) { input.jx = input.jy = 0; input.sprint = false; $('stick').classList.add('hide'); }
+    else if (r.role === 'move') { // 이동 스틱: 잠깐은 가던 방향을 유지
+      if (moveLost) clearTimeout(moveLost.timer);
+      const ml = { sx: r.sx, sy: r.sy, lx: r.lx, ly: r.ly, timer: 0 };
+      ml.timer = setTimeout(() => { if (moveLost === ml) { moveLost = null; input.jx = input.jy = 0; input.sprint = false; $('stick').classList.add('hide'); } }, GRACE);
+      moveLost = ml;
+    }
   }
 }
 document.addEventListener('touchend', touchEnd);
