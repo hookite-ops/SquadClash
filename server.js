@@ -111,6 +111,13 @@ const server = http.createServer((req, res) => {
     const codes = q.split(',').slice(0, 24), good = codes.filter((c) => CODES.has(normCode(c))).map(normCode);
     return res.end(JSON.stringify({ ok: good.length > 0, codes: good, skins: [...skinsFor(good)] }));
   }
+  if (url === '/api/rooms') { // 방 목록: 사람이 있는 방만 (많은 순)
+    const list = [];
+    for (const r of rooms.values()) { const n = r.humans(); if (n > 0) { const max = r.mode === 'br' ? BR.max : TEAM_MAX * 2; list.push({ code: r.code, pub: r.isPublic, mode: r.mode, map: MAPS[r.map] ? MAPS[r.map].name : '', n, max, bot: r.botLv }); } }
+    list.sort((a, b) => b.n - a.n);
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify({ rooms: list.slice(0, 30) }));
+  }
   if (url === '/') url = '/index.html';
   const f = loadFile(path.normalize(url).replace(/^[/\\]+/, ''));
   if (!f) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('없는 페이지'); }

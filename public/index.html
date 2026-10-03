@@ -37,6 +37,21 @@ button.big:active{transform:translateY(1px);filter:brightness(.92)}
 .opt label{display:flex;align-items:center;gap:6px}
 .opt input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc)}
 .help{font-size:12px;color:var(--dim);line-height:1.55;border-top:1px solid var(--line);margin-top:10px;padding-top:9px}
+#roomBox{border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:rgba(0,0,0,.18)}
+#roomHead{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;font-size:13px}
+#roomHead b{color:var(--txt)}#roomInfo{flex:1;color:var(--dim);font-size:12px}
+#roomRef{height:28px;padding:0 10px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--txt);font-size:12px;font-weight:700;cursor:pointer}
+#roomList{max-height:132px;overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid var(--line)}
+#roomList .empty{padding:10px;font-size:12px;color:var(--dim);text-align:center}
+.room{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;padding:4px 8px 4px 10px;border:0;border-bottom:1px solid rgba(255,255,255,.06);background:none;color:var(--txt);font-size:13px;text-align:left;cursor:pointer}
+.room:last-child{border-bottom:0}.room:active{background:rgba(255,255,255,.08)}
+.room i{font-style:normal;font-size:11px;font-weight:800;padding:2px 6px;border-radius:5px;background:rgba(255,210,63,.16);color:var(--acc);flex:0 0 auto}
+.room .rc{font-weight:800;flex:0 0 auto;max-width:9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room .rm{flex:1;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room .rn{flex:0 0 auto;font-variant-numeric:tabular-nums}
+.room em{font-style:normal;flex:0 0 auto;padding:5px 10px;border-radius:7px;background:var(--acc);color:#12151a;font-weight:800;font-size:12px}
+.room.full{opacity:.5;cursor:default}.room.full em{background:rgba(255,255,255,.14);color:var(--dim)}
+@media (max-height:420px){#roomList{max-height:88px}}
 #menuMsg{min-height:18px;font-size:13px;color:var(--acc);margin-top:4px}
 /* 무기고 */
 #locker{position:fixed;inset:0;display:flex;justify-content:space-between;pointer-events:none;padding:calc(8px + var(--st)) calc(8px + var(--sr)) calc(8px + var(--sb)) calc(8px + var(--sl));gap:8px}
@@ -294,6 +309,7 @@ body:not(.touch) .pad,body:not(.touch) #stickHint{display:none}
     <div class="row"><input id="name" type="text" maxlength="12" placeholder="닉네임" autocomplete="off"></div>
     <div class="row"><button class="big" id="quick">빠른 참가</button><button class="big alt" id="openLocker" style="flex:0 0 112px">무기고</button></div>
     <div class="row"><input id="code" type="text" maxlength="8" placeholder="방 코드 (친구와 같은 코드 입력)" autocomplete="off" autocapitalize="characters"><button class="big alt" id="joinCode" style="flex:0 0 112px">코드로 참가</button></div>
+    <div id="roomBox"><div id="roomHead"><b>방 목록</b><span id="roomInfo"></span><button id="roomRef">새로고침</button></div><div id="roomList"></div></div>
     <div class="opt"><span>시점 감도</span><input id="sens" type="range" min="0.4" max="2.5" step="0.1" value="1"><label class="touchOnly"><input id="autoFire" type="checkbox">자동 사격</label></div>
     <div class="opt"><span>소리</span><input id="vol" type="range" min="0" max="1" step="0.05" value="0.8"><span>화질</span><select id="gfx"><option value="low">낮음</option><option value="mid">보통</option><option value="high">높음</option></select></div>
     <div class="opt"><span>맵</span><select id="mapSel"><option value="">번갈아</option><option value="town">사막 마을</option><option value="dock">부두 야적장</option><option value="station">기차역</option><option value="castle">옛 성</option><option value="city">도심 교차로</option></select><span>봇</span><select id="botLv"><option value="0">쉬움</option><option value="1">보통</option><option value="2">어려움</option><option value="3">매우 어려움</option></select><span>조준선</span><select id="xhair"><option value="#ffffff">흰색</option><option value="#4ade80">초록</option><option value="#ffd23f">노랑</option><option value="#5ad1ff">하늘</option><option value="#ff5fa2">분홍</option></select></div>

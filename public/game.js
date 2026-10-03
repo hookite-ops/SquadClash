@@ -1197,7 +1197,7 @@ function leaveGame() {
   engineSound(-1); setAmbient(false);
   if (document.pointerLockElement) document.exitPointerLock();
   document.body.classList.remove('playing', 'br', 'sqmini');
-  $('menu').classList.remove('hide'); $('menuMsg').textContent = '게임에서 나왔어요.';
+  $('menu').classList.remove('hide'); $('menuMsg').textContent = '게임에서 나왔어요.'; loadRooms();
   setMode(selMode);
 }
 // ───────────── 입력 ─────────────
@@ -1366,6 +1366,30 @@ $('modeBomb').onclick = () => setMode('bomb'); $('modeTdm').onclick = () => setM
 $('mapSel').value = store.get('map', '');
 setMode(selMode);
 $('quick').onclick = () => join('');
+// 방 목록: 메뉴가 떠 있는 동안 몇 초마다 새로 받아 온다. 누르면 그 방으로 들어감
+const MODE_NAME = { bomb: '폭탄전', tdm: '데스매치', br: '생존전' };
+let roomBusy = false;
+async function loadRooms() {
+  if (roomBusy || joined || document.hidden) return;
+  roomBusy = true;
+  try {
+    const r = await fetch('./api/rooms', { cache: 'no-store' }), d = await r.json(), box = $('roomList');
+    const list = Array.isArray(d.rooms) ? d.rooms : [];
+    box.textContent = '';
+    $('roomInfo').textContent = list.length ? `${list.length}개 · ${list.reduce((a, x) => a + x.n, 0)}명 접속 중` : '';
+    if (!list.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = '열린 방이 없어요. 빠른 참가나 방 코드로 새 방을 만들어 보세요.'; box.appendChild(e); }
+    for (const x of list) {
+      const full = x.n >= x.max, b = document.createElement('button'); b.className = 'room' + (full ? ' full' : ''); b.type = 'button';
+      const add = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = txt; b.appendChild(e); };
+      add('i', '', MODE_NAME[x.mode] || x.mode); add('span', 'rc', x.pub ? '공개방' : String(x.code)); add('span', 'rm', String(x.map || '')); add('span', 'rn', `${x.n}/${x.max}`); add('em', '', full ? '가득 참' : '참가');
+      if (!full) b.onclick = () => { $('code').value = x.pub ? '' : x.code; join(String(x.code)); };
+      box.appendChild(b);
+    }
+  } catch { $('roomInfo').textContent = '목록을 불러오지 못했어요'; }
+  roomBusy = false;
+}
+$('roomRef').onclick = loadRooms;
+setInterval(loadRooms, 6000); document.addEventListener('visibilitychange', loadRooms); loadRooms();
 $('joinCode').onclick = () => { const c = $('code').value.trim(); if (!c) { $('menuMsg').textContent = '방 코드를 입력해 주세요.'; return; } join(c); };
 $('sens').oninput = (e) => { sens = parseFloat(e.target.value) || 1; store.set('sens', sens); };
 $('autoFire').onchange = (e) => setAuto(e.target.checked);
