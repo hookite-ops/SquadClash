@@ -12,7 +12,7 @@ SQUAD CLASH (스쿼드 클래시) — Google Cloud Run 배포 방법
    ※ 예전 파일이 남아 있으면 옛 버전이 올라갑니다. 다시 올릴 때는 업로드 전에 먼저:
       rm -rf ~/squad-clash ~/squad-clash*.zip
 
-4) 3~5분 뒤 마지막 줄에 나오는 https://squad-clash-....run.app 주소가 게임 주소입니다.
+4) 3~5분 뒤 마지막 줄에 나오는 https://squadclash-....run.app 주소가 게임 주소입니다.
    친구에게 그 주소를 보내고, 같은 "방 코드"를 입력하면 같은 방에서 만납니다.
    ("빠른 참가"는 공개방으로 들어갑니다.)
 
@@ -24,11 +24,13 @@ SQUAD CLASH (스쿼드 클래시) — Google Cloud Run 배포 방법
 GitHub 자동 배포 (한 번만 설정하면, 저장소 main 에 올라올 때마다 저절로 새 버전이 배포됩니다)
 - 저장소: https://github.com/hookite-ops/SquadClash
 - 설정 (Google Cloud 콘솔에서 한 번):
-  1) console.cloud.google.com → Cloud Run → squad-clash 서비스 → 위쪽 [지속적 배포 설정](저장소 연결)
+  (지금은 서울 서비스 squadclash 가 이 저장소에 연결되어 있습니다: https://squadclash-394173969859.asia-northeast3.run.app)
+  1) console.cloud.google.com → Cloud Run → 서비스 목록 위쪽 [저장소 연결] (서비스 이름 squadclash, 리전 asia-northeast3)
   2) 저장소 제공업체 GitHub → 인증 → Google Cloud Build 앱을 hookite-ops/SquadClash 에 설치 → 저장소 선택 → [다음]
   3) 브랜치 ^main$ · 빌드 유형 Dockerfile · 소스 위치 /Dockerfile → [저장]
 - 그 뒤로는 main 에 올라올 때마다 3~5분 안에 같은 주소로 새 버전이 뜹니다. 위의 zip 업로드는 하지 않아도 됩니다.
-- 서비스 설정(서울 리전, 인스턴스 1대, 60분 연결 등)은 처음 deploy.sh 로 만든 값이 그대로 유지됩니다.
+- 꼭 맞춰야 하는 설정: 최대 인스턴스 1 (2 이상이면 같은 방 코드로도 서로 못 만남). Cloud Shell 에서 한 번:
+    gcloud run services update squadclash --region asia-northeast3 --max-instances 1 --min-instances 0 --concurrency 250 --timeout 3600 --session-affinity --port 8080
 
 알아둘 점
 - 아무도 접속하지 않으면 서버가 자동으로 꺼져서 요금이 거의 나오지 않습니다.

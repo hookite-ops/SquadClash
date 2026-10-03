@@ -9,5 +9,5 @@ Node.js(ws) 서버 한 개와 Three.js 화면으로 이루어져 있고, Google 
 
 ## 자동 배포
 
-`main` 브랜치에 올라오면 Cloud Run 이 `Dockerfile` 로 빌드해 `squad-clash` 서비스에 배포합니다.
-(Cloud Run 콘솔 → squad-clash → 지속적 배포 설정 → 이 저장소 · `^main$` · Dockerfile 로 한 번 연결)
+`main` 브랜치에 올라오면 Cloud Run 이 `Dockerfile` 로 빌드해 서울(asia-northeast3)의 `squadclash` 서비스에 배포합니다.
+게임 주소: https://squadclash-394173969859.asia-northeast3.run.app

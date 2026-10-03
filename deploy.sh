@@ -26,7 +26,7 @@ if ! gcloud projects get-iam-policy "$PROJECT" --flatten='bindings[].members' \
 fi
 
 deploy() {
-gcloud run deploy squad-clash \
+gcloud run deploy squadclash \
   --source . \
   --region "$REGION" \
   --allow-unauthenticated \
@@ -45,4 +45,4 @@ if ! deploy; then
 fi
 echo
 echo "✅ 완료! 아래 주소를 폰 브라우저에서 열면 됩니다:"
-gcloud run services describe squad-clash --region "$REGION" --format 'value(status.url)'
+gcloud run services describe squadclash --region "$REGION" --format 'value(status.url)'
