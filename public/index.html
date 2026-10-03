@@ -119,6 +119,22 @@ body.layedit .pad{outline:2px dashed rgba(255,255,255,.55);outline-offset:3px;to
 #lkCode button,#lkBtns button{height:36px;border:0;border-radius:8px;font-size:13px;font-weight:800;padding:0 10px;cursor:pointer;background:var(--acc);color:#12151a}
 #lkBtns{display:flex;gap:5px}#lkBtns button{flex:1}#lkBtns button.alt{background:rgba(255,255,255,.12);color:var(--txt);border:1px solid var(--line)}
 #lkMsg{font-size:12px;color:var(--acc);min-height:16px;line-height:1.35}
+#lkTabSkin,#lkTabPart{display:flex;flex-direction:column;gap:6px}#lkTabSkin.hide,#lkTabPart.hide{display:none}
+#lkTabs{display:flex;gap:4px}#lkTabs button{height:30px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.06);color:var(--dim);font-size:13px;font-weight:800;padding:0 12px;cursor:pointer}
+#lkTabs button.on{background:var(--acc);color:#12151a;border-color:var(--acc)}
+#lkLv{font-size:11.5px;background:rgba(255,255,255,.05);border-radius:8px;padding:6px 8px;line-height:1.4}#lkLv b{display:block;font-size:12.5px}#lkLv span{color:var(--dim)}
+#lkLv div,.stBar{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin:4px 0}#lkLv i{display:block;height:100%;background:var(--acc)}
+#lkPartN{font-size:12px;font-weight:800;color:var(--acc)}
+#lkParts{display:flex;flex-direction:column;gap:5px}
+.ptSlot b{display:block;font-size:11px;color:var(--dim);margin:0 2px 3px}
+.ptSlot div{display:flex;flex-wrap:wrap;gap:4px}
+.ptSlot button{border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.06);color:var(--txt);font-size:11.5px;font-weight:700;padding:6px 8px;cursor:pointer}
+.ptSlot button.on{border-color:var(--acc);color:var(--acc);background:rgba(255,210,63,.12)}
+.ptSlot.lock b::after{content:" · 기본 장착";color:#7f8a99}
+#lkStats{display:flex;flex-direction:column;gap:3px;font-size:11px}
+.stRow{display:flex;align-items:center;gap:6px}.stRow span{flex:0 0 52px;color:var(--dim)}.stRow .stBar{flex:1;margin:0;position:relative}.stRow .stBar i{position:absolute;left:0;top:0;bottom:0;background:#cfd6df}.stRow .stBar u{position:absolute;top:0;bottom:0}
+.stRow em{flex:0 0 30px;text-align:right;font-style:normal;font-weight:800}.stRow em.up{color:#4ade80}.stRow em.dn{color:#ff6b6b}
+#lkBtns2{display:flex;gap:5px}#lkBtns2 button{flex:1;height:36px;border:0;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;background:var(--acc);color:#12151a}#lkBtns2 button.alt{background:rgba(255,255,255,.12);color:var(--txt);border:1px solid var(--line)}
 @media (max-height:420px){#lkLeft button{padding:5px 7px;font-size:12px}.sk i{height:18px}#lkTitle b{font-size:17px}}
 
 /* HUD */
@@ -369,11 +385,21 @@ body.half{position:fixed;left:0;right:0;bottom:0;top:50%;height:auto;transform:t
   <div id="lkLeft"><h4>무기</h4></div>
   <div id="lkMid"><div id="lkTitle"><b id="lkName"></b><span id="lkSkin"></span></div><div id="lkHint">끌어서 돌려 보기</div></div>
   <div id="lkRight">
-    <div class="lkHead"><h4>스킨</h4><button id="lkX">닫기 ✕</button></div>
-    <div id="lkSkins"></div>
-    <div id="lkBtns"><button id="lkAll" class="alt">전체 적용</button><button id="lkClose">닫기</button></div>
-    <h4>스킨 코드</h4>
-    <div id="lkCode"><input id="lkInput" type="text" maxlength="40" placeholder="코드 입력" autocomplete="off" autocapitalize="characters"><button id="lkRedeem">등록</button></div>
+    <div class="lkHead"><div id="lkTabs"><button data-tab="skin" class="on">스킨</button><button data-tab="part">파츠</button></div><button id="lkX">닫기 ✕</button></div>
+    <div id="lkTabSkin">
+      <div id="lkSkins"></div>
+      <div id="lkLv"><b></b><div><i></i></div><span></span></div>
+      <div id="lkBtns"><button id="lkAll" class="alt">전체 적용</button><button id="lkClose">닫기</button></div>
+      <h4>스킨 코드</h4>
+      <div id="lkCode"><input id="lkInput" type="text" maxlength="40" placeholder="코드 입력" autocomplete="off" autocapitalize="characters"><button id="lkRedeem">등록</button></div>
+    </div>
+    <div id="lkTabPart" class="hide">
+      <div id="lkPartN"></div>
+      <div id="lkParts"></div>
+      <h4>성능</h4>
+      <div id="lkStats"></div>
+      <div id="lkBtns2"><button id="lkPartClear" class="alt">모두 빼기</button><button id="lkClose2">닫기</button></div>
+    </div>
     <div id="lkMsg"></div>
   </div>
 </div>
@@ -393,6 +419,7 @@ body.half{position:fixed;left:0;right:0;bottom:0;top:50%;height:auto;transform:t
   <div class="ctlRow touchOnly"><span>사격 방식</span><div class="seg" id="ctlMode"><button data-v="simple">심플 · 조준하면 자동 사격</button><button data-v="adv">고급 · 직접 사격</button></div></div>
   <label class="ctlChk touchOnly"><input type="checkbox" id="ctlAdsFire"><span>사격 버튼을 누르면 바로 정조준 (1탭 조준 사격)</span></label>
   <label class="ctlChk touchOnly"><input type="checkbox" id="ctlAdsHold"><span>조준 버튼을 누르는 동안만 정조준</span></label>
+  <label class="ctlChk touchOnly"><input type="checkbox" id="ctlSnipe"><span>저격총: 사격 버튼을 누르면 조준, 떼면 발사</span></label>
   <label class="ctlChk touchOnly"><input type="checkbox" id="ctlSprint"><span>항상 달리기 (스틱을 앞으로 밀면 바로 달림)</span></label>
   <label class="ctlChk touchOnly"><input type="checkbox" id="ctlAssist"><span>조준 보정 (적 근처에서 시점이 느려지고 살짝 따라감)</span></label>
   <label class="ctlChk touchOnly"><input type="checkbox" id="ctlTouchFix"><span>터치 끊김 보정 (두 손가락을 쓸 때 터치가 잠깐 끊기는 기기용)</span></label>

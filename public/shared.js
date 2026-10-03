@@ -42,6 +42,66 @@ export const SKINS = [
   { id: 'aurora', name: '오로라', tier: '전설' },
   { id: 'halloween', name: '할로윈', tier: '한정' },
 ];
+// ───────────── 파츠(부착물) ─────────────
+// 무기마다 자리(slot)별로 하나씩, 모두 합쳐 PART_MAX 개까지 단다. 수치는 곱하는 값 (1 = 그대로):
+// range 사거리 · spread 정조준 탄퍼짐 · hip 지향사격 탄퍼짐 · ads 정조준 걸리는 시간 · kv 위로 튀는 반동 · kh 옆으로 튀는 반동 · move 이동 속도 · mag 탄창 · reload 장전 시간
+export const PART_MAX = 5;
+export const PART_SLOTS = [['muz', '총구'], ['bar', '총열'], ['opt', '조준경'], ['stk', '개머리판'], ['grp', '손잡이'], ['mag', '탄창'], ['las', '레이저']];
+export const PARTS = [
+  null,
+  { id: 'sup', slot: 'muz', name: '소음기', desc: '총소리가 작아지고 미니맵에 안 뜸', quiet: true, range: 0.9, kv: 0.96, ads: 1.06 },
+  { id: 'comp', slot: 'muz', name: '보정기', desc: '위로 튀는 반동을 줄임', kv: 0.8, kh: 1.08, hip: 1.06 },
+  { id: 'brake', slot: 'muz', name: '제동기', desc: '좌우 흔들림을 줄임', kh: 0.72, kv: 0.95, ads: 1.04 },
+  { id: 'long', slot: 'bar', name: '장총열', desc: '사거리와 명중률이 늘고 무거워짐', range: 1.25, spread: 0.8, move: 0.97, ads: 1.1 },
+  { id: 'light', slot: 'bar', name: '경량 총열', desc: '가볍고 빠르지만 사거리가 줄어듦', range: 0.86, move: 1.04, ads: 0.9, kv: 1.06 },
+  { id: 'dot', slot: 'opt', name: '레드 도트', desc: '점 하나로 빠르게 조준', ads: 0.96 },
+  { id: 'holo', slot: 'opt', name: '홀로그램', desc: '넓은 창으로 또렷하게 조준', spread: 0.92, no: ['pistol', 'revolver'] },
+  { id: 'x3', slot: 'opt', name: '3배율 조준경', desc: '멀리 있는 적을 크게 봄', zoom: 27, spread: 0.85, ads: 1.14, no: ['pistol', 'revolver', 'shotgun'] },
+  { id: 'lstk', slot: 'stk', name: '경량 개머리판', desc: '정조준이 빨라지고 반동이 늘어남', ads: 0.86, move: 1.02, kv: 1.1 },
+  { id: 'hstk', slot: 'stk', name: '안정 개머리판', desc: '반동이 줄고 정조준이 느려짐', kv: 0.87, kh: 0.88, ads: 1.1, move: 0.98 },
+  { id: 'vgrip', slot: 'grp', name: '수직 손잡이', desc: '위로 튀는 반동을 줄임', kv: 0.86, move: 0.98 },
+  { id: 'agrip', slot: 'grp', name: '경사 손잡이', desc: '정조준이 빨라지고 좌우 흔들림이 줄어듦', ads: 0.9, kh: 0.9 },
+  { id: 'ext', slot: 'mag', name: '대용량 탄창', desc: '탄이 늘고 장전이 느려짐', mag: 1.4, reload: 1.12, ads: 1.05, move: 0.98 },
+  { id: 'fast', slot: 'mag', name: '빠른 탄창', desc: '장전이 빨라짐', reload: 0.74 },
+  { id: 'laser', slot: 'las', name: '레이저', desc: '조준하지 않고 쏠 때 탄이 덜 퍼짐', hip: 0.62, ads: 0.96 },
+];
+const MODEL_SLOTS = { knife: '', pistol: 'muz opt mag las', revolver: 'bar opt las', sawed: 'bar las', smg: 'muz bar opt stk grp mag las', rifle: 'muz bar opt stk grp mag las', shotgun: 'muz bar opt stk mag las', sniper: 'muz bar stk mag las' };
+// 이 무기에 달 수 있는 자리 (소음기가 기본으로 달린 총은 총구를 못 바꿈)
+export function partSlots(wi) {
+  const W = WEAPONS[wi]; if (!W) return [];
+  const s = MODEL_SLOTS[W.model[0]].split(' ').filter(Boolean);
+  if (W.model[0] === 'shotgun' && W.model[1] && W.model[1].auto) s.splice(4, 0, 'grp');
+  return W.quiet ? s.filter((k) => k !== 'muz') : s;
+}
+export function partOk(wi, pi) { const P = PARTS[pi]; return !!P && partSlots(wi).includes(P.slot) && !(P.no && P.no.includes(WEAPONS[wi].model[0])); }
+// 받은 목록에서 쓸 수 있는 것만 남김 (자리마다 하나, 최대 PART_MAX 개)
+export function cleanParts(wi, arr) {
+  const out = [], used = new Set();
+  if (Array.isArray(arr)) for (const v of arr) { const pi = v | 0; if (out.length >= PART_MAX || !partOk(wi, pi) || used.has(PARTS[pi].slot)) continue; used.add(PARTS[pi].slot); out.push(pi); }
+  return out.sort((a, b) => a - b);
+}
+const ADS_MS = { knife: 0, pistol: 150, smg: 185, rifle: 235, shotgun: 225, sniper: 340, mg: 330 };
+const HIP = { side: 0.017, smg: 0.025, ar: 0.034, mg: 0.046 };
+// 파츠를 반영한 무기 수치. 표에 없는 값도 채운다: hip 지향사격 탄퍼짐, adsMs 정조준 시간, kv·kh 반동 배수
+export function effWeapon(wi, parts) {
+  const W = WEAPONS[wi], E = { ...W, kv: 1, kh: 1, hip: W.melee ? 0 : W.falloff ? W.spread : W.hipSpread || HIP[W.cat] || 0.03, adsMs: ADS_MS[W.vm] * (W.ap ? 1.2 : 1), move: W.move || 1, parts: [] };
+  for (const pi of cleanParts(wi, parts)) {
+    const P = PARTS[pi]; E.parts.push(pi);
+    for (const k of ['range', 'spread', 'hip', 'kv', 'kh', 'move', 'reload']) if (P[k]) E[k] *= P[k];
+    if (P.ads) E.adsMs *= P.ads;
+    if (P.mag) E.mag = Math.round(W.mag * P.mag);
+    if (P.quiet) E.quiet = true;
+    if (P.zoom) E.zoom = Math.min(W.zoom || 99, P.zoom);
+    if (P.range && W.falloff) E.falloff = [W.falloff[0] * P.range, W.falloff[1] * P.range];
+  }
+  E.reload = Math.round(E.reload); E.range = Math.round(E.range);
+  return E;
+}
+// ───────────── 스킨 업그레이드 ─────────────
+// 스킨을 낀 무기로 처치할수록 스킨 레벨이 오른다. 2 궤적 색 · 3 총구 불꽃과 탄착 색 · 4 처치 효과 · 5 각성(빛나는 겉면)
+export const SKIN_LV = [0, 5, 15, 35, 70];
+export const SKIN_LV_NAME = ['', '기본', '궤적 색', '불꽃·탄착 색', '처치 효과', '각성'];
+export function skinLevel(xp) { let l = 1; for (let i = 1; i < SKIN_LV.length; i++) if (xp >= SKIN_LV[i]) l = i + 1; return l; }
 export const CATS = [['side', '보조무기'], ['smg', '기관단총'], ['sg', '샷건'], ['ar', '소총'], ['sr', '저격총'], ['mg', '기관총']];
 export const NADE_WEAPON = 99; // 킬 로그에서 수류탄을 뜻하는 번호
 export const ZONE_WEAPON = 98; // 안전 구역 밖에서 쓰러짐
@@ -174,14 +234,15 @@ export function rayWorld(o, d, maxT) {
   return t;
 }
 // 닿은 지점의 면 방향 (탄흔 그릴 때 사용)
+export let HIT_M = ''; // hitNormal 이 마지막으로 찾은 곳의 재질 ('' = 땅)
 export function hitNormal(p) {
-  let best = 0.06, n = null;
+  let best = 0.06, n = null; HIT_M = '';
   for (const b of boxesNear(p[0], p[2], 0.1)) {
     if (p[0] < b.min[0] - 0.05 || p[0] > b.max[0] + 0.05 || p[1] < b.min[1] - 0.05 || p[1] > b.max[1] + 0.05 || p[2] < b.min[2] - 0.05 || p[2] > b.max[2] + 0.05) continue;
     for (let i = 0; i < 3; i++) {
       const a = Math.abs(p[i] - b.min[i]), c = Math.abs(p[i] - b.max[i]);
-      if (a < best) { best = a; n = [0, 0, 0]; n[i] = -1; }
-      if (c < best) { best = c; n = [0, 0, 0]; n[i] = 1; }
+      if (a < best) { best = a; n = [0, 0, 0]; n[i] = -1; HIT_M = b.m || ''; }
+      if (c < best) { best = c; n = [0, 0, 0]; n[i] = 1; HIT_M = b.m || ''; }
     }
   }
   if (n) return n;

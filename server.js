@@ -5,7 +5,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, W_DEFAULT_PRIM, MAPS, ARENA_MAPS, setMap, MAP, floorAt, buildNav, SPAWNS, SPAWNS_TDM, SITES, siteAt, dirFrom, rayWorld, rayPlayer, segHitsSphere, groundAt, boxesNear } from './public/shared.js';
+import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, W_DEFAULT_PRIM, MAPS, ARENA_MAPS, setMap, MAP, floorAt, buildNav, SPAWNS, SPAWNS_TDM, SITES, siteAt, dirFrom, rayWorld, rayPlayer, segHitsSphere, groundAt, boxesNear, cleanParts, effWeapon } from './public/shared.js';
 
 const PORT = process.env.PORT || 8080;
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
@@ -492,7 +492,7 @@ class Room {
     this.broadcast({ t: 'spawn', id: p.id, p: [p.x, p.y, p.z], yaw: p.yaw });
   }
   roster() {
-    return { t: 'roster', code: this.code, pub: this.isPublic, mode: this.mode, players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, k: p.k, d: p.d, sk: p.sk || undefined })) };
+    return { t: 'roster', code: this.code, pub: this.isPublic, mode: this.mode, players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, k: p.k, d: p.d, sk: p.sk || undefined, att: p.ew ? p.att : undefined, sl: p.sl || undefined })) };
   }
   rewind(e, rt) {
     const h = e.hist;
@@ -504,7 +504,7 @@ class Room {
     return [h[0].x, h[0].y, h[0].z];
   }
   fire(p, dirs, wi, rt, now) {
-    const W = WEAPONS[wi];
+    const W = p.ew ? p.ew[wi] : WEAPONS[wi]; // 파츠를 단 사람은 사거리·소음이 달라짐
     const o = [p.x, p.y + (p.c ? PLAYER.eyeCrouch : PLAYER.eye), p.z];
     const dmg = new Map(), ends = [];
     p.protUntil = 0; // 쏘면 무적 해제
@@ -526,7 +526,7 @@ class Room {
         dmg.set(hit, cur);
       }
     }
-    this.broadcast({ t: 'shot', id: p.id, w: wi, e: W.melee ? [] : ends.slice(0, 4) }, p);
+    this.broadcast({ t: 'shot', id: p.id, w: wi, e: W.melee ? [] : ends.slice(0, 4), q: W.quiet && !WEAPONS[wi].quiet ? 1 : undefined }, p);
     if (!W.melee) this.noise(p, W.quiet ? 16 : 62, now);
     for (const [e, v] of dmg) this.damage(p, e, Math.round(v.dmg), v.head, wi, now);
   }
@@ -1165,6 +1165,9 @@ wss.on('connection', (ws) => {
       me = room.addPlayer(cleanName(m.name), ws, team, false);
       if (room.mode === 'br') me.team = me.id; // 생존전은 모두가 적
       me.sk = cleanSkins(m.sk, skinsFor(m.codes)); // 가진 스킨만 인정
+      me.att = WEAPONS.map((_, i) => cleanParts(i, Array.isArray(m.att) ? m.att[i] : null)); // 파츠: 쓸 수 있는 것만 인정
+      me.ew = me.att.some((a) => a.length) ? WEAPONS.map((_, i) => effWeapon(i, me.att[i])) : null;
+      me.sl = Array.isArray(m.sl) && m.sl.some((v) => v > 1) ? SKINS.map((_, i) => clamp(m.sl[i] | 0, 1, 5)) : null; // 스킨 레벨 (꾸밈 효과에만 쓰임)
       me.paint = cleanPaint(m.paint);
       for (const p of room.players.values()) if (p !== me && p.paint) room.send(me, { t: 'paint', id: p.id, d: p.paint }); // 먼저 있던 사람들의 그림
       if (me.paint) room.broadcast({ t: 'paint', id: me.id, d: me.paint }, me);
