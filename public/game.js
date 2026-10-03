@@ -1188,7 +1188,7 @@ function leaveGame() {
   setMode(selMode);
 }
 // ───────────── 조작 설정 (감도 · 사격 방식 · 조준 보정 · 자이로 · 버튼 배치) ─────────────
-const CTL_DEF = { touchFix: false, adsFire: false, adsHold: false, alwaysSprint: false, assist: true, sAds: 1, sScope: 1, sFire: 1, gyro: 0, gyroInv: false, opacity: 1, layout: {} };
+const CTL_DEF = { touchDbg: false, touchFix: false, adsFire: false, adsHold: false, alwaysSprint: false, assist: true, sAds: 1, sScope: 1, sFire: 1, gyro: 0, gyroInv: false, opacity: 1, layout: {} };
 let ctl = { ...CTL_DEF };
 try { ctl = { ...CTL_DEF, ...JSON.parse(store.get('ctl', '{}')) }; if (!ctl.layout || typeof ctl.layout !== 'object') ctl.layout = {}; } catch {}
 let ctlOpen = false, layEdit = false, adsByFire = false, assistSlow = 1;
@@ -1207,7 +1207,7 @@ function applyLayout() { // 저장해 둔 버튼 자리·크기 (화면 크기�
 function syncCtl() {
   for (const b of $('ctlMode').children) b.classList.toggle('on', (b.dataset.v === 'simple') === autoFire);
   for (const b of $('ctlGyro').children) b.classList.toggle('on', +b.dataset.v === ctl.gyro);
-  $('ctlAdsFire').checked = ctl.adsFire; $('ctlAdsHold').checked = ctl.adsHold; $('ctlSprint').checked = ctl.alwaysSprint; $('ctlAssist').checked = ctl.assist; $('ctlGyroInv').checked = ctl.gyroInv; $('ctlTouchFix').checked = ctl.touchFix;
+  $('ctlAdsFire').checked = ctl.adsFire; $('ctlAdsHold').checked = ctl.adsHold; $('ctlSprint').checked = ctl.alwaysSprint; $('ctlAssist').checked = ctl.assist; $('ctlGyroInv').checked = ctl.gyroInv; $('ctlTouchFix').checked = ctl.touchFix; $('ctlTouchDbg').checked = ctl.touchDbg;
   for (const [id, v] of [['ctlSens', sens], ['ctlSAds', ctl.sAds], ['ctlSScope', ctl.sScope], ['ctlSFire', ctl.sFire], ['ctlOp', ctl.opacity]]) { $(id).value = v; $(id + 'V').textContent = Math.round(v * 100) + '%'; }
   $('sens').value = sens;
 }
@@ -1217,7 +1217,7 @@ function openCtl(on) {
 }
 for (const b of $('ctlMode').children) b.onclick = () => { setAuto(b.dataset.v === 'simple'); syncCtl(); };
 for (const b of $('ctlGyro').children) b.onclick = () => { ctl.gyro = +b.dataset.v; saveCtl(); syncCtl(); if (ctl.gyro) startGyro(); };
-for (const [id, key] of [['ctlAdsFire', 'adsFire'], ['ctlAdsHold', 'adsHold'], ['ctlSprint', 'alwaysSprint'], ['ctlAssist', 'assist'], ['ctlGyroInv', 'gyroInv'], ['ctlTouchFix', 'touchFix']]) $(id).onchange = (e) => { ctl[key] = e.target.checked; saveCtl(); };
+for (const [id, key] of [['ctlAdsFire', 'adsFire'], ['ctlAdsHold', 'adsHold'], ['ctlSprint', 'alwaysSprint'], ['ctlAssist', 'assist'], ['ctlGyroInv', 'gyroInv'], ['ctlTouchFix', 'touchFix'], ['ctlTouchDbg', 'touchDbg']]) $(id).onchange = (e) => { ctl[key] = e.target.checked; saveCtl(); tdbgShow(); };
 $('ctlSens').oninput = (e) => { sens = parseFloat(e.target.value) || 1; store.set('sens', sens); syncCtl(); };
 for (const [id, key] of [['ctlSAds', 'sAds'], ['ctlSScope', 'sScope'], ['ctlSFire', 'sFire'], ['ctlOp', 'opacity']]) $(id).oninput = (e) => { ctl[key] = parseFloat(e.target.value) || 1; saveCtl(); syncCtl(); applyLayout(); };
 $('ctlX').onclick = () => openCtl(false);
@@ -1402,6 +1402,29 @@ document.addEventListener('touchend', touchEnd);
 document.addEventListener('touchcancel', touchEnd);
 document.addEventListener('contextmenu', (e) => { if (joined) e.preventDefault(); });
 
+// 터치 진단: 브라우저가 알려 주는 손가락(초록 원)과 게임이 맡긴 역할, 끝남·취소 횟수를 보여 줌
+// '취소'가 늘면 시스템·브라우저 제스처가 터치를 가져간 것, '끝'만 늘면 기기가 손가락을 놓친 것
+const tdbg = { start: 0, end: 0, cancel: 0, max: 0, last: '' }, tdots = new Map();
+function tdbgShow() { $('tdbg').classList.toggle('hide', !ctl.touchDbg); if (!ctl.touchDbg) { for (const d of tdots.values()) d.remove(); tdots.clear(); } }
+function tdbgOn(e) {
+  if (!ctl.touchDbg) return;
+  if (e.type === 'touchstart') tdbg.start += e.changedTouches.length; else if (e.type === 'touchend') tdbg.end += e.changedTouches.length; else if (e.type === 'touchcancel') tdbg.cancel += e.changedTouches.length;
+  if (e.type !== 'touchmove') tdbg.last = e.type.slice(5) + ' ' + [...e.changedTouches].map((t) => Math.round(t.clientX) + ',' + Math.round(t.clientY)).join(' / ');
+  tdbg.max = Math.max(tdbg.max, e.touches.length);
+  const seen = new Set();
+  for (const t of e.touches) {
+    seen.add(t.identifier);
+    let d = tdots.get(t.identifier);
+    if (!d) { d = document.createElement('div'); d.className = 'tdot'; $('tdbg').appendChild(d); tdots.set(t.identifier, d); }
+    const r = touches.get(t.identifier);
+    d.style.left = t.clientX + 'px'; d.style.top = t.clientY - VT + 'px'; d.style.borderColor = r ? '#4ade80' : '#ff5a5a';
+    d.textContent = r ? (r.role === 'move' ? '이동' : r.btn ? r.btn : '시점') : '안 잡힘';
+  }
+  for (const [id, d] of tdots) if (!seen.has(id)) { d.remove(); tdots.delete(id); }
+  $('tdbgTxt').textContent = `손가락 ${e.touches.length}개 (게임이 잡은 것 ${touches.size}개) · 동시에 최대 ${tdbg.max}개\n시작 ${tdbg.start} · 끝 ${tdbg.end} · 취소 ${tdbg.cancel}\n마지막: ${tdbg.last}`;
+}
+for (const ty of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) document.addEventListener(ty, tdbgOn, { passive: true });
+tdbgShow();
 // PC 조작
 const canvas = $('c');
 let lastTouchAt = 0;

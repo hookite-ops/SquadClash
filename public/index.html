@@ -73,6 +73,9 @@ body:not(.touch) #ctl .touchOnly{display:none}
 #layBar{position:fixed;z-index:31;top:calc(8px + var(--st));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;background:rgba(18,22,28,.94);border:1px solid var(--acc);border-radius:10px;padding:6px 8px;font-size:12.5px;white-space:nowrap}
 #layBar button{height:32px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.09);color:var(--txt);font-size:12.5px;font-weight:700;padding:0 10px;cursor:pointer}#layDone{background:var(--acc)!important;color:#12151a!important;border:0!important}
 body.layedit .pad{outline:2px dashed rgba(255,255,255,.55);outline-offset:3px;touch-action:none;display:flex!important;opacity:1}body.layedit .pad.sel{outline-color:var(--acc)}
+#tdbg{position:fixed;inset:0;pointer-events:none;z-index:20}
+#tdbgTxt{position:absolute;left:50%;top:calc(46px + var(--st));transform:translateX(-50%);background:rgba(0,0,0,.72);border:1px solid var(--acc);border-radius:8px;padding:5px 10px;font-size:12px;line-height:1.5;color:#fff;white-space:pre;font-variant-numeric:tabular-nums}
+.tdot{position:absolute;width:64px;height:64px;margin:-32px;border-radius:50%;border:3px solid #4ade80;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;text-shadow:0 1px 2px #000}
 #roomBox{border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:rgba(0,0,0,.18)}
 #roomHead{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;font-size:13px}
 #roomHead b{color:var(--txt)}#roomInfo{flex:1;color:var(--dim);font-size:12px}
@@ -393,6 +396,7 @@ body.half{position:fixed;left:0;right:0;bottom:0;top:50%;height:auto;transform:t
   <label class="ctlChk touchOnly"><input type="checkbox" id="ctlSprint"><span>항상 달리기 (스틱을 앞으로 밀면 바로 달림)</span></label>
   <label class="ctlChk touchOnly"><input type="checkbox" id="ctlAssist"><span>조준 보정 (적 근처에서 시점이 느려지고 살짝 따라감)</span></label>
   <label class="ctlChk touchOnly"><input type="checkbox" id="ctlTouchFix"><span>터치 끊김 보정 (두 손가락을 쓸 때 터치가 잠깐 끊기는 기기용)</span></label>
+  <label class="ctlChk touchOnly"><input type="checkbox" id="ctlTouchDbg"><span>터치 진단 표시 (손가락 자리와 끊긴 횟수를 화면에 보여 줌)</span></label>
   <div class="ctlRow"><span>기본 감도</span><input type="range" id="ctlSens" min="0.4" max="2.5" step="0.05"><em id="ctlSensV"></em></div>
   <div class="ctlRow"><span>정조준 감도</span><input type="range" id="ctlSAds" min="0.3" max="2" step="0.05"><em id="ctlSAdsV"></em></div>
   <div class="ctlRow"><span>스코프 감도</span><input type="range" id="ctlSScope" min="0.3" max="2" step="0.05"><em id="ctlSScopeV"></em></div>
@@ -403,6 +407,7 @@ body.half{position:fixed;left:0;right:0;bottom:0;top:50%;height:auto;transform:t
   <div class="ctlBtns"><button id="ctlLayout" class="touchOnly">버튼 배치 바꾸기</button><button id="ctlReset" class="alt">기본값으로</button></div>
 </div></div>
 <div id="layBar" class="hide"><span id="layMsg">버튼을 끌어서 옮기세요</span><button id="laySm">작게</button><button id="layBig">크게</button><button id="layReset">초기화</button><button id="layDone">완료</button></div>
+<div id="tdbg" class="hide"><div id="tdbgTxt"></div></div>
 <div id="rotate"><i>📱</i>화면을 가로로 돌려 주세요</div>
 <script type="module" src="./game.js"></script>
 </body>
