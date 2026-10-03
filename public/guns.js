@@ -79,7 +79,10 @@ const FIX = {
   reticle: new THREE.MeshBasicMaterial({ map: (() => texOf(canvas(64, (g) => { g.strokeStyle = '#ff4030'; g.lineWidth = 3; g.beginPath(); g.arc(32, 32, 20, 0, 7); g.stroke(); g.fillStyle = '#ff4030'; g.beginPath(); g.arc(32, 32, 3.5, 0, 7); g.fill(); for (const [x, y, w, h] of [[30.5, 4, 3, 10], [30.5, 50, 3, 10], [4, 30.5, 10, 3], [50, 30.5, 10, 3]]) g.fillRect(x, y, w, h); }), true))(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
   rdot: new THREE.MeshBasicMaterial({ map: (() => texOf(canvas(32, (g) => { const rg = g.createRadialGradient(16, 16, 0, 16, 16, 16); rg.addColorStop(0, '#fff'); rg.addColorStop(0.3, '#ff3020'); rg.addColorStop(1, 'rgba(255,40,20,0)'); g.fillStyle = rg; g.fillRect(0, 0, 32, 32); }), true))(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
   xret: new THREE.MeshBasicMaterial({ map: (() => texOf(canvas(128, (g) => { g.strokeStyle = '#ff4030'; g.lineWidth = 2; g.beginPath(); g.moveTo(64, 70); g.lineTo(64, 122); g.moveTo(6, 64); g.lineTo(52, 64); g.moveTo(76, 64); g.lineTo(122, 64); g.stroke(); g.lineWidth = 3; g.beginPath(); g.moveTo(54, 74); g.lineTo(64, 60); g.lineTo(74, 74); g.stroke(); for (let i = 1; i < 4; i++) g.fillRect(58, 70 + i * 12, 12, 1.5); }), true))(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
-  beam: new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }),
+  beam: new THREE.MeshBasicMaterial({ map: (() => { const t = texOf(canvas(64, (g) => { const lg = g.createLinearGradient(0, 0, 0, 64); lg.addColorStop(0, 'rgba(255,40,20,0)'); lg.addColorStop(0.55, 'rgba(255,40,20,.35)'); lg.addColorStop(1, 'rgba(255,60,30,.9)'); g.fillStyle = lg; g.fillRect(0, 0, 64, 64); }), true); return t; })(), transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+  ldot: new THREE.MeshBasicMaterial({ color: 0xff3a2a }),
+  tubeIn: new THREE.MeshBasicMaterial({ color: 0x040506, side: THREE.BackSide }),
+  mask: new THREE.MeshBasicMaterial({ colorWrite: false }), // 1인칭 전용: 조준경 안쪽으로 총의 앞부분이 비쳐 보이지 않게 가림
 };
 allMats.delete(FIX.lens);
 
@@ -485,7 +488,9 @@ class Builder {
         geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
         geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
         geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-        grp.add(new THREE.Mesh(geo, mat));
+        const mesh = new THREE.Mesh(geo, mat);
+        if (mat === FIX.mask) { mesh.renderOrder = -1; mesh.visible = false; mesh.name = 'fpMask'; } // 1인칭 총에서만 켬
+        grp.add(mesh);
       }
     }
     return root;
@@ -549,16 +554,18 @@ function reddot(b, f, u0, M) { // 레드 도트: 낮은 받침에 테두리 달�
   b.add(new THREE.PlaneGeometry(0.0065, 0.0065).translate(0, cy, -(f + 0.0136)), M.rdot, null, true);
   return cy;
 }
-function scope3(b, f, u0, M) { // 3배율 조준경: 속이 빈 짧은 통
-  const cy = u0 + 0.027;
-  for (const d of [-0.03, 0.035]) { b.box(0.016, 0.016, 0.014, f + d, u0 + 0.008, M.steel); b.ring(0.0185, 0.003, f + d, cy, M.steel); }
-  b.tube(0.0165, 0.0165, f - 0.05, 0.11, cy, M.recv);
-  b.tube(0.0165, 0.023, f + 0.06, 0.03, cy, M.recv); b.tube(0.023, 0.023, f + 0.09, 0.03, cy, M.recv); b.ring(0.023, 0.0025, f + 0.12, cy, M.steel);
-  b.tube(0.021, 0.0165, f - 0.075, 0.025, cy, M.recv); b.tube(0.021, 0.021, f - 0.1, 0.025, cy, M.recv); b.ring(0.021, 0.003, f - 0.1, cy, M.rubber);
-  b.vcyl(0.008, 0.014, f + 0.005, cy + 0.022, M.steel); b.xcyl(0.008, 0.014, f + 0.005, cy, M.steel, 0.022);
-  b.add(new THREE.CircleGeometry(0.0205, 20).translate(0, cy, -(f - 0.09)), M.lens, null, true);
-  b.add(new THREE.PlaneGeometry(0.03, 0.03).translate(0, cy, -(f - 0.0895)), M.xret, null, true);
-  b.adsZ = -(0.2 - f); // 눈을 접안렌즈 가까이
+function scope3(b, f, u0, M) { // 3배율 조준경: 앞이 넓은 짧은 통. 안쪽 벽은 어두워서 들여다보면 깨끗한 원이 보임
+  const cy = u0 + 0.031, f0 = f - 0.075, f1 = f + 0.075, r0 = 0.02, r1 = 0.03;
+  b.box(0.022, 0.012, 0.09, f, u0 + 0.006, M.steel);
+  for (const d of [-0.03, 0.03]) b.box(0.012, 0.014, 0.012, f + d, u0 + 0.012, M.recv);
+  b.tube(r0, r1, f0, f1 - f0, cy, M.recv, 24); b.tube(r0 - 0.0012, r1 - 0.0012, f0, f1 - f0, cy, M.tubeIn, 24);
+  b.ring(r1, 0.0028, f1, cy, M.steel); b.ring(r0, 0.003, f0, cy, M.rubber);
+  b.vcyl(0.008, 0.012, f, cy + 0.03, M.steel); b.xcyl(0.008, 0.012, f, cy, M.steel, 0.03);
+  b.add(new THREE.CircleGeometry(r1 - 0.002, 24).rotateY(Math.PI).translate(0, cy, -(f1 - 0.004)), M.glass, null, true);
+  b.add(new THREE.CircleGeometry(r0 - 0.0015, 24).translate(0, cy, -(f0 + 0.01)), M.mask, null, true);
+  b.add(new THREE.CircleGeometry(r0 - 0.002, 24).translate(0, cy, -(f0 + 0.006)), M.lens, null, true);
+  b.add(new THREE.PlaneGeometry(0.03, 0.03).translate(0, cy, -(f0 + 0.0055)), M.xret, null, true);
+  b.adsZ = -(0.09 - f0); // 눈을 접안렌즈 가까이
   return cy;
 }
 // 조준경 파츠 (holoL = 큰 테두리 조준기). 가운데 높이를 돌려줌
@@ -588,8 +595,9 @@ function underGrip(b, kind, f, u, M) { // 총열덮개 아래 손잡이. 왼손 
 }
 function laserAtt(b, f, u, x, M) { // 레이저: 작은 상자와 앞으로 뻗는 빛줄기
   b.box(0.014, 0.016, 0.046, f, u, M.recv, x); b.box(0.015, 0.004, 0.02, f - 0.006, u + 0.009, M.dark, x);
-  b.cyl(0.0042, 0.0042, f + 0.023, 0.004, u, M.steel, x, 10); b.disc(0.0034, f + 0.0275, u, M.beam, false, x);
-  b.add(new THREE.BoxGeometry(0.002, 0.002, 2.6).translate(x, u, -(f + 0.028 + 1.3)), M.beam, null, true);
+  b.cyl(0.0042, 0.0042, f + 0.023, 0.004, u, M.steel, x, 10); b.disc(0.0034, f + 0.0275, u, M.ldot, false, x);
+  const L = 1.5; // 빛줄기: 십자로 겹친 얇은 판 두 장, 멀어질수록 흐려짐
+  for (const rz of [0, Math.PI / 2]) b.add(new THREE.PlaneGeometry(0.0024, L).rotateX(-Math.PI / 2).rotateZ(rz).translate(x, u, -(f + 0.028 + L / 2)), M.beam, null, true);
 }
 function magAtt(b, kind, f0, f1, u, w, M, sl = 0.008) { // 탄창 파츠: 밑으로 늘이거나(대용량) 당김 고리를 닮(빠른 탄창). 탄창과 함께 움직임
   b.part('mag');
@@ -603,7 +611,7 @@ function stockPart(b, kind, M, r, F) {
   if (kind === 'hstk') { // 안정: 가운데를 판 굵은 몸통, 높이 조절 뺨받침, 막대로 밀어내는 어깨받침
     const e = end + 0.03;
     b.prof([[f, top], [e, top], [e, bot], [e + 0.035, bot], [f - 0.06, j0 - 0.012], [f, j0]], w, F, 0.006, 0, { r: 0.006, holes: [[[f - 0.07, top - 0.024], [e + 0.028, top - 0.024], [e + 0.028, bot + 0.026], [f - 0.09, j0 - 0.004]]], hr: 0.005 });
-    b.prof([[f - 0.055, top], [f - 0.064, top + 0.02], [e + 0.052, top + 0.02], [e + 0.043, top]], w * 0.84, M.poly, 0.005, 0, { r: 0.004 });
+    b.prof([[f - 0.07, top], [f - 0.078, top + 0.013], [e + 0.05, top + 0.013], [e + 0.042, top]], w * 0.8, M.poly, 0.004, 0, { r: 0.003 });
     for (const q of [f - 0.085, e + 0.072]) { b.xcyl(0.0045, w + 0.006, q, top - 0.011, M.steel); for (const sd of [-1, 1]) b.sdisc(0.0068, q, top - 0.011, sd * (w / 2 + 0.0032), M.bolt); }
     for (const u of [top - 0.02, bot + 0.022]) b.cyl(0.0042, 0.0042, end + 0.008, 0.03, u, M.bolt, 0, 10);
     b.xcyl(0.009, w * 0.5, e + 0.012, mid, M.steel, 0, 14);
@@ -1033,7 +1041,8 @@ function rifle(M, o = {}) {
     if (o.supp) for (const s of [-1, 1]) b.box(0.0012, 0.07, 0.007, 0.082, -0.125, M.bolt, s * 0.0134, 0.1);
   }
   b.part();
-  if (A.mag && !heavy) { if (o.dmr || o.burst) magAtt(b, A.mag, 0.046, 0.108, -0.172, 0.027, M, 0.003); else magAtt(b, A.mag, 0.064, 0.124, -0.238, 0.027, M); }
+  if (A.mag && heavy) { const k = o.hmg ? 1.3 : 1; magAtt(b, A.mag, 0.005, 0.135, -0.07 - 0.11 * k - 0.002, 0.08 * k, M, 0); }
+  else if (A.mag) { if (o.dmr || o.burst) magAtt(b, A.mag, 0.046, 0.108, -0.172, 0.027, M, 0.003); else magAtt(b, A.mag, 0.064, 0.124, -0.238, 0.027, M); }
   pistolGrip(b, M);
   tguard(b, 0, -0.05, M);
   // 총열덮개
@@ -1078,14 +1087,13 @@ function rifle(M, o = {}) {
   if (o.dmr || heavy) for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.283; b.box(0.0025, 0.0025, end - hg - 0.06, (hg + end) / 2 + 0.01, Math.cos(a) * br, M.dark, Math.sin(a) * br); } // 총열 홈
   let tip;
   if (o.supp) { tip = suppressor(b, end - 0.03, 0.185, 0.02, 0, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.01, 0, 0.017, 0.045); }
-  else if (A.muz === 'sup') { tip = muzzleAtt(b, 'sup', end, 0, heavy ? 0.017 : 0.014, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.01, 0, 0.017, 0.045); }
-  else if (K.muzzle) tip = K.muzzle(b, M, end - 0.005, 0, heavy ? 0.017 : 0.014, heavy ? 0.06 : 0.05);
   else if (A.muz) tip = muzzleAtt(b, A.muz, end, 0, heavy ? 0.017 : 0.014, M);
+  else if (K.muzzle) tip = K.muzzle(b, M, end - 0.005, 0, heavy ? 0.017 : 0.014, heavy ? 0.06 : 0.05);
   else tip = muzzleBrake(b, end - 0.005, 0, M, heavy ? 0.017 : 0.014, heavy ? 0.06 : 0.05);
-  if (heavy || o.dmr) bipod(b, hg - 0.02, -0.044, M);
+  if ((heavy || o.dmr) && !A.grp) bipod(b, hg - 0.02, -0.044, M);
   // 개머리판
   if (K.orn) K.orn(b, M, { f0: -0.1, f1: 0.13, top: 0.042, u: 0.012, hw: 0.0222 });
-  const SK = K.stock || (A.stk ? (b2, M2, r) => stockPart(b2, A.stk, M2, r, F) : null);
+  const SK = A.stk ? (b2, M2, r) => stockPart(b2, A.stk, M2, r, F) : K.stock;
   if (SK) SK(b, M, { f: -0.105, end: -0.352, top: 0.032, bot: -0.108, j0: -0.04, w: 0.042 });
   else if (o.dmr || heavy) {
     b.prof([[-0.105, 0.03], [-0.33, 0.03], [-0.35, 0.012], [-0.35, -0.105], [-0.325, -0.11], [-0.2, -0.05], [-0.105, -0.04]], 0.04, F, 0.007, 0, { r: 0.006, holes: o.dmr ? [[[-0.22, -0.02], [-0.31, -0.02], [-0.31, -0.07], [-0.24, -0.04]]] : [] });
@@ -1103,7 +1111,7 @@ function rifle(M, o = {}) {
 // ───────────── 샷건: 펌프(나무) / 자동(auto: 상자 탄창, 권총손잡이) ─────────────
 function shotgun(M, o = {}) {
   const b = new Builder(), W = o.auto ? M.furn : M.wood, W2 = o.auto ? M.dark : M.woodDark, K = o.kit || {}, A = o.att || {}, dl = barDl(A);
-  const SK = K.stock || (A.stk ? (b2, M2, r) => stockPart(b2, A.stk, M2, r, W) : null);
+  const SK = A.stk ? (b2, M2, r) => stockPart(b2, A.stk, M2, r, W) : K.stock;
   b.prof([[-0.115, -0.038], [-0.125, 0.018], [-0.105, 0.036], [0.125, 0.036], [0.125, -0.048], [-0.03, -0.048]], 0.046, M.recv, 0.005, 0, { r: 0.004 });
   b.box(0.002, 0.02, 0.07, 0.04, 0.008, M.dark, 0.0234); b.box(0.002, 0.013, 0.06, 0.04, 0.009, M.bolt, 0.0238);
   b.xcyl(0.0035, 0.048, -0.07, -0.02, M.bolt); b.xcyl(0.0035, 0.048, 0.09, -0.03, M.bolt); b.sdisc(0.005, -0.09, 0.012, -0.0234, M.accent);
@@ -1111,9 +1119,8 @@ function shotgun(M, o = {}) {
   tguard(b, -0.045, -0.046, M);
   b.cyl(0.0135, 0.0125, 0.125, (o.auto ? 0.44 : 0.52) + dl, 0.016, M.steel);
   let tip = (o.auto ? 0.565 : 0.645) + dl;
-  if (A.muz === 'sup') { tip = muzzleAtt(b, 'sup', tip, 0.016, 0.0145, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.006, 0.016, 0.0145, 0.045); }
+  if (A.muz) tip = muzzleAtt(b, A.muz, tip, 0.016, 0.0145, M);
   else if (K.muzzle) tip = K.muzzle(b, M, tip - 0.006, 0.016, 0.0145, 0.045);
-  else if (A.muz) tip = muzzleAtt(b, A.muz, tip, 0.016, 0.0145, M);
   else { b.cyl(0.0145, 0.0145, tip - 0.02, 0.02, 0.016, M.recv); b.disc(0.0098, tip + 0.0005, 0.016, M.dark); }
   if (K.orn) K.orn(b, M, { f0: -0.115, f1: 0.12, top: 0.036, u: 0, hw: 0.0232 });
   b.box(0.01, 0.0035, 0.36, 0.3, 0.0312, M.steel); for (let i = 0; i < 9; i++) b.box(0.006, 0.006, 0.006, 0.14 + i * 0.04, 0.0275, M.steel); // 뜬 가늠대
@@ -1162,7 +1169,7 @@ function shotgun(M, o = {}) {
 // ───────────── 저격총: 중저격총 / 경저격총(light: 짧은 총열, 나무 총몸) ─────────────
 function sniper(M, o = {}) {
   const b = new Builder(), S = o.light ? M.wood : M.olive, K = o.kit || {}, A = o.att || {}, dl = barDl(A);
-  const SK = K.stock || (A.stk ? (b2, M2, r) => stockPart(b2, A.stk, M2, r, S) : null);
+  const SK = A.stk ? (b2, M2, r) => stockPart(b2, A.stk, M2, r, S) : K.stock;
   if (SK) { // 가운데 몸통만 남기고 앞(총열덮개)과 뒤(개머리판)를 스킨·파츠 형태로
     b.prof([[0.1, -0.014], [0.1, -0.054], [0.02, -0.052], [-0.022, -0.062], [-0.06, -0.135], [-0.102, -0.14], [-0.108, -0.085], [-0.165, -0.062], [-0.165, 0.0], [-0.11, -0.006], [-0.11, -0.014]], 0.046, S, 0.008, 0, { r: 0.006 });
     if (K.hg) K.hg(b, M, { f0: 0.1, f1: 0.37, u0: -0.056, u1: 0.018, w: 0.046 });
@@ -1185,9 +1192,8 @@ function sniper(M, o = {}) {
   b.cyl(0.013, 0.0098, 0.175, bl, 0, M.steel);
   for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.283; b.box(0.0028, 0.0028, bl * 0.6, 0.2 + bl * 0.36, Math.cos(a) * 0.0112, M.dark, Math.sin(a) * 0.0112); }
   let tip = 0.175 + bl;
-  if (A.muz === 'sup') { tip = muzzleAtt(b, 'sup', tip, 0, o.light ? 0.0125 : 0.016, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.01, 0, 0.0115, 0.04); }
+  if (A.muz) tip = muzzleAtt(b, A.muz, tip, 0, o.light ? 0.0125 : 0.016, M);
   else if (K.muzzle) tip = o.light ? K.muzzle(b, M, tip - 0.01, 0, 0.0115, 0.04) : K.muzzle(b, M, 0.67 + dl, 0, 0.016, 0.07);
-  else if (A.muz) tip = muzzleAtt(b, A.muz, tip, 0, o.light ? 0.0125 : 0.016, M);
   else if (!o.light) { const q = 0.67 + dl; b.cyl(0.011, 0.016, q, 0.012, 0, M.steel); b.prof([[q + 0.012, -0.014], [q + 0.012, 0.014], [q + 0.07, 0.014], [q + 0.07, -0.014]], 0.034, M.steel, 0.004, 0, { holes: [[[q + 0.02, -0.008], [q + 0.02, 0.008], [q + 0.034, 0.008], [q + 0.034, -0.008]], [[q + 0.042, -0.008], [q + 0.042, 0.008], [q + 0.058, 0.008], [q + 0.058, -0.008]]] }); tip = q + 0.07; } // 큰 제퇴기
   else { b.cyl(0.0115, 0.0115, tip - 0.014, 0.014, 0, M.recv, 0, 10); b.box(0.004, 0.014, 0.006, tip - 0.02, 0.016, M.bolt); }
   if (!K.muzzle && !A.muz) b.disc(0.006, tip + 0.0005, 0, M.dark);
@@ -1234,13 +1240,13 @@ function pistol(M, o = {}) {
   else b.box(0.031, 0.009, 0.052, -0.084, -0.134, M.rubber, 0, 0.07);
   b.part();
   if (A.mag) { if (o.ext) magAtt(b, A.mag, -0.122, -0.078, -0.206, 0.025, M, -0.008); else magAtt(b, A.mag, -0.108, -0.062, -0.14, 0.026, M, -0.008); }
-  if (A.las) laserAtt(b, 0.055, K.hg ? -0.07 : -0.042, 0, M);
+  if (A.las) laserAtt(b, 0.072, K.hg ? -0.07 : -0.041, 0, M);
   b.cyl(0.0068, 0.0068, 0.06, 0.036, 0.008, M.bolt);                                                                                         // 총열
   let tip = 0.096;
   if (o.supp) { tip = suppressor(b, 0.094, 0.13, 0.0145, 0.008, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.008, 0.008, 0.012, 0.032); }
-  else if (A.muz === 'sup') { tip = muzzleAtt(b, 'sup', 0.098, 0.008, 0.0105, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.008, 0.008, 0.012, 0.032); }
-  else if (K.muzzle) tip = K.muzzle(b, M, 0.093, 0.008, 0.0095, 0.036);
+  else if (A.muz === 'sup') tip = muzzleAtt(b, 'sup', 0.098, 0.008, 0.0105, M);
   else if (A.muz) { b.cyl(0.0068, 0.0068, 0.094, 0.012, 0.008, M.bolt); tip = muzzleAtt(b, A.muz, 0.104, 0.008, 0.0085, M); }
+  else if (K.muzzle) tip = K.muzzle(b, M, 0.093, 0.008, 0.0095, 0.036);
   else b.disc(0.0045, tip + 0.0005, 0.008, M.dark);
   b.part('slide');                                                                                                                         // 윗몸 (쏘면 뒤로 밀림)
   b.prof([[-0.092, -0.012], [-0.092, 0.02], [-0.085, 0.027], [0.084, 0.027], [0.092, 0.016], [0.092, -0.012]], 0.028, SL, 0.003);
@@ -1340,11 +1346,10 @@ function smg(M, o = {}) {
   let tip;
   if (c) {
     b.cyl(0.009, 0.009, hg, 0.05 + dl, 0, M.steel);
-    if (A.muz === 'sup') { tip = muzzleAtt(b, 'sup', hg + 0.045 + dl, 0, 0.013, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.01, 0, 0.015, 0.04); }
-    else tip = K.muzzle ? K.muzzle(b, M, hg + 0.035 + dl, 0, 0.013, 0.04) : A.muz ? muzzleAtt(b, A.muz, hg + 0.045 + dl, 0, 0.012, M) : muzzleBrake(b, hg + 0.035 + dl, 0, M, 0.013, 0.032);
+    tip = A.muz ? muzzleAtt(b, A.muz, hg + 0.045 + dl, 0, 0.0125, M) : K.muzzle ? K.muzzle(b, M, hg + 0.035 + dl, 0, 0.013, 0.04) : muzzleBrake(b, hg + 0.035 + dl, 0, M, 0.013, 0.032);
   }
   else { b.cyl(0.009, 0.009, 0.275, 0.05 + dl, 0, M.steel); tip = suppressor(b, 0.305 + dl, 0.095, 0.0175, 0, M); if (K.muzzle) tip = K.muzzle(b, M, tip - 0.01, 0, 0.015, 0.04); }
-  const SK = K.stock || (A.stk ? (b2, M2, r) => stockPart(b2, A.stk, M2, r, M.furn) : null);
+  const SK = A.stk ? (b2, M2, r) => stockPart(b2, A.stk, M2, r, M.furn) : K.stock;
   if (SK) SK(b, M, c ? { f: -0.1, end: -0.25, top: 0.03, bot: -0.062, j0: -0.04, w: 0.034 } : { f: -0.1, end: -0.312, top: 0.03, bot: -0.07, j0: -0.04, w: 0.036 });
   else if (!c) { for (const u of [0.022, -0.022]) b.cyl(0.0055, 0.0055, -0.3, 0.2, u, M.steel, 0, 8); b.prof([[-0.298, 0.04], [-0.298, -0.05], [-0.312, -0.05], [-0.312, 0.04]], 0.032, M.rubber, 0.004); b.box(0.034, 0.012, 0.02, -0.11, 0.0, M.steel); }
   else { b.box(0.03, 0.06, 0.012, -0.106, 0.0, M.rubber); for (const s of [-1, 1]) b.box(0.004, 0.008, 0.12, -0.04, 0.03, M.steel, s * 0.0232); }

@@ -118,7 +118,7 @@ body.layedit .pad{outline:2px dashed rgba(255,255,255,.55);outline-offset:3px;to
 #lkCode input{flex:1;min-width:0;height:36px;font-size:13px;padding:0 8px}
 #lkCode button,#lkBtns button{height:36px;border:0;border-radius:8px;font-size:13px;font-weight:800;padding:0 10px;cursor:pointer;background:var(--acc);color:#12151a}
 #lkBtns{display:flex;gap:5px}#lkBtns button{flex:1}#lkBtns button.alt{background:rgba(255,255,255,.12);color:var(--txt);border:1px solid var(--line)}
-#lkMsg{font-size:12px;color:var(--acc);min-height:16px;line-height:1.35}
+#lkMsg{font-size:12px;color:var(--acc);line-height:1.35}#lkMsg:empty{display:none}
 #lkTabSkin,#lkTabPart{display:flex;flex-direction:column;gap:6px}#lkTabSkin.hide,#lkTabPart.hide{display:none}
 #lkTabs{display:flex;gap:4px}#lkTabs button{height:30px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.06);color:var(--dim);font-size:13px;font-weight:800;padding:0 12px;cursor:pointer}
 #lkTabs button.on{background:var(--acc);color:#12151a;border-color:var(--acc)}
@@ -386,6 +386,7 @@ body.half{position:fixed;left:0;right:0;bottom:0;top:50%;height:auto;transform:t
   <div id="lkMid"><div id="lkTitle"><b id="lkName"></b><span id="lkSkin"></span></div><div id="lkHint">끌어서 돌려 보기</div></div>
   <div id="lkRight">
     <div class="lkHead"><div id="lkTabs"><button data-tab="skin" class="on">스킨</button><button data-tab="part">파츠</button></div><button id="lkX">닫기 ✕</button></div>
+    <div id="lkMsg"></div>
     <div id="lkTabSkin">
       <div id="lkSkins"></div>
       <div id="lkLv"><b></b><div><i></i></div><span></span></div>
@@ -400,7 +401,7 @@ body.half{position:fixed;left:0;right:0;bottom:0;top:50%;height:auto;transform:t
       <div id="lkStats"></div>
       <div id="lkBtns2"><button id="lkPartClear" class="alt">모두 빼기</button><button id="lkClose2">닫기</button></div>
     </div>
-    <div id="lkMsg"></div>
+
   </div>
 </div>
 

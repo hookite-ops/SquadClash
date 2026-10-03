@@ -183,6 +183,7 @@ function vmGun(wi) { // 1인칭 총 모델도 처음 들 때 만든다 (스킨�
   if (guns[wi] && guns[wi].userData.skin !== key) { vm.remove(guns[wi]); guns[wi] = null; }
   if (!guns[wi]) {
     const info = makeGun(wi, mySk[wi], myParts[wi], myLv(mySk[wi])), g = new THREE.Group(), v = VM[WEAPONS[wi].vm], arms = makeArms(info, sleeveMat);
+    info.group.traverse((m) => { if (m.name === 'fpMask') m.visible = true; });
     g.add(info.group, arms);
     g.position.set(...v.pos);
     if (v.rot) info.group.rotation.set(...v.rot);
@@ -2104,6 +2105,7 @@ function frame(now) {
     let want = input.fire && !shopOpen;
     if (me.snipeQ) { if (!me.scoped || !W.scope || now - me.snipeQ > 1600) me.snipeQ = 0; else if (me.adsP >= 1) want = true; } // 저격총: 손을 떼면 조준이 끝나는 대로 발사
     if (!want && autoFire && !shopOpen && !me.reloadEnd && !me.drop && now - me.lastShot >= W.interval && (!W.scope || (me.scoped && me.adsP >= 1))) want = aimedEnemy(W.falloff ? 14 : Math.min(W.range, mode === 'br' ? 90 : 999));
+    if (want && W.scope && me.scoped && me.adsP < 1) want = false; // 저격총은 조준 중이면 총을 다 올린 뒤에 나감 (조준하지 않고 쏘는 것은 그대로)
     if (W.burst) { if (me.burstLeft > 0) want = true; else if (want && now - me.burstAt < W.burstGap) want = false; } // 점사
     me.spin = clamp(me.spin + (want && W.spin && !me.reloadEnd ? dt / 1.3 : -dt / 0.5), 0, 1);                       // 쏠수록 빨라지는 기관총
     const wantAct = mode !== 'br' && (input.act || keys.has('KeyE')) && canAct();
@@ -2224,4 +2226,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // 테스트·디버그용
-window.__sc = { send, setWeapon, ew, gainSkinXp, impact, killFx, skXp, get parts() { return myParts; }, get mySk() { return mySk; }, unlocked, me, inv, others, dropMeshes, loot, zone, camera, car, vehs, get air() { return airdrop; }, get near() { return nearLoot; }, get world() { return world; }, get map() { return curMap; }, input, bomb, smokes, nadeMeshes, get myId() { return myId; }, get phase() { return phase; }, get attack() { return attack; }, get myTeam() { return myTeam; }, get mode() { return mode; }, get joined() { return joined; }, get roster() { return roster; }, get score() { return score; }, get shop() { return shopOpen; } };
+window.__sc = { send, setWeapon, setParts, ew, gainSkinXp, impact, killFx, skXp, get parts() { return myParts; }, get mySk() { return mySk; }, unlocked, me, inv, others, dropMeshes, loot, zone, camera, car, vehs, get air() { return airdrop; }, get near() { return nearLoot; }, get world() { return world; }, get map() { return curMap; }, input, bomb, smokes, nadeMeshes, get myId() { return myId; }, get phase() { return phase; }, get attack() { return attack; }, get myTeam() { return myTeam; }, get mode() { return mode; }, get joined() { return joined; }, get roster() { return roster; }, get score() { return score; }, get shop() { return shopOpen; } };
