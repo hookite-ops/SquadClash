@@ -41,15 +41,16 @@ export const SKINS = [
   { id: 'galaxy', name: '은하', tier: '전설' },
   { id: 'aurora', name: '오로라', tier: '전설' },
   { id: 'halloween', name: '할로윈', tier: '한정' },
-  // 아래는 무늬만 바뀌는 위장(camo). 콜 오브 듀티의 마스터리 위장처럼 광택·흐르는 빛·반짝임이 움직인다. 번호가 바뀌지 않게 항상 끝에 붙인다
-  { id: 'urban', name: '디지털 도심', free: true, camo: true },
-  { id: 'platinum', name: '플래티넘', tier: '마스터리', camo: true },
-  { id: 'damascus', name: '다마스커스', tier: '마스터리', camo: true },
-  { id: 'obsidian', name: '흑요석', tier: '마스터리', camo: true },
-  { id: 'diamond', name: '다이아몬드', tier: '마스터리', camo: true },
-  { id: 'atomic', name: '아토믹', tier: '마스터리', camo: true },
-  { id: 'orion', name: '오리온', tier: '마스터리', camo: true },
-  { id: 'darkmatter', name: '다크 매터', tier: '마스터리', camo: true },
+  // 번호가 바뀌지 않게 새 스킨은 항상 끝에 붙인다
+  { id: 'urban', name: '디지털 도심', free: true },
+  // 얼티밋 번들 (발로란트식): 총 모양 · 총소리·꺼내는 소리·처치 소리 · 궤적·총구 불꽃·착탄·처치 효과 · 처치 엠블럼이 모두 바뀌고, 레벨과 상관없이 처음부터 다 켜짐
+  { id: 'platinum', name: '플래티넘 프라임', tier: '얼티밋', bundle: true },
+  { id: 'damascus', name: '다마스커스 사무라이', tier: '얼티밋', bundle: true },
+  { id: 'obsidian', name: '흑요석 리퍼', tier: '얼티밋', bundle: true },
+  { id: 'diamond', name: '다이아몬드 크라운', tier: '얼티밋', bundle: true },
+  { id: 'atomic', name: '아토믹 리액터', tier: '얼티밋', bundle: true },
+  { id: 'orion', name: '오리온 성좌', tier: '얼티밋', bundle: true },
+  { id: 'darkmatter', name: '다크 매터 보이드', tier: '얼티밋', bundle: true },
 ];
 // ───────────── 파츠(부착물) ─────────────
 // 무기마다 자리(slot)별로 하나씩, 모두 합쳐 PART_MAX 개까지 단다. 수치는 곱하는 값 (1 = 그대로):

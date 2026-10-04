@@ -113,6 +113,11 @@ body.layedit .pad{outline:2px dashed rgba(255,255,255,.55);outline-offset:3px;to
 .sk.on{border-color:var(--acc)}
 .sk.eq::after{content:"장착";position:absolute;right:4px;top:4px;font-size:9.5px;font-weight:800;background:var(--acc);color:#12151a;border-radius:5px;padding:1px 5px}
 .sk.lock::before{content:"🔒";position:absolute;left:5px;top:3px;font-size:13px;filter:drop-shadow(0 1px 2px #000)}
+#skKill{position:fixed;left:50%;top:62%;transform:translate(-50%,0) scale(.6);display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;pointer-events:none;z-index:60}
+#skKill i{width:64px;height:64px;border-radius:14px;transform:rotate(45deg);box-shadow:0 0 0 2px rgba(255,255,255,.85),0 0 24px rgba(255,255,255,.55),0 0 48px rgba(180,120,255,.45)}
+#skKill b{margin-top:14px;font-size:14px;font-weight:900;letter-spacing:.06em;color:#fff;text-shadow:0 0 10px rgba(255,255,255,.7),0 2px 4px #000}
+#skKill.on{animation:skPop 1.5s cubic-bezier(.2,1.4,.4,1) forwards}
+@keyframes skPop{0%{opacity:0;transform:translate(-50%,0) scale(.4)}12%{opacity:1;transform:translate(-50%,0) scale(1.12)}22%{transform:translate(-50%,0) scale(1)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-14px) scale(1)}}
 .t0{color:var(--dim)}.t1{color:#5ab8ff}.t2{color:#c08bff}.t3{color:#ffc24a}.t4{color:#ff8a2a}
 .t5{background:linear-gradient(90deg,#ff5f9e,#ffd84a,#7dffc8,#7ab8ff,#c08bff,#ff5f9e);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:mShine 3s linear infinite}
 .sk.m i{position:relative;overflow:hidden}.sk.m i::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.75) 50%,transparent 65%);background-size:250% 100%;animation:mSweep 2.4s ease-in-out infinite}
@@ -479,7 +484,7 @@ details.help summary::-webkit-details-marker{display:none}details.help div{margi
     <div id="lkTabSkin">
       <div id="lkSkins"></div>
       <div id="lkLv"><b></b><div><i></i></div><span></span></div>
-      <div id="lkBtns"><button id="lkAll" class="alt">전체 적용</button><button id="lkClose">닫기</button></div>
+      <div id="lkBtns"><button id="lkFx" class="alt">효과 미리보기</button><button id="lkAll" class="alt">전체 적용</button><button id="lkClose">닫기</button></div>
       <h4>스킨 코드</h4>
       <div id="lkCode"><input id="lkInput" type="text" maxlength="40" placeholder="코드 입력" autocomplete="off" autocapitalize="characters"><button id="lkRedeem">등록</button></div>
     </div>
@@ -527,5 +532,6 @@ details.help summary::-webkit-details-marker{display:none}details.help div{margi
 <div id="tdbg" class="hide"><div id="tdbgTxt"></div></div>
 <div id="rotate"><i>📱</i>화면을 가로로 돌려 주세요</div>
 <script type="module" src="./game.js"></script>
+<div id="skKill"><i></i><b></b></div>
 </body>
 </html>
