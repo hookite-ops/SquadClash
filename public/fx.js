@@ -91,10 +91,10 @@ export function initFx(sc, cam, o = {}) {
 }
 
 // ───────────── 예광탄 ─────────────
-export function addTracer(a, b, color, life = 0.1) { // 총구에서 맞은 곳까지 날아가는 빛줄기
+export function addTracer(a, b, color, life = 0.1, wm = 1) { // 총구에서 맞은 곳까지 날아가는 빛줄기
   const t = tracers[tracerIdx = (tracerIdx + 1) % tracers.length];
   const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.hypot(dx, dy, dz) || 0.01, big = life > 0.12;
-  t.a = [a[0], a[1], a[2]]; t.d = [dx / len, dy / len, dz / len]; t.len = len; t.seg = big ? 16 : 11; t.t = -9; t.w = big ? 1.5 : 1;
+  t.a = [a[0], a[1], a[2]]; t.d = [dx / len, dy / len, dz / len]; t.len = len; t.seg = big ? 16 : 11; t.t = -9; t.w = (big ? 1.5 : 1) * wm;
   t.m.material.color.setHex(color).multiplyScalar(K > 1 ? (big ? 1.5 : 1.15) : 1); t.m.visible = true; t.life = 1;
   moveTracer(t);
 }
@@ -174,6 +174,11 @@ function updPool(P, dt) {
 export function puff(p, v, hex, k = 1, life = 0.5, op = 0.55) { // 먼지·연기 한 덩이
   spawn(smokePool, p[0], p[1], p[2], { life, s0: 0.22 * k, s1: 1.17 * k, c0: hex, op, v, drag: 3, spin: (Math.random() - 0.5) * 1.5 });
 }
+
+// 빛 덩이 하나 (얼티밋 스킨 효과): s0 → s1 크기로 커지며 c0 → c1 로 바뀜. g 음수면 떠오름
+export function glow(x, y, z, c0, s0, s1, life, o = {}) { spawn(firePool, x, y, z, { life, s0, s1, c0, c1: o.c1 ?? c0, v: o.v, drag: o.drag ?? 2.5, g: o.g || 0, wait: o.wait || 0, spin: o.spin || 0, k: (o.k || 1.6) * K }); }
+// 바닥을 훑는 빛 고리 (얼티밋 스킨 처치 효과)
+export function shock(x, y, z, hex, r = 3, life = 0.4) { const rg = rings[ringIdx = (ringIdx + 1) % rings.length]; rg.m.position.set(x, y, z); rg.life = rg.max = life; rg.r = r; rg.m.material.color.setHex(hex).multiplyScalar(K * 0.8); rg.m.visible = true; }
 
 // ───────────── 번쩍이는 빛 ─────────────
 export function lightFlash(x, y, z, hex, intensity, dist, dur) { // 더 센 빛이 남아 있으면 건드리지 않음

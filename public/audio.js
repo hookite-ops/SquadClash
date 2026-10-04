@@ -88,6 +88,42 @@ export function sfxShot(wi, vol, pan = 0, far = 0, delay = 0, quiet = false) {
   if (far < 0.7) noise(t, S.body[2] * 0.6, 'bandpass', S.body[0] * p, S.body[1], 1.1, vol * 0.4 * near, dst, 0.001);
   tone(t, S.thump[2] * len, 'triangle', S.thump[0] * p, S.thump[1], vol * 0.62, dst, 0.001);                    // 낮게 치는 울림
 }
+// ───────────── 얼티밋 스킨 소리: 총소리에 겹치는 전용 소리 · 꺼낼 때 · 처치할 때 ─────────────
+// kind: prime 플래티넘 · blade 다마스커스 · shard 흑요석 · crystal 다이아몬드 · reactor 아토믹 · star 오리온 · void 다크 매터
+export function sfxSkin(kind, what, vol = 1, pan = 0, far = 0, delay = 0) {
+  if (!AC || !kind || vol < 0.02) return;
+  const t = AC.currentTime + delay, near = 1 - far, d = out(pan, what === 'shot' ? 0.12 + far * 0.4 : 0.18), p = 0.96 + R() * 0.08;
+  const T = (dt, len, type, f0, f1, v, at = 0.002) => tone(t + dt, len, type, f0 * p, f1 * p, v * vol, d, at), N = (dt, len, type, f0, f1, q, v, at = 0.001) => noise(t + dt, len, type, f0, f1, q, v * vol, d, at);
+  if (what === 'shot') {
+    vol *= near * 0.9 + 0.1;
+    if (kind === 'prime') { T(0, 0.09, 'sine', 2600, 1300, 0.16); T(0.004, 0.06, 'square', 5200, 3100, 0.025); N(0, 0.07, 'bandpass', 6000, 3500, 3, 0.08); }
+    else if (kind === 'blade') { T(0, 0.22, 'triangle', 3150, 3000, 0.07); T(0, 0.18, 'sine', 4420, 4300, 0.05); N(0, 0.05, 'highpass', 7000, 4000, 1, 0.1); }
+    else if (kind === 'shard') { N(0, 0.06, 'highpass', 6500, 3000, 0.8, 0.16); T(0, 0.07, 'triangle', 2700, 1900, 0.06); T(0.01, 0.12, 'sine', 3900, 3500, 0.03); }
+    else if (kind === 'crystal') { T(0, 0.28, 'sine', 1760, 1760, 0.07); T(0, 0.22, 'sine', 2637, 2637, 0.05); T(0, 0.16, 'sine', 3520, 3520, 0.03); N(0, 0.03, 'highpass', 8000, 8000, 1, 0.07); }
+    else if (kind === 'reactor') { T(0, 0.12, 'sawtooth', 920, 110, 0.11); T(0, 0.16, 'sine', 90, 42, 0.2); N(0, 0.09, 'bandpass', 3000, 600, 2, 0.08); }
+    else if (kind === 'star') { T(0, 0.12, 'sine', 1400, 2800, 0.08); T(0.03, 0.2, 'sine', 2100, 2100, 0.05); N(0, 0.05, 'bandpass', 5000, 9000, 4, 0.05); }
+    else if (kind === 'void') { T(0, 0.22, 'sine', 120, 38, 0.26); N(0, 0.12, 'bandpass', 300, 2400, 3, 0.1, 0.06); T(0.02, 0.1, 'sawtooth', 220, 70, 0.05); }
+    return;
+  }
+  if (what === 'equip') {
+    if (kind === 'prime') { [880, 1320, 1760].forEach((f, i) => T(i * 0.06, 0.18, 'sine', f, f, 0.07)); N(0, 0.25, 'bandpass', 2000, 7000, 2, 0.05, 0.08); }
+    else if (kind === 'blade') { N(0, 0.32, 'bandpass', 2500, 7000, 4, 0.12, 0.2); T(0.3, 0.6, 'triangle', 3150, 3100, 0.07); T(0.3, 0.5, 'sine', 4420, 4400, 0.05); }
+    else if (kind === 'shard') { N(0, 0.2, 'highpass', 3000, 8000, 1, 0.08, 0.1); [2700, 2000, 3400].forEach((f, i) => T(0.05 + i * 0.05, 0.12, 'triangle', f, f * 0.9, 0.05)); }
+    else if (kind === 'crystal') { [1760, 2217, 2637, 3520].forEach((f, i) => T(i * 0.07, 0.5, 'sine', f, f, 0.06)); }
+    else if (kind === 'reactor') { T(0, 0.6, 'sawtooth', 60, 240, 0.08, 0.05); T(0, 0.6, 'sine', 120, 480, 0.08, 0.05); N(0.5, 0.1, 'bandpass', 2000, 900, 2, 0.08); }
+    else if (kind === 'star') { [1047, 1319, 1568, 2093].forEach((f, i) => T(i * 0.08, 0.45, 'sine', f, f, 0.06)); N(0, 0.4, 'bandpass', 6000, 10000, 5, 0.04, 0.1); }
+    else if (kind === 'void') { N(0, 0.5, 'bandpass', 200, 3000, 2, 0.12, 0.45); T(0.45, 0.4, 'sine', 70, 35, 0.3); }
+    return;
+  }
+  // 처치
+  if (kind === 'prime') { [1320, 1760, 2640].forEach((f, i) => T(i * 0.05, 0.3, 'sine', f, f, 0.08)); T(0, 0.2, 'square', 220, 110, 0.03); }
+  else if (kind === 'blade') { N(0, 0.14, 'bandpass', 3000, 9000, 3, 0.14, 0.1); T(0.14, 0.9, 'triangle', 3150, 3100, 0.08); T(0.14, 0.7, 'sine', 4420, 4400, 0.06); T(0.14, 0.4, 'sine', 196, 180, 0.12); }
+  else if (kind === 'shard') { N(0, 0.4, 'highpass', 4000, 2000, 0.8, 0.2); for (let i = 0; i < 6; i++) T(i * 0.03, 0.1, 'triangle', 2000 + R() * 3000, 1500, 0.05); }
+  else if (kind === 'crystal') { [2637, 3136, 3951, 5274].forEach((f, i) => T(i * 0.05, 0.6, 'sine', f, f, 0.06)); N(0, 0.3, 'highpass', 7000, 7000, 1, 0.08); }
+  else if (kind === 'reactor') { T(0, 0.5, 'sine', 160, 30, 0.35); N(0, 0.6, 'lowpass', 2400, 120, 0.7, 0.3, 0.003); T(0, 0.25, 'sawtooth', 1200, 80, 0.07); }
+  else if (kind === 'star') { [1568, 2093, 2637, 3136, 4186].forEach((f, i) => T(i * 0.06, 0.5, 'sine', f, f, 0.05)); }
+  else if (kind === 'void') { N(0, 0.35, 'bandpass', 3000, 150, 2, 0.16, 0.3); T(0.32, 0.7, 'sine', 55, 28, 0.42); T(0.32, 0.3, 'sawtooth', 110, 40, 0.06); }
+}
 export function sfxBoom(vol = 0.9, dur = 1.8, pan = 0) {
   if (!AC || vol < 0.02) return;
   vol *= 1.5;

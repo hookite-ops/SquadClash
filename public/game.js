@@ -1,11 +1,11 @@
 // SQUAD CLASH — 클라이언트
 import * as THREE from './vendor/three.module.js';
 import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, MAPS, setMap, BOXES, SITES, siteAt, dirFrom, rayWorld, rayPlayer, hitNormal, HIT_M, segHitsSphere, groundAt, waterAt, boxesNear, PARTS, PART_SLOTS, PART_MAX, partSlots, partOk, cleanParts, effWeapon, SKIN_LV, SKIN_LV_NAME, skinLevel } from './shared.js';
-import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox } from './guns.js';
+import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox, pulseSkin } from './guns.js';
 import { paintTex, isPaint, initPaintEditor, paintUI } from './paint.js';
 import { makeRig, rigHold, rigShot, rigFlinch, rigMuzzle, animate as animRig, setAvatarFlash } from './avatar.js';
-import { initAudio, audioOn, setVolume, sfxShot, sfxBoom, sfxStep, sfxSplash, sfxTone, sfxImpact as playImpact, sfxWhiz, sfxReload, sfxUI, setAmbient, engineSound } from './audio.js';
-import { initFx, flashTex, addTracer, hole, clearHoles, spark, emitSpark, emitChip, puff, lightFlash, explode, addSmoke, clearSmokes, smokes, updateFx as tickFx } from './fx.js';
+import { initAudio, audioOn, setVolume, sfxShot, sfxBoom, sfxStep, sfxSplash, sfxTone, sfxImpact as playImpact, sfxWhiz, sfxReload, sfxUI, setAmbient, engineSound, sfxSkin } from './audio.js';
+import { initFx, flashTex, addTracer, hole, clearHoles, spark, emitSpark, emitChip, puff, lightFlash, explode, addSmoke, clearSmokes, smokes, glow, shock, updateFx as tickFx } from './fx.js';
 import { buildWorld, blobShadow, MOODS, setWorldQuality } from './world.js';
 import { makePost, TONE } from './post.js';
 
@@ -235,11 +235,13 @@ function vmGun(wi) { // 1인칭 총 모델도 처음 들 때 만든다 (스킨�
 }
 setAvatarFlash(flashTex);
 const FX0 = { tracer: 0xffffff, flash: 0xffd27a }, _fxc = new THREE.Color();
-function fxOf(skin, lv = 1) { // 스킨의 궤적·불꽃 색. 스킨 레벨 2부터 궤적, 3부터 불꽃·탄착 색 (오로라는 무지갯빛으로 계속 바뀜)
-  const f = lv >= 2 ? skinFx(skin) : null;
+function fxOf(skin, lv = 1) { // 스킨의 궤적·불꽃 색. 스킨 레벨 2부터 궤적, 3부터 불꽃·탄착 색 (오로라는 무지갯빛으로 계속 바뀜). 얼티밋 번들은 처음부터 전부 + 전용 효과(kind)
+  const sf = skinFx(skin);
+  if (sf && sf.bundle) lv = Math.max(lv, 4);
+  const f = lv >= 2 ? sf : null;
   if (!f) return FX0;
   const c = f.rainbow ? _fxc.setHSL((performance.now() / 700) % 1, 1, 0.68).getHex() : 0;
-  return { tracer: c || f.tracer, flash: lv >= 3 ? c || f.flash : FX0.flash, tint: lv >= 3, kill: lv >= 4 ? c || f.flash : 0 };
+  return { tracer: c || f.tracer, flash: lv >= 3 ? c || f.flash : FX0.flash, tint: lv >= 3, kill: lv >= 4 ? c || f.flash : 0, kind: f.bundle ? f.sfx : '' };
 }
 const flash = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ map: flashTex, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending }));
 flash.visible = false;
@@ -266,7 +268,7 @@ function sfxImpact(k, x, z) {
   lastImpSfx = now;
   playImpact(k, v, pan);
 }
-function impact(p, col = 0xffd890, tint = false) { // 벽·바닥에 맞은 자리: 재질에 따라 탄흔, 먼지, 파편, 소리가 다름
+function impact(p, col = 0xffd890, tint = false, kind = '') { // 벽·바닥에 맞은 자리: 재질에 따라 탄흔, 먼지, 파편, 소리가 다름
   const wl = waterAt(p[0], p[2]);
   if (p[1] < wl - 0.02) { // 물: 물기둥과 물방울
     const q = [p[0], wl + 0.02, p[2]];
@@ -291,7 +293,44 @@ function impact(p, col = 0xffd890, tint = false) { // 벽·바닥에 맞은 자�
     hole(p, n, k);
   }
   if (tint || k <= 1) spark(p[0] + n[0] * 0.05, p[1] + n[1] * 0.05, p[2] + n[2] * 0.05, tint ? 0.42 : k === 1 ? 0.34 : 0.22, col, 0.09);
+  if (kind && near) impactFx(kind, p, n, col);
   sfxImpact(k, p[0], p[2]);
+}
+// ───────────── 얼티밋 번들 효과 (스킨마다 착탄·총구·처치 모습이 다름) ─────────────
+const STARC = [0xff8ad8, 0x8ad8ff, 0xb9ffd8, 0xffe28a, 0xc08bff];
+function impactFx(kind, p, n, col) {
+  const [x, y, z] = [p[0] + n[0] * 0.06, p[1] + n[1] * 0.06, p[2] + n[2] * 0.06];
+  if (kind === 'prime') { emitSpark(p, n, 6, 3.5, 0x7fdcff, 0.35, 4); glow(x, y, z, 0x7fdcff, 0.08, 0.45, 0.18); }
+  else if (kind === 'blade') { emitSpark(p, n, 8, 5, 0xffc46a, 0.4, 10); emitChip(p, n, 3, 2, 0xb3121c, 0.7, 3); }
+  else if (kind === 'shard') { emitChip(p, n, 6, 3, 0x18141f, 0.6, 9); emitSpark(p, n, 4, 3, 0xc89cff, 0.3, 6); glow(x, y, z, 0xa060ff, 0.05, 0.3, 0.14); }
+  else if (kind === 'crystal') { emitChip(p, n, 6, 3, 0xe8f8ff, 0.6, 8); spark(x, y, z, 0.55, 0xffffff, 0.14); }
+  else if (kind === 'reactor') { glow(x, y, z, 0xffb050, 0.12, 0.7, 0.26, { c1: 0xff3000 }); emitSpark(p, n, 8, 4, 0xff7a20, 0.45, 8); }
+  else if (kind === 'star') { for (let i = 0; i < 3; i++) emitSpark(p, n, 3, 3.5, STARC[(Math.random() * 5) | 0], 0.45, 2); spark(x, y, z, 0.4, col, 0.12); }
+  else if (kind === 'void') { glow(x, y, z, 0xa040ff, 0.6, 0.04, 0.26); emitSpark(p, n, 5, 1.6, 0xb05cff, 0.4, -2); }
+}
+function muzzleFx(kind, a, d, col) { // 총구에서 스킨 색 불티가 튐 (3인칭·1인칭 공통, 세계 좌표)
+  if (!kind) return;
+  emitSpark(a, d, kind === 'reactor' ? 5 : 3, 2.4, col, 0.18, kind === 'void' ? -3 : 2, 0.35);
+  if (kind === 'void' || kind === 'reactor') glow(a[0] + d[0] * 0.15, a[1] + d[1] * 0.15, a[2] + d[2] * 0.15, col, 0.25, 0.05, 0.12);
+}
+function bundleKill(kind, x, y, z, col) {
+  const gy = Math.min(y - 1.05, groundAt(x, z)) + 0.06, up = [0, 1, 0];
+  lightFlash(x, y, z, col, 60, 12, 0.35);
+  if (kind === 'prime') { shock(x, gy, z, 0x7fdcff, 4, 0.5); emitSpark([x, y, z], up, 34, 5, 0x7fdcff, 0.9, 3, 1); for (let i = 0; i < 4; i++) glow(x, y - 0.6 + i * 0.35, z, 0x9fe6ff, 0.5, 0.05, 0.5, { wait: i * 0.05, v: [0, 2.2, 0], drag: 0.5 }); emitSpark([x, y, z], up, 10, 3, 0xffd27a, 0.7, 4, 1); }
+  else if (kind === 'blade') { glow(x, y, z, 0xffd890, 1.4, 0.1, 0.3); emitSpark([x, y, z], [1, 0.2, 0], 26, 7, 0xffc46a, 0.6, 6, 0.5); emitSpark([x, y, z], [-1, 0.2, 0], 26, 7, 0xffc46a, 0.6, 6, 0.5); emitChip([x, y + 0.3, z], up, 30, 3, 0xc8141e, 2.2, 1.2, 1); }
+  else if (kind === 'shard') { shock(x, gy, z, 0xa060ff, 3.5, 0.4); emitChip([x, y, z], up, 34, 6, 0x120f18, 1.2, 9, 1); emitSpark([x, y, z], up, 24, 5, 0xc89cff, 0.7, 5, 1); glow(x, y, z, 0xffffff, 0.3, 1.6, 0.16); }
+  else if (kind === 'crystal') { shock(x, gy, z, 0xe0f4ff, 3.5, 0.45); emitChip([x, y, z], up, 44, 5, 0xe8f8ff, 1.3, 7, 1); for (let i = 0; i < 7; i++) setTimeout(() => spark(x + (Math.random() - 0.5) * 1.4, y + (Math.random() - 0.3) * 1.2, z + (Math.random() - 0.5) * 1.4, 0.7, 0xffffff, 0.16), i * 60); }
+  else if (kind === 'reactor') { glow(x, y, z, 0xfff0c0, 0.4, 3.4, 0.45, { c1: 0xff3000 }); glow(x, y + 0.3, z, 0xffa040, 0.6, 2.4, 0.6, { c1: 0x801000, v: [0, 1.5, 0], wait: 0.06 }); shock(x, gy, z, 0xff7a20, 6, 0.5); emitSpark([x, y, z], up, 40, 8, 0xff7a20, 0.9, 9, 1); puff([x, y + 0.4, z], [0, 1.4, 0], 0x2a2420, 2.2, 1.4, 0.6); }
+  else if (kind === 'star') { for (let i = 0; i < 5; i++) { emitSpark([x, y, z], up, 12, 5, STARC[i], 1.1, 2, 1); glow(x, y, z, STARC[i], 0.2, 0.05, 0.9, { v: [(Math.random() - 0.5) * 3, 2 + Math.random() * 2, (Math.random() - 0.5) * 3], drag: 1, wait: i * 0.04 }); } shock(x, gy, z, 0xffffff, 3.5, 0.5); }
+  else if (kind === 'void') { // 빨려 들어갔다가 터짐
+    glow(x, y, z, 0xa040ff, 2.6, 0.05, 0.34); emitSpark([x, y, z], up, 16, 1.2, 0xb05cff, 0.35, -6, 1);
+    setTimeout(() => { glow(x, y, z, 0xd08aff, 0.1, 2.6, 0.32, { c1: 0x6020ff }); shock(x, gy, z, 0xa040ff, 5, 0.45); emitSpark([x, y, z], up, 36, 7, 0xb05cff, 0.8, 4, 1); emitSpark([x, y, z], up, 16, 6, 0xff40b0, 0.7, 4, 1); puff([x, y, z], [0, 0.6, 0], 0x14081e, 2, 1.2, 0.7); }, 330);
+  }
+}
+function skinEmblem(sk) { // 내가 얼티밋 스킨으로 처치하면 조준점 아래에 스킨 엠블럼이 튀어나옴
+  const e = $('skKill'); if (!e || !SKINS[sk]) return;
+  e.firstElementChild.style.background = SWATCH[SKINS[sk].id] || '#444'; e.lastElementChild.textContent = SKINS[sk].name;
+  e.classList.remove('on'); void e.offsetWidth; e.classList.add('on');
 }
 // 스킨 4레벨 처치 효과: 스킨 색 불티가 터져 나옴
 function killFx(x, y, z, hex) {
@@ -619,9 +658,11 @@ function onMsg(m) {
       const a = [o.x + d[0] * 0.9, o.y + (o.c ? 0.9 : 1.3), o.z + d[2] * 0.9];
       if (o.alive && !WEAPONS[m.w].melee) { rigShot(o, quiet); if (rigMuzzle(o, _mz)) { a[0] = _mz.x; a[1] = _mz.y; a[2] = _mz.z; } if (!quiet && Math.hypot(o.x - camera.position.x, o.z - camera.position.z) < 70) lightFlash(a[0], a[1], a[2], 0xffc27a, 20, 12, 0.07); }
       const osk = o.sk ? o.sk[m.w] : 0, ofx = fxOf(osk, o.sl ? o.sl[osk] : 1);
-      for (const e of m.e) { addTracer(a, e, ofx === FX0 ? 0xfff1b0 : ofx.tracer, ofx === FX0 ? 0.1 : 0.14); impact(e, ofx.flash, ofx.tint); if (o.team !== myTeam) whiz(a, e); }
+      if (ofx.kind && o.alive && !WEAPONS[m.w].melee && Math.hypot(o.x - camera.position.x, o.z - camera.position.z) < 60) muzzleFx(ofx.kind, a, d, ofx.flash);
+      for (const e of m.e) { addTracer(a, e, ofx === FX0 ? 0xfff1b0 : ofx.tracer, ofx === FX0 ? 0.1 : ofx.kind ? 0.16 : 0.14, ofx.kind ? 1.5 : 1); if (ofx.kind) addTracer(a, e, 0xffffff, 0.16, 0.45); impact(e, ofx.flash, ofx.tint, ofx.kind); if (o.team !== myTeam) whiz(a, e); }
       const [v, pan] = heard(o.x, o.z, quiet ? 26 : mode === 'br' ? 220 : 90);
       sfxShot(m.w, Math.min(1, v * 1.5) * 0.55, pan, 1 - v, Math.min(0.6, Math.hypot(o.x - camera.position.x, o.z - camera.position.z) / 340), !!m.q); // 멀수록 먹먹하고 늦게 들림
+      if (ofx.kind) sfxSkin(ofx.kind, 'shot', Math.min(1, v * 1.5) * (m.q ? 0.25 : 0.55), pan, 1 - v, Math.min(0.6, Math.hypot(o.x - camera.position.x, o.z - camera.position.z) / 340));
       break;
     }
     case 'hit':
@@ -665,7 +706,10 @@ function onMsg(m) {
       { // 스킨 4레벨부터 처치 효과
         const vo = m.to === myId ? me : others.get(m.to), ko = others.get(m.by), ksk = WEAPONS[m.w] ? (m.by === myId ? mySk[m.w] : ko && ko.sk ? ko.sk[m.w] : 0) : 0;
         const kfx = ksk ? fxOf(ksk, m.by === myId ? myLv(ksk) : ko && ko.sl ? ko.sl[ksk] : 1) : FX0;
-        if (vo && kfx.kill && m.by !== m.to) killFx(vo.x, vo.y + 1.1, vo.z, kfx.kill);
+        if (vo && kfx.kill && m.by !== m.to) {
+          if (kfx.kind) { bundleKill(kfx.kind, vo.x, vo.y + 1.1, vo.z, kfx.kill); const [kv, kp] = heard(vo.x, vo.z, 60); sfxSkin(kfx.kind, 'kill', m.by === myId ? 0.8 : kv * 0.6, m.by === myId ? 0 : kp); if (m.by === myId) skinEmblem(ksk); }
+          else killFx(vo.x, vo.y + 1.1, vo.z, kfx.kill);
+        }
       }
       if (m.by === myId && b && m.to !== myId) {
         gainSkinXp(m.w, m.head);
@@ -1093,7 +1137,7 @@ function setWeapon(wi, force) {
   me.w = wi; me.reloadEnd = 0; me.shotN = 0; me.burstLeft = 0; me.spin = 0; me.inspAt = -1e9; me.snipeQ = 0; me.snipeHold = false; me.bloom = 0; setScope(false);
   vmGun(wi);
   guns.forEach((g, i) => { if (g) g.visible = i === wi; });
-  if (changed) { me.draw = 1; me.lastShot = Math.max(me.lastShot, performance.now() - WEAPONS[wi].interval + 350); sfxUI('equip'); }
+  if (changed) { me.draw = 1; me.lastShot = Math.max(me.lastShot, performance.now() - WEAPONS[wi].interval + 350); sfxUI('equip'); const ef = fxOf(mySk[wi], myLv(mySk[wi])); if (ef.kind) { sfxSkin(ef.kind, 'equip', 0.8); pulseSkin(); } } // 얼티밋: 꺼내는 소리와 번쩍임
   refreshInv();
 }
 function inspect() { if (me.alive && !me.reloadEnd && !me.scoped && !car.id && performance.now() - me.inspAt > 2600) me.inspAt = performance.now(); }
@@ -1551,7 +1595,7 @@ const SWATCH = { std: 'linear-gradient(90deg,#4a505a,#22252a)', carbon: 'repeati
   urban: 'conic-gradient(from 90deg at 30% 40%,#a9aeb3 25%,#4a4f56 0 50%,#787e85 0 75%,#24272c 0) 0 0/10px 10px', platinum: 'linear-gradient(110deg,#8d939e,#f4f7fb 40%,#b9c0cb 60%,#eef1f6)', damascus: 'repeating-linear-gradient(160deg,#3a2414 0 3px,#a8723a 3px 6px,#f0d79a 6px 8px,#5c3a1e 8px 11px)',
   obsidian: 'linear-gradient(120deg,#08070c 40%,#d8d8e8 45%,#08070c 48%,#1a1428)', diamond: 'linear-gradient(120deg,#cfe9ff,#ffffff 30%,#a8d8ff 50%,#f0e6ff 70%,#ffffff)', atomic: 'linear-gradient(120deg,#5a0008,#d81e1a 35%,#ff6a1a 55%,#ffd45a 70%,#8e0a10)',
   orion: 'linear-gradient(110deg,#ff8ad8,#8ad8ff 30%,#b9ffd8 50%,#ffe28a 70%,#c08bff)', darkmatter: 'linear-gradient(120deg,#05040c,#3a1a7a 40%,#b05cff 50%,#ff3da8 55%,#05040c)' };
-const TIERN = { 희귀: 1, 영웅: 2, 전설: 3, 한정: 4, 마스터리: 5 };
+const TIERN = { 희귀: 1, 영웅: 2, 전설: 3, 한정: 4, 얼티밋: 5 };
 const CATN = { melee: '근접', side: '보조', smg: '기관단총', sg: '샷건', ar: '소총', sr: '저격총', mg: '기관총' };
 let lockerOpen = false, lkW = 13, lkSkin = 0, lkYaw = 0.7, lkDrag = null, lkGun = null, lkKey = '', lkSpin = true, lkTab = 'skin';
 const lkGroup = new THREE.Group();
@@ -1579,7 +1623,7 @@ function lkRefresh() {
   for (const b of $('lkLeft').querySelectorAll('button')) b.classList.toggle('on', +b.dataset.w === lkW);
   const k = SKINS[lkSkin];
   $('lkName').textContent = WEAPONS[lkW].name;
-  $('lkSkin').textContent = `${k.name} · ${k.free ? '무료' : k.tier + (k.camo ? ' · 움직이는 위장' : ' · 형태 변경')}${unlocked.has(lkSkin) ? '' : ' · 잠김'}`; $('lkSkin').className = 't' + (TIERN[k.tier] || 0);
+  $('lkSkin').textContent = `${k.name} · ${k.free ? '무료' : k.tier + (k.bundle ? ' · 형태·이펙트·소리 전부 변경' : ' · 형태 변경')}${unlocked.has(lkSkin) ? '' : ' · 잠김'}`; $('lkSkin').className = 't' + (TIERN[k.tier] || 0);
   for (const b of $('lkSkins').children) { const i = +b.dataset.s; b.classList.toggle('on', i === lkSkin); b.classList.toggle('eq', mySk[lkW] === i); b.classList.toggle('lock', !unlocked.has(i)); }
   for (const b of $('lkTabs').children) b.classList.toggle('on', b.dataset.tab === lkTab);
   $('lkTabSkin').classList.toggle('hide', lkTab !== 'skin'); $('lkTabPart').classList.toggle('hide', lkTab !== 'part');
@@ -1589,8 +1633,16 @@ function lkRefresh() {
   L.children[0].textContent = `${k.name} Lv.${lv}${lv >= 5 ? ' · 각성' : ''}`;
   L.children[1].firstElementChild.style.width = (lv >= 5 ? 100 : Math.round(((xp - SKIN_LV[lv - 1]) / (SKIN_LV[lv] - SKIN_LV[lv - 1])) * 100)) + '%';
   L.children[2].textContent = lv >= 5 ? `처치 ${xp} · 모든 효과가 열렸어요` : `처치 ${xp} / ${SKIN_LV[lv]} · 다음: ${SKIN_LV_NAME[lv + 1]}`;
+  $('lkFx').style.display = k.bundle ? '' : 'none';
   if (lkTab === 'part') lkPartsRefresh();
 }
+$('lkFx').onclick = () => { // 얼티밋 번들: 꺼내기 → 사격 세 발 → 처치 소리·엠블럼을 들어 보기
+  initAudio(); const f = skinFx(lkSkin);
+  if (!f || !f.bundle) return;
+  pulseSkin(); lkSpin = true; sfxSkin(f.sfx, 'equip', 0.8);
+  for (let i = 0; i < 3; i++) setTimeout(() => { sfxShot(lkW, 0.5, 0); if (!WEAPONS[lkW].melee) sfxSkin(f.sfx, 'shot', 0.55); }, 750 + i * (WEAPONS[lkW].melee ? 380 : Math.max(130, WEAPONS[lkW].interval)));
+  setTimeout(() => { sfxSkin(f.sfx, 'kill', 0.8); skinEmblem(lkSkin); pulseSkin(); }, 1700);
+};
 // 파츠 칸: 자리별로 고르는 단추와 성능 막대
 const STATS = [
   ['피해', (W) => Math.min(100, (W.dmg * W.pellets) / 1.1)],
@@ -1652,7 +1704,7 @@ function openLocker() {
   if ($('lkLeft').children.length < 3) {
     WEAPONS.forEach((W, i) => { const b = document.createElement('button'); b.dataset.w = i; b.textContent = W.name; const sm = document.createElement('small'); sm.textContent = CATN[W.cat] || ''; b.append(sm); b.onclick = () => { lkW = i; lkSkin = mySk[i]; lkRefresh(); }; $('lkLeft').append(b); });
     SKINS.forEach((k, i) => {
-      const b = document.createElement('button'); b.className = 'sk' + (k.tier === '마스터리' ? ' m' : ''); b.dataset.s = i;
+      const b = document.createElement('button'); b.className = 'sk' + (k.bundle ? ' m' : ''); b.dataset.s = i;
       const sw = document.createElement('i'); sw.style.background = SWATCH[k.id] || '#444';
       const nm = document.createElement('span'); nm.textContent = k.name;
       const tr = document.createElement('em'); tr.textContent = k.free ? '무료' : k.tier; tr.className = 't' + (TIERN[k.tier] || 0);
@@ -1814,6 +1866,7 @@ function tryFire(now) {
     me.lastShot = now; me.kickAnim = 1;
     send({ t: 'shoot', w: me.w, d: [dirFrom(me.yaw, me.pitch).map((v) => Math.round(v * 1e4) / 1e4)], rt: Math.round(performance.now() + (timeOff || 0) - 100) });
     sfxShot(me.w, 0.5, 0);
+    { const kf = fxOf(mySk[me.w], myLv(mySk[me.w])); if (kf.kind) sfxSkin(kf.kind, 'shot', 0.4); }
     return true;
   }
   if (me.ammo[me.w] <= 0) { me.burstLeft = 0; startReload(now); return false; }
@@ -1837,8 +1890,9 @@ function tryFire(now) {
       let t = tw;
       for (const o of others.values()) { if (!o.alive || o.team === myTeam) continue; const h = rayPlayer(eye, d, o.x, o.y, o.z, o.c); if (h && h.t < t) t = h.t; }
       const end = [eye[0] + d[0] * t, eye[1] + d[1] * t, eye[2] + d[2] * t];
-      addTracer(muzzle, end, myFx.tracer, myFx === FX0 ? 0.1 : 0.14);
-      if (t === tw && tw < W.range) impact(end, myFx.flash, myFx.tint);
+      addTracer(muzzle, end, myFx.tracer, myFx === FX0 ? 0.1 : myFx.kind ? 0.16 : 0.14, myFx.kind ? 1.5 : 1);
+      if (myFx.kind) addTracer(muzzle, end, 0xffffff, 0.16, 0.45); // 얼티밋: 흰 속심이 있는 굵은 궤적
+      if (t === tw && tw < W.range) impact(end, myFx.flash, myFx.tint, myFx.kind);
     }
   }
   send({ t: 'shoot', w: me.w, d: dirs.map((d) => d.map((v) => Math.round(v * 1e4) / 1e4)), rt: Math.round(performance.now() + (timeOff || 0) - 100) });
@@ -1857,6 +1911,7 @@ function tryFire(now) {
     if (c) { const g = vmGun(me.w); c.m.position.set(g.position.x + 0.03, g.position.y + 0.03, g.position.z + 0.02); c.m.rotation.set(0, 0, 0); c.v = [0.9 + Math.random() * 0.6, 1.1 + Math.random() * 0.6, 0.2 + Math.random() * 0.3]; c.life = 0.55; c.m.visible = true; }
   }
   sfxShot(me.w, 0.55, 0, 0, 0, !!W.quiet);
+  if (myFx.kind) { sfxSkin(myFx.kind, 'shot', W.quiet ? 0.25 : 0.55); muzzleFx(myFx.kind, muzzle, [_f.x, _f.y, _f.z], myFx.flash); }
   if (W.scope) { me.snipeQ = 0; setTimeout(() => setScope(false), 60); }
   if (me.ammo[me.w] <= 0) { me.burstLeft = 0; setTimeout(() => startReload(performance.now()), 250); }
   return true;

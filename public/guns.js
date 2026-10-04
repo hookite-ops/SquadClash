@@ -321,7 +321,7 @@ const PAT = {
     });
   },
 };
-// ───────────── 위장(camo): 콜 오브 듀티식 디지털·우드랜드와 마스터리 위장 ─────────────
+// ───────────── 무늬: 콜 오브 듀티식 디지털·우드랜드 위장과 얼티밋 번들의 겉면 ─────────────
 // 칸마다 계산하는 무늬는 이어지는 잡음(주기가 정수인 값 잡음)으로 만들어 가장자리가 맞물린다. u, v = 0~1
 const hsh = (x, y, sd) => { let h = (x * 374761393 + y * 668265263 + sd * 982451653) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 const wrp = (a, p) => ((a % p) + p) % p;
@@ -348,7 +348,7 @@ function field(n, fn) {
 const FN = () => Math.min(512, 256 * PQ); // 칸 계산 무늬의 해상도 (화질 '낮음'이면 절반)
 // 이어지는 보로노이(결정면): 점마다 가장 가까운 점·두 번째 점까지의 거리
 function voro(n, sd) { const P = []; for (let i = 0; i < n; i++) P.push([hsh(i, 1, sd), hsh(i, 2, sd), hsh(i, 3, sd), hsh(i, 4, sd) * 6.283]); return (u, v) => { let d1 = 9, d2 = 9, k = 0, ex = 0, ey = 0; for (let i = 0; i < n; i++) { let dx = u - P[i][0], dy = v - P[i][1]; dx -= Math.round(dx); dy -= Math.round(dy); const d = dx * dx + dy * dy; if (d < d1) { d2 = d1; d1 = d; k = i; ex = dx; ey = dy; } else if (d < d2) d2 = d; } return [Math.sqrt(d1), Math.sqrt(d2), k, ex, ey, P[k][2], P[k][3]]; }; }
-// 비스듬히 지나가는 빛 띠 (마스터리 위장의 광택 훑기)
+// 비스듬히 지나가는 빛 띠 (얼티밋 번들 겉면의 광택 훑기)
 const sweepTex = (w = 0.045) => texOf(field(128, (u, v, o) => { const d = (u + v) % 1, k = Math.exp(-(((d - 0.5) / w) ** 2)) + Math.exp(-(((d - 0.62) / (w * 0.35)) ** 2)) * 0.5; o[0] = o[1] = o[2] = Math.min(255, k * 255); }), true, 1);
 // 디지털 위장: 8칸 네모를 잡음 높이로 네 가지 색에 나눔 (큰 덩어리 + 잔 네모가 섞인 MARPAT 느낌)
 function digital(pal, sd) {
@@ -441,7 +441,7 @@ const SKIN_DEF = {
   desert: () => { const c = pcan(CAMO.desert, 10), m = texOf(c, true), n = nrm(c, 0.35); return { body: { wear: 0.5, wearCol: 0xb0a690, color: 0xffffff, map: m, normalMap: n, metalness: 0.06, roughness: 0.78 }, body2: { wear: 0.5, color: 0xc2b294, map: m, normalMap: n, metalness: 0.06, roughness: 0.84 }, grip: { color: 0x4a4234, roughness: 0.85 }, metal: { color: 0x4f473b, metalness: 0.78, roughness: 0.44 }, accent: { color: 0xe2c078 } }; },
   forest: () => { const c = pcan(CAMO.forest, 10), m = texOf(c, true), n = nrm(c, 0.3); return { body: { wear: 0.5, color: 0xffffff, map: m, normalMap: n, metalness: 0.05, roughness: 0.8 }, body2: { wear: 0.5, color: 0xb2b49a, map: m, normalMap: n, metalness: 0.05, roughness: 0.86 }, grip: { color: 0x2c3024, roughness: 0.85 }, metal: { color: 0x2b2e28, metalness: 0.8, roughness: 0.45 }, accent: { color: 0x9db55a } }; },
   urban: () => { const c = pcan(CAMO.urban, 10), m = texOf(c, true), n = nrm(c, 0.35); return { body: { wear: 0.55, wearCol: 0xd0d5dc, color: 0xffffff, map: m, normalMap: n, metalness: 0.1, roughness: 0.72 }, body2: { wear: 0.5, color: 0xb8bcc2, map: m, normalMap: n, metalness: 0.1, roughness: 0.8 }, grip: { color: 0x1c1e22, roughness: 0.85 }, metal: { color: 0x2a2d32, metalness: 0.85, roughness: 0.4 }, accent: { color: 0xd8dde3 } }; },
-  // ── 마스터리 위장: 모두 빛 층(emissive)이 있고, 매 프레임 세기를 다시 정한다 (각성 효과가 그 위에 곱해짐) ──
+  // ── 얼티밋 번들 겉면: 모두 빛 층(emissive)이 있고, 매 프레임 세기를 다시 정한다 (각성 효과가 그 위에 곱해짐) ──
   platinum: () => { const c = pcan(CAMO.platinum, 5), sw = sweepTex(); return { body: { wear: 0.3, wearCol: 0xffffff, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.9), metalness: 1, roughness: 0.14, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.06, emissive: 0xe8f0ff, emissiveMap: sw, emissiveIntensity: 0.4 }, grip: { color: 0x15171b, metalness: 0.3, roughness: 0.5 }, metal: { color: 0xeef1f6, metalness: 1, roughness: 0.1 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.05 }, accent: { color: 0x9fb6d8 }, envI: 1.9, anim: sweepAnim(sw, 0.15, 0.55) }; },
   damascus: () => { const c = pcan(CAMO.damascus, 5), sw = sweepTex(0.05); return { body: { wear: 0.25, wearCol: 0xfff2c8, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 1.1), metalness: 1, roughness: 0.24, roughnessMap: smudge(), clearcoat: 0.7, clearcoatRoughness: 0.1, emissive: 0xffd890, emissiveMap: sw, emissiveIntensity: 0.4 }, grip: { color: 0x1d140d, metalness: 0.25, roughness: 0.55 }, metal: { color: 0x3a2618, metalness: 1, roughness: 0.22 }, bolt: { color: 0xf3cf8a, metalness: 1, roughness: 0.1 }, accent: { color: 0xe2a24a }, envI: 1.7, anim: sweepAnim(sw, 0.12, 0.5) }; },
   obsidian: () => { const c = pcan(CAMO.obsidian, 4), sw = sweepTex(0.035); return { body: { wear: 0, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.6), metalness: 0.35, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02, emissive: 0xc8b8ff, emissiveMap: sw, emissiveIntensity: 0.3 }, grip: { color: 0x0a0a0d, metalness: 0.4, roughness: 0.35 }, metal: { color: 0x121216, metalness: 1, roughness: 0.12 }, bolt: { color: 0xe6e8ee, metalness: 1, roughness: 0.06 }, accent: { color: 0xffffff }, envI: 2, anim: sweepAnim(sw, 0.1, 0.45, 0.26) }; },
@@ -465,9 +465,7 @@ const SKIN_DEF = {
   halloween: () => { const c = pcan((g, s) => PAT.halloween(g, s, false), 8), mp = texOf(c, true), em = texOf(pcan((g, s) => PAT.halloween(g, s, true), 0), true); return { body: { wear: 0.25, color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.1, normalMap: nrm(c, 0.4), metalness: 0.2, roughness: 0.5, clearcoat: 0.4, clearcoatRoughness: 0.3 }, grip: { color: 0x1a1220, roughness: 0.8 }, metal: { color: 0x2c1d3a, metalness: 0.88, roughness: 0.32 }, bolt: { color: 0xff8a1a, metalness: 0.7, roughness: 0.3, emissive: 0x7a2c00, emissiveIntensity: 0.5 }, accent: { color: 0x9dff3a, emissive: 0x6fd020, emissiveIntensity: 0.9 }, anim: (M, t) => { const k = 1.75 + Math.sin(t * 9.1) * 0.22 + Math.sin(t * 23.7) * 0.16; M.glow.emissiveIntensity = k; M.body.emissiveIntensity = 0.75 + (k - 1.75) * 1.1 + 0.35; } }; }, // 촛불처럼 일렁임
 };
 // 형태 키트가 없는 스킨(무료·위장)의 궤적·불꽃 색 (형태 키트가 있는 스킨은 키트에 적혀 있음)
-const FX_FREE = { desert: { tracer: 0xffd08a, flash: 0xffb45a }, forest: { tracer: 0xbfff8a, flash: 0xd9ff9a }, urban: { tracer: 0xdfe8f2, flash: 0xfff0d0 },
-  platinum: { tracer: 0xeaf2ff, flash: 0xf4f8ff }, damascus: { tracer: 0xffc46a, flash: 0xffd890 }, obsidian: { tracer: 0xd8ccff, flash: 0xffffff }, diamond: { tracer: 0x9fe8ff, flash: 0xe0f8ff },
-  atomic: { tracer: 0xff4a1a, flash: 0xff8a3a }, orion: { tracer: 0xffffff, flash: 0xe0e8ff, rainbow: true }, darkmatter: { tracer: 0xb05cff, flash: 0xd08aff } };
+const FX_FREE = { desert: { tracer: 0xffd08a, flash: 0xffb45a }, forest: { tracer: 0xbfff8a, flash: 0xd9ff9a }, urban: { tracer: 0xdfe8f2, flash: 0xfff0d0 } };
 // 형태 키트가 쓰는 스킨 전용 재질
 const KMATS = {
   tiger: () => ({ fang: { color: 0xf3ead2, metalness: 0.1, roughness: 0.32 }, eye: { color: 0xb6ff3a, emissive: 0x9dff3a, emissiveIntensity: 1.3, roughness: 0.2 } }),
@@ -478,9 +476,17 @@ const KMATS = {
   gold: () => ({ gem: { color: 0xe0102c, metalness: 0.3, roughness: 0.04, emissive: 0x80000e, emissiveIntensity: 0.6, flatShading: true } }),
   galaxy: () => ({ star: { color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 1.6 }, planet: { color: 0xff9ad8, emissive: 0x8030ff, emissiveIntensity: 0.5, roughness: 0.4 }, portal: { color: 0xb060ff, emissive: 0xa040ff, emissiveIntensity: 1.6, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false } }),
   aurora: (M) => ({ prism: { color: 0xffffff, map: M.body.map, metalness: 0.55, roughness: 0.05, transparent: true, opacity: 0.66, emissive: 0xffffff, emissiveMap: M.body.map, emissiveIntensity: 0.4, side: THREE.DoubleSide } }),
+  platinum: () => ({ holo: { color: 0x9fe6ff, emissive: 0x3ab8ff, emissiveIntensity: 2.2, roughness: 0.3 }, trim: { color: 0xffd27a, metalness: 1, roughness: 0.14 } }),
+  damascus: () => ({ wrap: { color: 0x17120e, metalness: 0.05, roughness: 0.92 }, gilt: { color: 0xf0c060, metalness: 1, roughness: 0.16 }, silk: { color: 0xb3121c, metalness: 0, roughness: 0.75, emissive: 0x3a0004, emissiveIntensity: 0.4 }, hamon: { color: 0xe8edf2, metalness: 1, roughness: 0.08 } }),
+  obsidian: () => ({ shard: { color: 0x0b0a10, metalness: 0.5, roughness: 0.03, flatShading: true }, rift: { color: 0xd8b8ff, emissive: 0xa060ff, emissiveIntensity: 2.4, roughness: 0.4 } }),
+  diamond: () => ({ crystal: { color: 0xe8f8ff, metalness: 0.1, roughness: 0.02, transparent: true, opacity: 0.72, emissive: 0x6fc0ff, emissiveIntensity: 0.55, flatShading: true }, gilt: { color: 0xf3d27a, metalness: 1, roughness: 0.12 }, pink: { color: 0xff8fcf, metalness: 0.3, roughness: 0.04, emissive: 0x80104a, emissiveIntensity: 0.6, flatShading: true } }),
+  atomic: () => ({ core: { color: 0xff9a40, emissive: 0xff4a00, emissiveIntensity: 2.4, roughness: 0.5 }, glassR: { color: 0xffe0c0, metalness: 0.2, roughness: 0.04, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }, hazard: { color: 0xffc21a, metalness: 0.3, roughness: 0.45, emissive: 0x3a2400, emissiveIntensity: 0.4 } }),
+  orion: () => ({ star: { color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2 }, line: { color: 0xc8e4ff, emissive: 0x8fc8ff, emissiveIntensity: 1.6, roughness: 0.3 } }),
+  darkmatter: () => ({ voidm: { color: 0x000000, metalness: 0, roughness: 1 }, rim: { color: 0xd8a0ff, emissive: 0xa040ff, emissiveIntensity: 2.4, roughness: 0.4 }, halo: { color: 0x8040ff, emissive: 0xa040ff, emissiveIntensity: 1.6, transparent: true, opacity: 0.55, side: THREE.BackSide, depthWrite: false }, disk: { color: 0xff8ad8, emissive: 0xff40b0, emissiveIntensity: 2, roughness: 0.4 } }),
   halloween: () => ({ pumpkin: { color: 0xc94f08, metalness: 0.05, roughness: 0.6 }, glow: { color: 0xffe070, emissive: 0xffc030, emissiveIntensity: 1.8, roughness: 0.6 }, wing: { color: 0x17101f, metalness: 0.35, roughness: 0.45, side: THREE.DoubleSide }, stem: { color: 0x4d6b2a, metalness: 0, roughness: 0.8 }, eye: { color: 0xb6ff3a, emissive: 0x9dff3a, emissiveIntensity: 1.5, roughness: 0.3 } }),
 };
-const SETS = new Map(), animated = [];
+const SETS = new Map(), animated = [], bundleSets = [];
+let pulseAt = -9;
 // aw = 각성(스킨 5레벨): 총열과 몸통에 빛줄기가 흐르고 빛이 더 세게 맥박침
 function matsFor(skin, aw) {
   const key = skin + (aw ? 'a' : '');
@@ -493,6 +499,7 @@ function matsFor(skin, aw) {
     if (def.accent) M.accent = mk(def.accent);
     M.body = body;
     if (KMATS[id]) for (const [k, o] of Object.entries(KMATS[id](M))) M[k] = mk(o);
+    if (KITS[id] && KITS[id].fx.bundle) { M._glow = Object.keys(KMATS[id](M)).map((k) => M[k]).filter((m) => m.emissiveIntensity > 0 && m.emissive && m.emissive.getHex()).map((m) => [m, m.emissiveIntensity]); bundleSets.push(M); }
     if (def.anim) animated.push({ M, f: def.anim });
     if (aw) {
       const col = (skinFx(skin) || {}).flash || 0xffe9a8, v = veins(), own = !!body.emissiveMap;
@@ -505,7 +512,16 @@ function matsFor(skin, aw) {
   return M;
 }
 // 움직이는 스킨(빛나는 맥박, 흐르는 무늬)
-export function tickSkins(t) { for (const a of animated) a.f(a.M, t); }
+export function tickSkins(t) {
+  for (const a of animated) a.f(a.M, t);
+  const k = Math.max(0, 1 - (performance.now() / 1000 - pulseAt) / 0.8) ** 2; // 꺼낼 때 한 번 확 밝아짐
+  for (const M of bundleSets) { // 얼티밋 스킨: 빛나는 부품이 숨 쉬듯 일렁임
+    M._glow.forEach(([m, b], i) => { m.emissiveIntensity = b * (0.82 + 0.22 * Math.sin(t * 3.1 + i * 1.7) + k * 2.6); });
+    if (k && M.body.emissiveMap) M.body.emissiveIntensity *= 1 + k * 2;
+  }
+}
+// 얼티밋 스킨을 꺼낼 때 빛이 번쩍이게
+export function pulseSkin() { pulseAt = performance.now() / 1000; }
 
 // ───────────── 형태 도구 ─────────────
 const labelMats = new Map();
@@ -1200,6 +1216,288 @@ const KITS = {
       b.prof(out, 0.007, M.wing, 0.0028, 0, { holes: [tri(0.075), tri(0.115), [[0.06, -0.006], [0.078, -0.011], [0.095, -0.006], [0.112, -0.011], [0.13, -0.006], [0.112, -0.0145], [0.095, -0.012], [0.078, -0.0145]]] });
       b.prof(out, 0.0024, M.glow, 0);
       b.prof([[0.15, -0.0165], [0.222, -0.002], [0.248, 0.028], [0.254, 0.064], [0.25, 0.03], [0.228, 0.004], [0.17, -0.012]], 0.0074, M.pumpkin, 0.0004); // 주황 날
+    },
+  },
+  // ───────────── 얼티밋 번들: 형태 + 전용 총소리·장착음·처치음 + 궤적·불꽃·착탄·처치 효과가 모두 바뀐다 (발로란트식) ─────────────
+  // 플래티넘 프라임 — 각진 장갑판, 금빛 테두리, 푸른 홀로그램 빛줄
+  platinum: {
+    fx: { tracer: 0x7fdcff, flash: 0xbfeaff, sfx: 'prime', bundle: true },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, k = Math.min(1, L / 0.2);
+      b.prof([[f0, u0], [f0, u1], [f1 - 0.03 * k, u1], [f1 + 0.012 * k, um + hh * 0.25], [f1 - 0.006, u0]], w, M.recv, 0.003, 0, { r: 0.004 });
+      b.box(w * 0.5, 0.003, L * 0.82, f0 + L * 0.45, u1 + 0.0012, M.trim);
+      for (const s of [-1, 1]) {
+        const x = s * (hw + 0.0009);
+        b.box(0.0016, 0.0042, L * 0.66, f0 + L * 0.42, um + hh * 0.1, M.holo, x); b.box(0.0016, 0.002, L * 0.4, f0 + L * 0.36, um - hh * 0.42, M.holo, x);
+        for (let i = 0; i < 3; i++) { const f = f0 + L * 0.74 + i * 0.012 * k, a = 0.011 * k; b.prof([[f, um], [f + a, um + a], [f + a + 0.005, um + a], [f + 0.005, um], [f + a + 0.005, um - a], [f + a, um - a]], 0.0018, M.trim, 0, x); }
+        b.prof([[f0 + 0.004, u0 + hh * 0.3], [f0 + L * 0.2, u0 + 0.002], [f0 + L * 0.62, u0 + 0.002], [f0 + L * 0.7, u0 + hh * 0.35]], 0.002, M.trim, 0, s * (hw + 0.0016));
+      }
+      for (let i = 0; i < Math.max(2, Math.round(L / 0.04)); i++) b.box(w * 0.5, 0.002, 0.012, f0 + 0.02 + i * 0.035, u0 - 0.0006, M.holo);
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2;
+      const out = [[f, top], [end + 0.03, top + 0.005], [end, top - 0.012], [end, bot + 0.01], [end + 0.022, bot], [f - L * 0.45, j0 - 0.012], [f, j0]];
+      const hole = [[f - 0.03, top - 0.012], [end + 0.04, top - 0.008], [end + 0.022, um], [end + 0.03, bot + 0.016], [f - L * 0.45, j0 - 0.002 - 0.012 + 0.012], [f - 0.03, j0 + 0.006]];
+      b.prof(out, w, M.recv, 0.004, 0, { holes: [hole] }); b.prof(hole, w * 0.28, M.holo, 0);
+      for (const s of [-1, 1]) b.prof([[f - 0.004, top + 0.001], [end + 0.03, top + 0.006], [end + 0.026, top + 0.002], [f - 0.006, top - 0.003]], 0.002, M.trim, 0, s * (w / 2 + 0.001));
+      buttPad(b, end, um, top - bot - 0.02, M, w);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.prof([[f, u - r * 1.3], [f, u + r * 1.3], [f + len * 0.78, u + r * 1.1], [f + len, u], [f + len * 0.78, u - r * 1.1]], r * 2.4, M.recv, 0.002);
+      for (const s of [-1, 1]) for (let i = 0; i < 3; i++) b.box(0.0012, r * 0.32, len * 0.12, f + len * (0.22 + i * 0.18), u, M.holo, s * (r * 1.2 + 0.0006));
+      b.box(r * 1.2, 0.0016, len * 0.6, f + len * 0.4, u + r * 1.25, M.trim);
+      b.tor(r * 1.7, r * 0.11, [f + len * 1.02, u, 0], M.holo, 0, 0, 6.2832, 24);
+      b.disc(r * 0.5, f + len + 0.0005, u, M.dark);
+      return f + len;
+    },
+    orn(b, M, R) {
+      const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1;
+      for (const s of [-1, 1]) { const x = s * (hw + 0.0009), f = f0 + L * 0.25; for (let i = 0; i < 2; i++) { const a = 0.012 * k, g = f + i * 0.009 * k; b.prof([[g, u], [g + a, u + a], [g + a + 0.004 * k, u + a], [g + 0.004 * k, u], [g + a + 0.004 * k, u - a], [g + a, u - a]], 0.0018, i ? M.holo : M.trim, 0, x); } b.box(0.0014, 0.0025 * k, L * 0.4, f0 + L * 0.62, u + 0.012 * k, M.holo, x); }
+    },
+    blade(b, M) {
+      b.prof([[0.03, -0.016], [0.2, -0.016], [0.255, 0.004], [0.236, 0.021], [0.03, 0.021]], 0.0052, M.recv, 0.0015);
+      b.prof([[0.035, -0.0166], [0.2, -0.0166], [0.254, 0.0035], [0.2, -0.0105], [0.035, -0.0105]], 0.0058, M.holo, 0.0004);
+      for (const s of [-1, 1]) b.box(0.0014, 0.002, 0.15, 0.12, 0.016, M.trim, s * 0.0028);
+    },
+  },
+  // 다마스커스 사무라이 — 실로 감은 손잡이, 금빛 코등이, 붉은 술, 총검처럼 뻗은 칼끝
+  damascus: {
+    fx: { tracer: 0xffb04a, flash: 0xffd890, sfx: 'blade', bundle: true },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, k = Math.min(1, L / 0.2);
+      b.prof([[f0, u0], [f0, u1], [f1, u1], [f1, u0]], w, M.recv, 0.003, 0, { r: Math.min(0.012, hh * 0.6) });
+      const n = Math.max(3, Math.round((L - 0.03) / 0.022));
+      for (let i = 0; i < n; i++) { const f = f0 + 0.015 + (i + 0.5) * ((L - 0.03) / n); for (const a of [0.62, -0.62]) b.box(w + 0.002, (u1 - u0) * 1.02, 0.0042, f, um, M.wrap, 0, a); }
+      b.ecyl(hw * 1.7, hh * 1.55, f1 - 0.004, 0.006, um, M.gilt, 1, 20); b.ecyl(hw * 1.2, hh * 1.12, f1 - 0.012, 0.008, um, M.gilt, 1, 16); // 코등이(쓰바)와 덧쇠
+      b.ecyl(hw * 1.06, hh * 1.04, f0, 0.008, um, M.gilt, 1, 16);
+      const fx = f0 + 0.02, ux = u0 - 0.002; // 붉은 술(사게오)
+      b.rod([fx, ux, 0], [fx - 0.004, ux - 0.03 * k, 0], 0.0022, 0.0022, M.silk, 6); b.ball(0.005 * k + 0.002, [fx - 0.004, ux - 0.032 * k, 0], M.gilt, [1, 1, 1], 8);
+      b.rod([fx - 0.004, ux - 0.034 * k, 0], [fx - 0.006, ux - 0.07 * k, 0], 0.0045 * k + 0.001, 0.0012, M.silk, 7);
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2;
+      b.prof([[f, top], [end + 0.04, top + 0.004], [end, top - 0.016], [end, bot + 0.014], [end + 0.03, bot], [f - L * 0.5, j0 - 0.016], [f, j0]], w, M.recv, 0.006, 0, { r: 0.01 });
+      for (let i = 0; i < 4; i++) { const ff = f - 0.03 - i * 0.02; for (const a of [0.62, -0.62]) b.box(w + 0.002, (top - j0) * 1.0, 0.004, ff, (top + j0) / 2, M.wrap, 0, a); }
+      for (const s of [-1, 1]) { const x = s * (w / 2 + 0.0012); b.sdisc(0.014, end + 0.06, um, x, M.gilt); for (let i = 0; i < 3; i++) { const a = i * 2.094; b.ball(0.0034, [end + 0.06 + Math.cos(a) * 0.006, um + Math.sin(a) * 0.006, x + s * 0.0012], M.wrap, [1, 1, 0.5], 6); } }
+      b.prof([[end + 0.004, bot + 0.012], [end + 0.004, top - 0.014], [end + 0.012, top - 0.008], [end + 0.012, bot + 0.008]], w + 0.004, M.gilt, 0.002);
+      b.rod([end + 0.02, bot + 0.004, 0], [end + 0.018, bot - 0.03, 0], 0.002, 0.002, M.silk, 6); b.rod([end + 0.018, bot - 0.03, 0], [end + 0.016, bot - 0.06, 0], 0.0045, 0.0012, M.silk, 7);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.15, r * 1.15, f, len * 0.16, u, M.gilt, 0, 14); b.cyl(r * 0.85, r * 0.85, f + len * 0.16, len * 0.5, u, M.steel, 0, 12); b.cyl(r * 1.05, r * 1.05, f + len * 0.6, len * 0.1, u, M.gilt, 0, 14);
+      b.disc(r * 0.5, f + len * 0.7 + 0.0005, u, M.dark);
+      const ub = u - r * 1.25; // 총열 아래로 뻗은 칼끝 (칼날 무늬 하몬)
+      b.prof([[f + len * 0.05, ub - r * 0.9], [f + len * 1.5, ub - r * 0.9], [f + len * 1.95, ub + r * 0.2], [f + len * 1.5, ub + r * 0.35], [f + len * 0.05, ub + r * 0.35]], r * 0.55, M.hamon, r * 0.12);
+      b.prof([[f + len * 0.05, ub - r * 0.95], [f + len * 1.5, ub - r * 0.95], [f + len * 1.93, ub + r * 0.15], [f + len * 1.5, ub - r * 0.4], [f + len * 0.05, ub - r * 0.4]], r * 0.6, M.bolt, 0);
+      return f + len * 0.7;
+    },
+    orn(b, M, R) {
+      const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1;
+      for (const s of [-1, 1]) { const x = s * (hw + 0.0011), f = f0 + L * 0.3, rr = 0.011 * k; b.sdisc(rr, f, u + 0.004 * k, x, M.gilt); for (let i = 0; i < 3; i++) { const a = i * 2.094 + 0.5; b.ball(rr * 0.28, [f + Math.cos(a) * rr * 0.5, u + 0.004 * k + Math.sin(a) * rr * 0.5, x + s * 0.001], M.wrap, [1, 1, 0.5], 6); } b.box(0.0014, 0.0022 * k, L * 0.36, f0 + L * 0.66, u + 0.006 * k, M.gilt, x); }
+    },
+    blade(b, M) { // 휜 일본도: 칼날(하몬)과 등, 금빛 덧쇠
+      const lo = [], hi = [], cv = (t) => Math.sin(t * 1.3) * 0.014;
+      for (let i = 0; i <= 12; i++) { const t = i / 12, f = 0.034 + t * 0.228; lo.push([f, -0.011 + cv(t) + (t > 0.78 ? ((t - 0.78) / 0.22) ** 1.6 * 0.02 : 0)]); hi.push([f, 0.011 + cv(t)]); }
+      const tip = [0.272, 0.011 + cv(1) - 0.002];
+      b.prof([...lo, tip, ...hi.slice().reverse()], 0.0055, M.hamon, 0.0018);
+      b.prof([...hi.slice(0, 11), ...hi.slice(0, 11).reverse().map(([f, uu]) => [f, uu - 0.006])], 0.0062, M.recv, 0.0006);
+      b.prof([[0.026, -0.022], [0.034, -0.022], [0.034, 0.026], [0.026, 0.026]], 0.012, M.gilt, 0.002);
+    },
+  },
+  // 흑요석 리퍼 — 검은 유리 조각이 돋고, 갈라진 틈에서 보랏빛이 샘. 칼은 낫
+  obsidian: {
+    fx: { tracer: 0xc89cff, flash: 0xe0c8ff, sfx: 'shard', bundle: true },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, k = Math.min(1, L / 0.2);
+      b.prof([[f0, u0 + hh * 0.2], [f0, u1], [f0 + L * 0.4, u1 + 0.004 * k], [f1 - 0.01, u1 - hh * 0.1], [f1 + 0.02 * k, um - hh * 0.3], [f1 - 0.02, u0], [f0 + L * 0.3, u0 - 0.004 * k]], w, M.recv, 0.002);
+      for (const s of [-1, 1]) { const x = s * (hw + 0.0008), P = []; for (let i = 0; i <= 7; i++) P.push([f0 + 0.01 + i * (L - 0.02) / 7, um + (i % 2 ? 0.4 : -0.3) * hh * (0.6 + kr(i + (s > 0 ? 9 : 0)) * 0.5)]); for (let i = 0; i < 7; i++) b.rod([P[i][0], P[i][1], x], [P[i + 1][0], P[i + 1][1], x], 0.0011, 0.0011, M.rift, 4); }
+      const n = Math.max(3, Math.round(L / 0.035));
+      for (let i = 0; i < n; i++) { const f = f0 + 0.012 + (i * (L - 0.03)) / (n - 1), hgt = (0.014 + kr(i + 4) * 0.016) * k; b.crys([f, u1 - 0.002, (kr(i) - 0.5) * hw], [f + 0.012 * k, u1 + hgt, (kr(i + 1) - 0.5) * hw * 1.6], 0.005 * k + 0.002, M.shard, 4); if (i % 2) for (const s of [-1, 1]) b.crys([f, um - hh * 0.2, s * hw * 0.8], [f + 0.01 * k, um - hh * 0.5, s * (hw + 0.014 * k)], 0.004 * k + 0.0015, M.shard, 4); }
+    },
+    stock(b, M, R) { // 낫날처럼 휘어 내려간 개머리판
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2;
+      const out = [[f, top], [f - L * 0.4, top + 0.008], [end + 0.01, top - 0.004], [end - 0.012, top - 0.03], [end + 0.008, bot + 0.006], [end + 0.03, bot - 0.012], [end + 0.04, bot + 0.012], [f - L * 0.5, j0 - 0.02], [f, j0]];
+      b.prof(out, w, M.recv, 0.003, 0, { holes: [[[f - 0.03, top - 0.012], [end + 0.04, top - 0.014], [end + 0.03, um], [f - L * 0.5, j0 - 0.006], [f - 0.03, j0 + 0.004]]] });
+      b.prof([[f - 0.03, top - 0.012], [end + 0.04, top - 0.014], [end + 0.03, um], [f - L * 0.5, j0 - 0.006], [f - 0.03, j0 + 0.004]], w * 0.25, M.rift, 0);
+      for (let i = 0; i < 3; i++) b.crys([end + 0.03 + i * 0.03, top - 0.002, 0], [end + 0.02 + i * 0.03, top + 0.016 + kr(i + 20) * 0.01, 0], 0.005, M.shard, 4);
+      b.crys([end + 0.03, bot - 0.004, 0], [end + 0.05, bot - 0.03, 0], 0.005, M.shard, 4);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 0.9, r * 1.1, f, len * 0.5, u, M.recv, 0, 7); b.cyl(r * 0.55, r * 0.55, f, len * 0.75, u, M.steel, 0, 8); b.disc(r * 0.4, f + len * 0.752, u, M.dark);
+      b.tor(r * 1.15, r * 0.12, [f + len * 0.45, u, 0], M.rift, 0, 0, 6.2832, 14);
+      b.radial(3, () => new THREE.ConeGeometry(r * 0.38, len * 0.95, 4).rotateX(-Math.PI / 2 + 0.22).translate(0, r * 1.3, -len * 0.35), f + len * 0.35, u, M.shard, 0.5);
+      return f + len * 0.78;
+    },
+    orn(b, M, R) {
+      const { f0, f1, u, top, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1;
+      for (const s of [-1, 1]) { for (let i = 0; i < 3; i++) b.crys([f0 + L * (0.2 + i * 0.06), u, s * (hw - 0.002)], [f0 + L * (0.16 + i * 0.07), Math.min(top + 0.01 * k, u + (0.014 + i * 0.006) * k), s * (hw + (0.01 + i * 0.003) * k)], 0.0035 * k + 0.001, M.shard, 4); b.box(0.0012, 0.0016, L * 0.45, f0 + L * 0.62, u - 0.004 * k, M.rift, s * (hw + 0.0007)); }
+    },
+    blade(b, M) { // 낫
+      const pts = [[0.03, -0.014]];
+      for (let i = 0; i <= 10; i++) { const a = ((-88 + i * 9) * Math.PI) / 180; pts.push([0.11 + Math.cos(a) * 0.15, 0.13 + Math.sin(a) * 0.15]); }
+      for (let i = 10; i >= 0; i--) { const a = ((-84 + i * 8) * Math.PI) / 180; pts.push([0.12 + Math.cos(a) * 0.12, 0.122 + Math.sin(a) * 0.12]); }
+      pts.push([0.03, 0.02]);
+      b.prof(pts, 0.0052, M.shard, 0.0018);
+      for (const s of [-1, 1]) for (let i = 0; i < 9; i++) { const a0 = ((-86 + i * 9) * Math.PI) / 180, a1 = ((-86 + (i + 1) * 9) * Math.PI) / 180; b.rod([0.115 + Math.cos(a0) * 0.135, 0.126 + Math.sin(a0) * 0.135, s * 0.0029], [0.115 + Math.cos(a1) * 0.135, 0.126 + Math.sin(a1) * 0.135, s * 0.0029], 0.0011, 0.0011, M.rift, 4); }
+    },
+  },
+  // 다이아몬드 크라운 — 금빛 띠에 박힌 결정 무리, 왕관 총구, 큰 보석을 문 개머리판
+  diamond: {
+    fx: { tracer: 0xbff0ff, flash: 0xeaf8ff, sfx: 'crystal', bundle: true },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, k = Math.min(1, L / 0.2);
+      b.ecyl(hw * 1.05, hh, f0, L, um, M.recv, 0.92, 6);
+      for (const f of [f0 + 0.003, f0 + L * 0.5, f1 - 0.012]) b.ecyl(hw * 1.1, hh * 1.05, f, 0.009, um, M.gilt, 1, 6);
+      const n = Math.max(2, Math.round(L / 0.05));
+      for (let i = 0; i < n; i++) { const f = f0 + 0.02 + (i * (L - 0.04)) / Math.max(1, n - 1); b.crys([f, u1 - 0.004, 0], [f - 0.004, u1 + (0.018 + kr(i) * 0.012) * k, 0], 0.006 * k + 0.002, M.crystal, 6); for (const s of [-1, 1]) { b.crys([f + 0.008, u1 - 0.004, s * hw * 0.4], [f + 0.012, u1 + 0.01 * k, s * (hw * 0.4 + 0.008 * k)], 0.004 * k + 0.0015, M.crystal, 5); b.gem(0.0045 * k + 0.0015, [f, um, s * (hw * 1.02 + 0.002)], M.pink, [1.2, 1.2, 0.6]); } }
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2, cx = end + L * 0.42;
+      b.prof([[f, top], [end + 0.03, top], [end, top - 0.02], [end, bot + 0.01], [end + 0.03, bot], [f - L * 0.5, j0 - 0.014], [f, j0]], w * 0.8, M.recv, 0.004, 0, { holes: [[[cx, top - 0.01], [cx + 0.03, um], [cx, bot + 0.014], [cx - 0.03, um]]] });
+      b.gem(0.026, [cx, um + 0.002, 0], M.crystal, [1.1, 1.5, 0.55]);
+      for (const s of [-1, 1]) for (const [df, du] of [[0.04, 0], [-0.045, 0], [0, (top - um) * 0.7]]) b.gem(0.005, [cx + df, um + du, s * (w * 0.4 + 0.002)], M.pink, [1, 1, 0.6]);
+      b.prof([[end + 0.003, bot + 0.004], [end + 0.003, top - 0.016], [end + 0.012, top - 0.01], [end + 0.012, bot + 0.002]], w + 0.004, M.gilt, 0.002);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.25, r * 1.25, f, len * 0.3, u, M.gilt, 0, 6); b.cyl(r * 0.6, r * 0.6, f, len * 0.6, u, M.steel, 0, 10); b.disc(r * 0.4, f + len * 0.602, u, M.dark);
+      b.radial(6, () => new THREE.ConeGeometry(r * 0.32, len * 0.75, 4).rotateX(-Math.PI / 2 + 0.3).translate(0, r * 1.25, -len * 0.3), f + len * 0.3, u, M.crystal, 0.52);
+      b.radial(6, () => new THREE.OctahedronGeometry(r * 0.24, 0).translate(0, r * 1.32, 0), f + len * 0.16, u, M.pink);
+      return f + len * 0.65;
+    },
+    orn(b, M, R) {
+      const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1;
+      for (const s of [-1, 1]) { const x = s * (hw + 0.001), f = f0 + L * 0.25; b.tor(0.011 * k, 0.002 * k, [f, u, x], M.gilt, 0, Math.PI / 2, 6.2832, 6); b.gem(0.009 * k, [f, u, x], M.crystal, [1, 1, 0.55]); for (let i = 0; i < 3; i++) b.gem(0.003 * k + 0.001, [f0 + L * (0.45 + i * 0.1), u + 0.004 * k, x], M.pink, [1, 1, 0.6]); }
+    },
+    blade(b, M) {
+      b.prof([[0.03, -0.015], [0.2, -0.02], [0.262, 0.004], [0.2, 0.026], [0.03, 0.02]], 0.006, M.recv, 0.0022);
+      b.prof([[0.03, -0.0175], [0.2, -0.0225], [0.27, 0.004], [0.2, -0.012], [0.03, -0.01]], 0.0035, M.crystal, 0.001);
+      for (const s of [-1, 1]) for (let i = 0; i < 5; i++) b.gem(0.003, [0.06 + i * 0.035, 0.004 + (i % 2) * 0.004, s * 0.0034], M.pink, [1, 1, 0.6]);
+      b.prof([[0.026, -0.024], [0.034, -0.024], [0.034, 0.028], [0.026, 0.028]], 0.012, M.gilt, 0.002);
+      for (const s of [-1, 1]) b.gem(0.006, [0.03, 0.002, s * 0.0065], M.pink, [1, 1, 0.6]);
+    },
+  },
+  // 아토믹 리액터 — 유리관 속 빛나는 노심과 도는 고리, 방열판, 테슬라 코일 총구
+  atomic: {
+    fx: { tracer: 0xff6a1a, flash: 0xffa040, sfx: 'reactor', bundle: true },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, k = Math.min(1, L / 0.2), rc = Math.max(0.006, Math.min(hw, hh) * 0.82);
+      b.box(w * 0.9, 0.007, L, f0 + L / 2, u1 - 0.0035, M.recv); b.box(w * 0.9, 0.007, L, f0 + L / 2, u0 + 0.0035, M.recv);
+      for (const f of [f0 + 0.006, f1 - 0.006]) b.ecyl(hw * 1.05, hh, f - 0.006, 0.012, um, M.recv, 1, 14);
+      b.cyl(rc * 0.42, rc * 0.42, f0 + 0.01, L - 0.02, um, M.core, 0, 10);
+      b.tube(rc, rc, f0 + 0.012, L - 0.024, um, M.glassR, 16);
+      for (let i = 0, n = Math.max(3, Math.round(L / 0.03)); i < n; i++) { const f = f0 + 0.02 + (i * (L - 0.04)) / (n - 1); b.box(w * 0.92, 0.0016, 0.006, f, u1 + 0.0004, i % 2 ? M.hazard : M.dark); b.box(w * 0.92, 0.0016, 0.006, f, u0 - 0.0004, i % 2 ? M.dark : M.hazard); }
+      const prev = b.cur, fm = f0 + L / 2;
+      if (prev === '') b.part('spin' + ++spinN, [fm, um, b.shift], 3);
+      for (const df of [-L * 0.25, L * 0.25]) { b.tor(rc * 1.06, 0.0014, [fm + df, um, 0], M.hazard, 0, 0, 6.2832, 20); b.ball(0.0026, [fm + df, um + rc * 1.06, 0], M.core, [1, 1, 1], 6); }
+      b.cur = prev;
+      for (const s of [-1, 1]) for (let i = 0; i < 3; i++) b.box(0.012 * k, 0.0025, 0.022 * k, f0 + L * 0.25 + i * 0.03 * k, um - hh * 0.6, M.recv, s * (hw + 0.004 * k), 0, s * 0.4);
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2;
+      b.prof([[f, top], [end, top], [end, bot], [end + 0.03, bot], [f - L * 0.4, j0 - 0.01], [f, j0]], w * 0.4, M.recv, 0.003);
+      for (let i = 0; i < 6; i++) b.box(w * 1.1, top - bot - 0.012, 0.0032, end + 0.024 + i * 0.012, um, M.steel);
+      b.cyl(0.013, 0.013, f - L * 0.42, L * 0.3, um + 0.004, M.recv, 0, 14); b.cyl(0.006, 0.006, f - L * 0.41, L * 0.28, um + 0.004, M.core, 0, 10); b.tube(0.0105, 0.0105, f - L * 0.4, L * 0.26, um + 0.004, M.glassR, 14);
+      b.box(w + 0.003, 0.004, 0.02, end + 0.008, top - 0.004, M.hazard);
+      buttPad(b, end, um, top - bot - 0.01, M, w);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 0.7, r * 0.7, f, len * 0.9, u, M.steel, 0, 10);
+      for (let i = 0; i < 4; i++) b.cyl(r * (1.7 - i * 0.22), r * (1.7 - i * 0.22), f + len * (0.08 + i * 0.18), len * 0.06, u, i % 2 ? M.hazard : M.recv, 0, 14);
+      b.ball(r * 0.75, [f + len * 0.95, u, 0], M.core, [1.2, 1, 1], 10);
+      const prev = b.cur; if (prev === '') b.part('spin' + ++spinN, [f + len * 0.95, u, b.shift], -4);
+      b.tor(r * 1.4, r * 0.08, [f + len * 0.95, u, 0], M.core, 0.6, 0, 6.2832, 18); b.cur = prev;
+      return f + len;
+    },
+    orn(b, M, R) {
+      const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1;
+      for (const s of [-1, 1]) { const x = s * (hw + 0.001), f = f0 + L * 0.28, rr = 0.012 * k; b.sdisc(rr, f, u, x, M.hazard); for (let i = 0; i < 3; i++) { const a = i * 2.094 + 1.5708, P = [[f, u]]; for (let j = 0; j <= 4; j++) { const t = a - 0.5 + j * 0.25; P.push([f + Math.cos(t) * rr * 0.9, u + Math.sin(t) * rr * 0.9]); } b.prof(P, 0.0012, M.dark, 0, x + s * 0.0004); } b.sdisc(rr * 0.22, f, u, x + s * 0.0009, M.hazard); }
+    },
+    blade(b, M) {
+      b.prof([[0.03, -0.015], [0.2, -0.015], [0.255, 0.004], [0.215, 0.021], [0.03, 0.021]], 0.008, M.glassR, 0.003);
+      b.prof([[0.04, -0.006], [0.19, -0.006], [0.23, 0.004], [0.19, 0.012], [0.04, 0.012]], 0.003, M.core, 0.001);
+      for (let i = 0; i < 4; i++) b.box(0.012, 0.042, 0.0024, 0.032 - i * 0.004, 0.003, i % 2 ? M.hazard : M.dark);
+    },
+  },
+  // 오리온 성좌 — 별자리 빛줄, 둘레를 도는 후광 고리, 네 갈래 별 총구
+  orion: {
+    fx: { tracer: 0xffffff, flash: 0xe0e8ff, rainbow: true, sfx: 'star', bundle: true },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, fm = f0 + L / 2;
+      b.ecyl(hw, hh, f0 + 0.008, L - 0.022, um, M.recv, 0.94, 20); b.ball(1, [f1 - 0.014, um, 0], M.recv, [0.022, hh * 0.94, hw * 0.94], 14);
+      for (const s of [-1, 1]) { const x = s * (hw + 0.0012), P = []; for (let i = 0; i < 6; i++) P.push([f0 + 0.016 + i * (L - 0.04) / 5 + (kr(i + (s > 0 ? 40 : 50)) - 0.5) * 0.01, um + (kr(i + (s > 0 ? 60 : 70)) - 0.5) * hh * 1.2]);
+        for (let i = 0; i < 5; i++) b.rod([P[i][0], P[i][1], x], [P[i + 1][0], P[i + 1][1], x], 0.0008, 0.0008, M.line, 4);
+        P.forEach(([f, uu], i) => b.gem(i % 2 ? 0.0024 : 0.0036, [f, uu, x + s * 0.001], M.star, [1, 1, 0.6])); }
+      const RR = Math.max(hw, hh) + 0.012, prev = b.cur;
+      if (prev === '') b.part('spin' + ++spinN, [fm, um, b.shift], 1.2);
+      b.tor(RR, 0.0016, [fm, um, 0], M.line, 0.35, 0, 6.2832, 32); for (let i = 0; i < 3; i++) { const a = i * 2.094; b.gem(0.003, [fm + Math.sin(a) * RR * 0.34, um + Math.cos(a) * RR * 0.94, Math.sin(a) * RR * 0.94], M.star); }
+      if (prev === '') b.part('spin' + ++spinN, [fm, um, b.shift], -0.8);
+      b.tor(RR + 0.006, 0.0012, [fm + L * 0.2, um, 0], M.line, -0.4, 0, 6.2832, 32); b.gem(0.0034, [fm + L * 0.2, um - RR - 0.006, 0], M.star);
+      b.cur = prev;
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2, cx = end + L * 0.45, rr = Math.min(0.03, (top - bot) * 0.36), star = [];
+      for (let i = 0; i < 10; i++) { const a = -1.5708 + (i * Math.PI) / 5, q = i % 2 ? 0.45 : 1; star.push([cx + Math.cos(a) * rr * q, um + Math.sin(a) * rr * q]); }
+      b.prof([[f, top], [end + 0.02, top], [end, top - 0.016], [end, bot + 0.01], [end + 0.024, bot], [f - L * 0.5, j0 - 0.012], [f, j0]], w * 0.8, M.recv, 0.004, 0, { r: 0.008, holes: [star] });
+      b.prof(star, w * 0.3, M.star, 0);
+      buttPad(b, end, um, top - bot - 0.026, M, w * 0.8);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 1.1, r * 1.1, f, len * 0.3, u, M.bolt, 0, 14); b.cyl(r * 0.6, r * 0.6, f, len * 0.7, u, M.steel, 0, 10); b.disc(r * 0.4, f + len * 0.702, u, M.dark);
+      b.radial(4, () => new THREE.ConeGeometry(r * 0.28, r * 2.2, 4).translate(0, r * 1.7, 0), f + len * 0.62, u, M.star, 0.785);
+      b.ball(r * 0.5, [f + len * 0.62, u + r * 0.001, 0], M.star, [0.5, 1, 1], 8);
+      const prev = b.cur; if (prev === '') b.part('spin' + ++spinN, [f + len * 0.62, u, b.shift], 2);
+      b.tor(r * 2.1, r * 0.08, [f + len * 0.62, u, 0], M.line, 0, 0, 6.2832, 24); b.gem(r * 0.25, [f + len * 0.62, u + r * 2.1, 0], M.star); b.cur = prev;
+      return f + len * 0.72;
+    },
+    orn(b, M, R) {
+      const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1;
+      for (const s of [-1, 1]) { const x = s * (hw + 0.001), P = [[f0 + L * 0.15, u + 0.008 * k], [f0 + L * 0.3, u - 0.004 * k], [f0 + L * 0.45, u + 0.01 * k], [f0 + L * 0.6, u]]; for (let i = 0; i < 3; i++) b.rod([P[i][0], P[i][1], x], [P[i + 1][0], P[i + 1][1], x], 0.0007, 0.0007, M.line, 4); P.forEach(([f, uu], i) => b.gem(i === 2 ? 0.0034 * k + 0.001 : 0.0022 * k + 0.001, [f, uu, x + s * 0.001], M.star, [1, 1, 0.6])); }
+    },
+    blade(b, M) {
+      b.prof([[0.03, -0.014], [0.21, -0.014], [0.262, 0.004], [0.21, 0.02], [0.03, 0.02]], 0.005, M.recv, 0.002);
+      const P = [[0.06, 0.004], [0.1, 0.012], [0.14, -0.004], [0.18, 0.008], [0.22, 0.003]];
+      for (const s of [-1, 1]) { for (let i = 0; i < 4; i++) b.rod([P[i][0], P[i][1], s * 0.0028], [P[i + 1][0], P[i + 1][1], s * 0.0028], 0.0006, 0.0006, M.line, 4); P.forEach(([f, uu]) => b.gem(0.0024, [f, uu, s * 0.003], M.star, [1, 1, 0.6])); }
+    },
+  },
+  // 다크 매터 보이드 — 우리 안에 떠 있는 검은 구슬과 도는 빛 고리, 블랙홀 총구
+  darkmatter: {
+    fx: { tracer: 0xb05cff, flash: 0xd08aff, sfx: 'void', bundle: true },
+    hg(b, M, R) {
+      const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, k = Math.min(1, L / 0.2), fm = f0 + L * 0.52, ro = Math.min(hh, hw * 1.4, L * 0.22) * 0.95;
+      for (const s of [-1, 1]) b.prof([[f0, um + s * hh], [f1 - 0.01, um + s * hh * 0.85], [f1 + 0.01 * k, um + s * hh * 0.3], [f1 - 0.004, um + s * hh * 0.25], [f1 - 0.016, um + s * (hh - 0.007)], [f0, um + s * (hh - 0.007)]], w * 0.8, M.recv, 0.002);
+      for (const df of [-L * 0.36, L * 0.34]) for (const s of [-1, 1]) b.rod([fm + df, um - hh + 0.004, s * hw * 0.7], [fm + df + 0.012 * k, um + hh - 0.004, s * hw * 0.7], 0.0022, 0.0022, M.recv, 6);
+      b.ecyl(hw * 0.95, hh * 0.9, f0, 0.012, um, M.recv, 1, 14); b.ecyl(hw * 0.9, hh * 0.85, f1 - 0.016, 0.014, um, M.recv, 1, 14);
+      b.cyl(0.004, 0.004, f0, L, um, M.steel, 0, 8);
+      b.ball(ro, [fm, um, 0], M.voidm, [1, 1, 1], 18); b.ball(ro * 1.08, [fm, um, 0], M.halo, [1, 1, 1], 18);
+      const prev = b.cur;
+      if (prev === '') b.part('spin' + ++spinN, [fm, um, b.shift], 2.6);
+      b.tor(ro * 1.5, 0.0015, [fm, um, 0], M.disk, 0.5, 0, 6.2832, 28); for (let i = 0; i < 3; i++) { const a = i * 2.094; b.ball(0.0024, [fm + Math.sin(a) * ro * 0.7, um + Math.cos(a) * ro * 1.3, Math.sin(a) * ro * 1.3], M.rim, [1, 1, 1], 6); }
+      b.cur = prev;
+    },
+    stock(b, M, R) {
+      const { f, end, top, bot, j0, w } = R, L = f - end, um = (top + bot) / 2, rr = Math.min(0.032, (top - bot) * 0.42), cx = end + rr + 0.012;
+      b.prof([[f, top], [cx + rr * 0.6, top - 0.002], [cx + rr * 0.6, top - 0.012], [f - 0.02, top - 0.014], [f - 0.02, j0 + 0.01], [cx + rr * 0.8, um - 0.006], [cx + rr * 0.8, um - 0.018], [f, j0]], w * 0.7, M.recv, 0.003);
+      b.tor(rr, 0.0055, [cx, um, 0], M.recv, 0, Math.PI / 2, 6.2832, 28); b.tor(rr - 0.006, 0.0015, [cx, um, 0], M.rim, 0, Math.PI / 2, 6.2832, 28);
+      b.ball(rr * 0.42, [cx, um, 0], M.voidm, [1, 1, 1], 14); b.ball(rr * 0.47, [cx, um, 0], M.halo, [1, 1, 1], 14);
+      b.prof([[end + 0.002, um - rr * 0.8], [end + 0.002, um + rr * 0.8], [end - 0.008, um + rr * 0.6], [end - 0.008, um - rr * 0.6]], w * 0.9, M.rubber, 0.003);
+    },
+    muzzle(b, M, f, u, r, len) {
+      b.cyl(r * 0.6, r * 0.6, f, len * 0.4, u, M.steel, 0, 10);
+      for (const a of [0, 2.094, 4.189]) b.rod([f + len * 0.05, u + Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7], [f + len * 0.55, u + Math.cos(a) * r * 1.9, Math.sin(a) * r * 1.9], r * 0.18, r * 0.1, M.recv, 5);
+      b.ball(r * 1.15, [f + len * 0.75, u, 0], M.voidm, [1, 1, 1], 14); b.ball(r * 1.24, [f + len * 0.75, u, 0], M.halo, [1, 1, 1], 14);
+      const prev = b.cur; if (prev === '') b.part('spin' + ++spinN, [f + len * 0.75, u, b.shift], 3.5);
+      for (let i = 0; i < 3; i++) b.tor(r * (1.7 + i * 0.35), r * 0.06, [f + len * 0.75, u, 0], M.disk, 0, 0, 6.2832, 24);
+      b.ball(r * 0.18, [f + len * 0.75, u + r * 2.05, 0], M.rim, [1, 1, 1], 6); b.ball(r * 0.14, [f + len * 0.75, u - r * 1.7, 0], M.rim, [1, 1, 1], 6); b.cur = prev;
+      return f + len * 0.9;
+    },
+    orn(b, M, R) {
+      const { f0, f1, u, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1;
+      for (const s of [-1, 1]) { const x = s * (hw + 0.003 * k), f = f0 + L * 0.25; b.ball(0.008 * k, [f, u + 0.003 * k, x], M.voidm, [1, 1, 0.6], 10); b.tor(0.0105 * k, 0.0012, [f, u + 0.003 * k, x], M.rim, 0, Math.PI / 2, 6.2832, 20); b.box(0.0012, 0.0018, L * 0.42, f0 + L * 0.64, u - 0.004 * k, M.rim, s * (hw + 0.0007)); }
+    },
+    blade(b, M) {
+      const out = [[0.03, -0.015], [0.12, -0.02], [0.2, -0.014], [0.262, 0.006], [0.2, 0.02], [0.12, 0.026], [0.03, 0.02]];
+      b.prof(out, 0.006, M.voidm, 0.0022); b.prof(out.map(([f, uu]) => [f + (f > 0.25 ? 0.005 : 0), uu * 1.14]), 0.0026, M.rim, 0);
+      for (const s of [-1, 1]) b.rod([0.05, 0.003, s * 0.0031], [0.24, 0.005, s * 0.0031], 0.0009, 0.0009, M.rim, 4);
+      b.ball(0.008, [0.05, 0.003, 0], M.voidm, [1, 1, 1], 10); b.ball(0.009, [0.05, 0.003, 0], M.halo, [1, 1, 1], 10);
     },
   },
 };
