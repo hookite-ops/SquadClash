@@ -103,6 +103,16 @@ export function sfxSkin(kind, what, vol = 1, pan = 0, far = 0, delay = 0) {
     else if (kind === 'reactor') { T(0, 0.12, 'sawtooth', 920, 110, 0.11); T(0, 0.16, 'sine', 90, 42, 0.2); N(0, 0.09, 'bandpass', 3000, 600, 2, 0.08); }
     else if (kind === 'star') { T(0, 0.12, 'sine', 1400, 2800, 0.08); T(0.03, 0.2, 'sine', 2100, 2100, 0.05); N(0, 0.05, 'bandpass', 5000, 9000, 4, 0.05); }
     else if (kind === 'void') { T(0, 0.22, 'sine', 120, 38, 0.26); N(0, 0.12, 'bandpass', 300, 2400, 3, 0.1, 0.06); T(0.02, 0.1, 'sawtooth', 220, 70, 0.05); }
+    else if (kind === 'race') { T(0, 0.08, 'sawtooth', 340, 180, 0.08); N(0, 0.05, 'bandpass', 1800, 900, 2, 0.08); }
+    else if (kind === 'beast') { T(0, 0.14, 'sawtooth', 110, 60, 0.12); N(0, 0.12, 'lowpass', 900, 200, 1, 0.12); }
+    else if (kind === 'petal') { T(0, 0.2, 'sine', 1568, 1568, 0.06); T(0.02, 0.18, 'sine', 2349, 2349, 0.04); N(0, 0.06, 'bandpass', 4000, 6000, 3, 0.04, 0.02); }
+    else if (kind === 'frost') { N(0, 0.07, 'highpass', 5000, 2500, 1, 0.14); T(0, 0.12, 'triangle', 3600, 2400, 0.05); }
+    else if (kind === 'cyber') { T(0, 0.07, 'square', 1800, 600, 0.05); T(0, 0.1, 'sawtooth', 880, 220, 0.06); }
+    else if (kind === 'magma') { N(0, 0.2, 'lowpass', 1400, 150, 0.8, 0.18); T(0, 0.18, 'sine', 70, 35, 0.2); }
+    else if (kind === 'royal') { T(0, 0.3, 'triangle', 1318, 1318, 0.06); T(0, 0.26, 'sine', 1975, 1975, 0.04); }
+    else if (kind === 'cosmic') { T(0, 0.16, 'sine', 600, 2400, 0.07); T(0, 0.2, 'sine', 300, 120, 0.12); }
+    else if (kind === 'prism') { T(0, 0.18, 'sine', 2093, 2637, 0.05); T(0.02, 0.18, 'sine', 3136, 3520, 0.04); }
+    else if (kind === 'spooky') { T(0, 0.22, 'sine', 520, 380, 0.06); T(0, 0.18, 'triangle', 260, 180, 0.08); N(0, 0.1, 'bandpass', 700, 300, 4, 0.06, 0.03); }
     return;
   }
   if (what === 'equip') {
@@ -113,6 +123,16 @@ export function sfxSkin(kind, what, vol = 1, pan = 0, far = 0, delay = 0) {
     else if (kind === 'reactor') { T(0, 0.6, 'sawtooth', 60, 240, 0.08, 0.05); T(0, 0.6, 'sine', 120, 480, 0.08, 0.05); N(0.5, 0.1, 'bandpass', 2000, 900, 2, 0.08); }
     else if (kind === 'star') { [1047, 1319, 1568, 2093].forEach((f, i) => T(i * 0.08, 0.45, 'sine', f, f, 0.06)); N(0, 0.4, 'bandpass', 6000, 10000, 5, 0.04, 0.1); }
     else if (kind === 'void') { N(0, 0.5, 'bandpass', 200, 3000, 2, 0.12, 0.45); T(0.45, 0.4, 'sine', 70, 35, 0.3); }
+    else if (kind === 'race') { T(0, 0.55, 'sawtooth', 90, 420, 0.07, 0.05); T(0.5, 0.2, 'sawtooth', 420, 300, 0.05); N(0.5, 0.15, 'bandpass', 1200, 600, 2, 0.06); }
+    else if (kind === 'beast') { T(0, 0.6, 'sawtooth', 80, 120, 0.12, 0.1); N(0, 0.6, 'lowpass', 600, 300, 1, 0.12, 0.15); }
+    else if (kind === 'petal') { [1047, 1319, 1568, 2093].forEach((f, i) => T(i * 0.09, 0.5, 'sine', f, f, 0.05)); N(0, 0.5, 'bandpass', 5000, 3000, 3, 0.03, 0.2); }
+    else if (kind === 'frost') { N(0, 0.4, 'highpass', 2000, 7000, 1, 0.07, 0.2); [3136, 2637, 3520].forEach((f, i) => T(0.1 + i * 0.07, 0.3, 'triangle', f, f, 0.04)); }
+    else if (kind === 'cyber') { [440, 660, 880, 1320].forEach((f, i) => T(i * 0.05, 0.08, 'square', f, f, 0.04)); T(0.22, 0.3, 'sawtooth', 220, 880, 0.04); }
+    else if (kind === 'magma') { N(0, 0.7, 'lowpass', 300, 1400, 0.8, 0.14, 0.4); T(0.4, 0.4, 'sine', 60, 40, 0.25); }
+    else if (kind === 'royal') { [784, 988, 1175, 1568].forEach((f, i) => T(i * 0.1, 0.5, 'triangle', f, f, 0.06)); }
+    else if (kind === 'cosmic') { T(0, 0.6, 'sine', 200, 1600, 0.07, 0.1); T(0.3, 0.5, 'sine', 2400, 2400, 0.04); N(0, 0.6, 'bandpass', 800, 6000, 4, 0.04, 0.3); }
+    else if (kind === 'prism') { [1568, 1976, 2349, 2794, 3136].forEach((f, i) => T(i * 0.05, 0.4, 'sine', f, f, 0.045)); }
+    else if (kind === 'spooky') { T(0, 0.8, 'sine', 400, 260, 0.07, 0.2); T(0.05, 0.8, 'sine', 410, 250, 0.05, 0.2); N(0.3, 0.3, 'bandpass', 900, 400, 6, 0.05, 0.05); }
     return;
   }
   // 처치
@@ -123,6 +143,16 @@ export function sfxSkin(kind, what, vol = 1, pan = 0, far = 0, delay = 0) {
   else if (kind === 'reactor') { T(0, 0.5, 'sine', 160, 30, 0.35); N(0, 0.6, 'lowpass', 2400, 120, 0.7, 0.3, 0.003); T(0, 0.25, 'sawtooth', 1200, 80, 0.07); }
   else if (kind === 'star') { [1568, 2093, 2637, 3136, 4186].forEach((f, i) => T(i * 0.06, 0.5, 'sine', f, f, 0.05)); }
   else if (kind === 'void') { N(0, 0.35, 'bandpass', 3000, 150, 2, 0.16, 0.3); T(0.32, 0.7, 'sine', 55, 28, 0.42); T(0.32, 0.3, 'sawtooth', 110, 40, 0.06); }
+  else if (kind === 'race') { T(0, 0.7, 'sawtooth', 600, 200, 0.07); T(0, 0.7, 'sawtooth', 640, 210, 0.05); N(0, 0.3, 'bandpass', 2000, 800, 2, 0.08); }
+  else if (kind === 'beast') { T(0, 0.9, 'sawtooth', 140, 70, 0.16, 0.08); N(0, 0.9, 'lowpass', 1200, 200, 1, 0.16, 0.08); }
+  else if (kind === 'petal') { [2093, 2637, 3136, 4186].forEach((f, i) => T(i * 0.06, 0.7, 'sine', f, f, 0.05)); N(0, 0.6, 'bandpass', 3000, 6000, 2, 0.05, 0.1); }
+  else if (kind === 'frost') { N(0, 0.5, 'highpass', 6000, 2000, 0.8, 0.18); for (let i = 0; i < 5; i++) T(i * 0.04, 0.2, 'triangle', 2500 + R() * 2500, 2000, 0.04); }
+  else if (kind === 'cyber') { [880, 1320, 1760, 2640].forEach((f, i) => T(i * 0.06, 0.12, 'square', f, f, 0.04)); N(0.25, 0.3, 'bandpass', 4000, 1000, 3, 0.06); }
+  else if (kind === 'magma') { N(0, 0.9, 'lowpass', 2000, 100, 0.8, 0.3, 0.003); T(0, 0.6, 'sine', 90, 25, 0.35); }
+  else if (kind === 'royal') { [1047, 1319, 1568, 2093].forEach((f, i) => T(i * 0.08, 0.8, 'triangle', f, f, 0.06)); for (let i = 0; i < 6; i++) T(0.3 + i * 0.05, 0.08, 'sine', 3000 + R() * 2000, 2800, 0.03); }
+  else if (kind === 'cosmic') { T(0, 0.8, 'sine', 2400, 120, 0.1); T(0.1, 0.9, 'sine', 600, 600, 0.04); N(0, 0.8, 'bandpass', 6000, 400, 3, 0.06); }
+  else if (kind === 'prism') { [2093, 2637, 3136, 3951, 4699, 5274].forEach((f, i) => T(i * 0.05, 0.6, 'sine', f, f, 0.04)); }
+  else if (kind === 'spooky') { T(0, 1.0, 'sine', 600, 300, 0.08, 0.1); T(0, 1.0, 'sine', 612, 290, 0.06, 0.1); for (let i = 0; i < 4; i++) N(0.1 + i * 0.08, 0.06, 'bandpass', 3000, 2000, 6, 0.05); }
 }
 export function sfxBoom(vol = 0.9, dur = 1.8, pan = 0) {
   if (!AC || vol < 0.02) return;

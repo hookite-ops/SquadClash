@@ -78,18 +78,21 @@ function std(o) {
   const phys = o.clearcoat !== undefined || o.iridescence !== undefined;
   if (phys && !PHYS) for (const k of ['clearcoat', 'clearcoatRoughness', 'iridescence', 'iridescenceIOR']) delete o[k];
   const m = phys && PHYS ? new THREE.MeshPhysicalMaterial(o) : new THREE.MeshStandardMaterial(o); if (ENV) m.envMap = ENV; m.envMapIntensity = 1.5; allMats.add(m);
-  if (wear > 0 && !o.flatShading && !o.transparent) {
-    const uW = { value: wear }, uC = { value: new THREE.Color(wearCol) };
-    m.onBeforeCompile = (sh) => {
-      sh.uniforms.uWear = uW; sh.uniforms.uWearCol = uC; sh.uniforms.tWear = { value: wearNoise() };
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aWear; varying float vWear; varying vec2 vWuv;').replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvWear = aWear; vWuv = uv;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWear; varying vec2 vWuv; uniform float uWear; uniform vec3 uWearCol; uniform sampler2D tWear; float wearK = 0.0;')
-        .replace('#include <map_fragment>', '#include <map_fragment>\n\twearK = smoothstep( 0.6, 0.86, vWear * ( 0.22 + texture2D( tWear, vWuv * 4.3 ).r * 1.2 ) ) * uWear;\n\tdiffuseColor.rgb = mix( diffuseColor.rgb, uWearCol, wearK );')
-        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = mix( roughnessFactor, 0.32, wearK );')
-        .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor = mix( metalnessFactor, 1.0, wearK );');
-    };
-    m.customProgramCacheKey = () => 'gunwear';
-  }
+  const W = wear > 0 && !o.flatShading && !o.transparent, uW = { value: wear }, uC = { value: new THREE.Color(wearCol) };
+  m.userData.rim = { value: new THREE.Color(0, 0, 0) }; // 윤곽광: 비스듬히 보이는 가장자리가 스킨 색으로 빛남 (스킨이 정함)
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uRim = m.userData.rim;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += uRim * pow( 1.0 - saturate( abs( dot( normal, normalize( vViewPosition ) ) ) ), 2.6 );');
+    if (!W) return;
+    sh.uniforms.uWear = uW; sh.uniforms.uWearCol = uC; sh.uniforms.tWear = { value: wearNoise() };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aWear; varying float vWear; varying vec2 vWuv;').replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvWear = aWear; vWuv = uv;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWear; varying vec2 vWuv; uniform float uWear; uniform vec3 uWearCol; uniform sampler2D tWear; float wearK = 0.0;')
+      .replace('#include <map_fragment>', '#include <map_fragment>\n\twearK = smoothstep( 0.6, 0.86, vWear * ( 0.22 + texture2D( tWear, vWuv * 4.3 ).r * 1.2 ) ) * uWear;\n\tdiffuseColor.rgb = mix( diffuseColor.rgb, uWearCol, wearK );')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = mix( roughnessFactor, 0.32, wearK );')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor = mix( metalnessFactor, 1.0, wearK );');
+  };
+  m.customProgramCacheKey = () => (W ? 'gunwear+rim' : 'gunrim');
   return m;
 }
 // 총에 비칠 주변 풍경(밝은 하늘, 어두운 땅, 조명판 몇 개)을 작게 만들어 반사에 쓴다
@@ -473,7 +476,7 @@ const KMATS = {
   ice: () => ({ crystal: { color: 0xcdefff, metalness: 0.1, roughness: 0.04, transparent: true, opacity: 0.74, emissive: 0x3a8fd0, emissiveIntensity: 0.4, flatShading: true } }),
   neon: () => ({ glow: { color: 0x19e3ff, emissive: 0x19e3ff, emissiveIntensity: 1.7, roughness: 0.3 }, glow2: { color: 0xff3df0, emissive: 0xff3df0, emissiveIntensity: 1.5, roughness: 0.3 } }),
   lava: () => ({ core: { color: 0xffb040, emissive: 0xff5a00, emissiveIntensity: 1.9, roughness: 0.6 }, horn: { color: 0x241a16, metalness: 0.25, roughness: 0.55, flatShading: true } }),
-  gold: () => ({ gem: { color: 0xe0102c, metalness: 0.3, roughness: 0.04, emissive: 0x80000e, emissiveIntensity: 0.6, flatShading: true } }),
+  gold: () => ({ gem: { color: 0xff1a3c, metalness: 0.3, roughness: 0.04, emissive: 0xc00018, emissiveIntensity: 1.3, flatShading: true } }),
   galaxy: () => ({ star: { color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 1.6 }, planet: { color: 0xff9ad8, emissive: 0x8030ff, emissiveIntensity: 0.5, roughness: 0.4 }, portal: { color: 0xb060ff, emissive: 0xa040ff, emissiveIntensity: 1.6, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false } }),
   aurora: (M) => ({ prism: { color: 0xffffff, map: M.body.map, metalness: 0.55, roughness: 0.05, transparent: true, opacity: 0.66, emissive: 0xffffff, emissiveMap: M.body.map, emissiveIntensity: 0.4, side: THREE.DoubleSide } }),
   platinum: () => ({ holo: { color: 0x9fe6ff, emissive: 0x3ab8ff, emissiveIntensity: 2.2, roughness: 0.3 }, trim: { color: 0xffd27a, metalness: 1, roughness: 0.14 } }),
@@ -486,6 +489,7 @@ const KMATS = {
   halloween: () => ({ pumpkin: { color: 0xc94f08, metalness: 0.05, roughness: 0.6 }, glow: { color: 0xffe070, emissive: 0xffc030, emissiveIntensity: 1.8, roughness: 0.6 }, wing: { color: 0x17101f, metalness: 0.35, roughness: 0.45, side: THREE.DoubleSide }, stem: { color: 0x4d6b2a, metalness: 0, roughness: 0.8 }, eye: { color: 0xb6ff3a, emissive: 0x9dff3a, emissiveIntensity: 1.5, roughness: 0.3 } }),
 };
 const SETS = new Map(), animated = [], bundleSets = [];
+const RIMK = { sakura: 0.3, ice: 0.45, aurora: 0.6, halloween: 0.5, tiger: 0.55, diamond: 0.4, platinum: 0.5, orion: 0.45, gold: 0.8 };
 let pulseAt = -9;
 // aw = 각성(스킨 5레벨): 총열과 몸통에 빛줄기가 흐르고 빛이 더 세게 맥박침
 function matsFor(skin, aw) {
@@ -499,7 +503,11 @@ function matsFor(skin, aw) {
     if (def.accent) M.accent = mk(def.accent);
     M.body = body;
     if (KMATS[id]) for (const [k, o] of Object.entries(KMATS[id](M))) M[k] = mk(o);
-    if (KITS[id] && KITS[id].fx.bundle) { M._glow = Object.keys(KMATS[id](M)).map((k) => M[k]).filter((m) => m.emissiveIntensity > 0 && m.emissive && m.emissive.getHex()).map((m) => [m, m.emissiveIntensity]); bundleSets.push(M); }
+    if (KITS[id] && KITS[id].fx.bundle) { M._glow = Object.keys(KMATS[id] ? KMATS[id](M) : {}).map((k) => M[k]).filter((m) => m.emissiveIntensity > 0 && m.emissive && m.emissive.getHex()).map((m) => [m, m.emissiveIntensity]); bundleSets.push(M); }
+    { // 윤곽광: 유료 스킨은 테마 색으로 가장자리가 은은히 빛나고, 무료 스킨은 아주 약하게
+      const th = new THREE.Color((skinFx(skin) || {}).flash || 0xbfc8d4), paid = !SKINS[skin].free, rk = RIMK[id] ?? 1; // 밝은 겉면은 윤곽광을 줄여 하얗게 뜨지 않게
+      M._rims = [[body, paid ? 0.3 * rk : 0.08], [body2, paid ? 0.2 * rk : 0.05], [metal, paid ? 0.26 * rk : 0.05], [M.bolt, paid ? 0.2 * rk : 0], [grip, paid ? 0.1 * rk : 0]].map(([m, k]) => { m.userData.rim.value.copy(th).multiplyScalar(k); return [m, m.userData.rim.value.clone()]; });
+    }
     if (def.anim) animated.push({ M, f: def.anim });
     if (aw) {
       const col = (skinFx(skin) || {}).flash || 0xffe9a8, v = veins(), own = !!body.emissiveMap;
@@ -518,6 +526,7 @@ export function tickSkins(t) {
   for (const M of bundleSets) { // 얼티밋 스킨: 빛나는 부품이 숨 쉬듯 일렁임
     M._glow.forEach(([m, b], i) => { m.emissiveIntensity = b * (0.82 + 0.22 * Math.sin(t * 3.1 + i * 1.7) + k * 2.6); });
     if (k && M.body.emissiveMap) M.body.emissiveIntensity *= 1 + k * 2;
+    if (M._rims) for (const [m, c] of M._rims) m.userData.rim.value.copy(c).multiplyScalar(1 + 0.18 * Math.sin(t * 2.2) + k * 4);
   }
 }
 // 얼티밋 스킨을 꺼낼 때 빛이 번쩍이게
@@ -855,7 +864,7 @@ function flower(b, M, f, u, x, r) { // 옆면에 붙는 다섯 잎 꽃
 const KITS = {
   // 탄소 섬유 — 경주차: 삼각 뼈대, 날개, 빨간 속통
   carbon: {
-    fx: { tracer: 0xff5a4a, flash: 0xff9a80 },
+    fx: { tracer: 0xff5a4a, flash: 0xff9a80, sfx: 'race', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, n = Math.max(2, Math.round(L / 0.055)), st = (L - 0.024) / n, m = 0.011, holes = [], uc = R.uc ?? (u0 + u1) / 2;
       for (let i = 0; i < n; i++) { const a = f0 + 0.012 + i * st, c = a + st - 0.008; holes.push([[a, u0 + m], [c, u0 + m], [(a + c) / 2, u1 - m]]); if (i < n - 1) holes.push([[a + st / 2, u1 - m], [c + st / 2, u1 - m], [(a + c + st) / 2, u0 + m]]); }
@@ -893,7 +902,7 @@ const KITS = {
   },
   // 호랑이 — 맹수: 갈기, 발톱, 송곳니 총구, 빛나는 눈
   tiger: {
-    fx: { tracer: 0xffa02a, flash: 0xffb040 },
+    fx: { tracer: 0xffa02a, flash: 0xffb040, sfx: 'beast', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2;
       b.prof([[f0, u0], [f0, u1], [f1 - 0.03, u1], [f1 + 0.014, um + 0.012], [f1 + 0.014, um - 0.01], [f1 - 0.02, u0]], w, M.recv, 0.009, 0, { r: 0.008 });
@@ -932,7 +941,7 @@ const KITS = {
   },
   // 벚꽃 — 둥근 몸, 꽃 장식, 꽃잎 총구, 술
   sakura: {
-    fx: { tracer: 0xff8fc0, flash: 0xffa6cf },
+    fx: { tracer: 0xff8fc0, flash: 0xffa6cf, sfx: 'petal', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2;
       const kf = (f) => 1 - 0.2 * ((f - f0) / L), sx = (f, du) => hw * kf(f) * Math.sqrt(Math.max(0.05, 1 - (du / (hh * kf(f))) ** 2));
@@ -968,7 +977,7 @@ const KITS = {
   },
   // 빙결 — 반투명 얼음 결정이 돋아남
   ice: {
-    fx: { tracer: 0x9fe6ff, flash: 0xbfeeff },
+    fx: { tracer: 0x9fe6ff, flash: 0xbfeeff, sfx: 'frost', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2;
       b.prof([[f0, u0 + 0.008], [f0, u1], [f1, u1], [f1 + 0.022, um + 0.008], [f1, u0 + 0.014], [f0 + L * 0.5, u0]], w * 0.84, M.recv, 0.008);
@@ -999,7 +1008,7 @@ const KITS = {
   },
   // 네온 — 뼈대만 남긴 틀 속에 빛나는 에너지 관
   neon: {
-    fx: { tracer: 0x19e3ff, flash: 0x7af4ff },
+    fx: { tracer: 0x19e3ff, flash: 0x7af4ff, sfx: 'cyber', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, uc = R.uc ?? (u0 + u1) / 2, rr = Math.max(0.006, Math.min(0.0125, Math.min(u1 - uc, uc - u0) - 0.012));
       for (const s of [-1, 1]) for (const u of [u0 + 0.004, u1 - 0.004]) b.box(0.007, 0.008, L, (f0 + f1) / 2, u, M.recv, s * (hw - 0.0035));
@@ -1034,7 +1043,7 @@ const KITS = {
   },
   // 용암 — 갈라진 바위 덩어리와 빛나는 속, 뿔
   lava: {
-    fx: { tracer: 0xff7a1a, flash: 0xff6a20 },
+    fx: { tracer: 0xff7a1a, flash: 0xff6a20, sfx: 'magma', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2;
       b.ecyl(hw * 0.62, hh * 0.72, f0, L, um, M.core, 1, 10);
@@ -1068,7 +1077,7 @@ const KITS = {
   },
   // 황금 — 왕실: 둥근 통과 띠, 깃털 날개, 붉은 보석, 왕관 총구
   gold: {
-    fx: { tracer: 0xffd84a, flash: 0xffe27a },
+    fx: { tracer: 0xffd84a, flash: 0xffe27a, sfx: 'royal', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2;
       b.ecyl(hw * 0.96, hh, f0, L, um, M.recv, 0.86, 12); b.ecyl(hw * 0.83, hh * 0.86, f1 - 0.001, 0.02, um, M.bolt, 0.6, 12);
@@ -1102,7 +1111,7 @@ const KITS = {
   },
   // 은하 — 도는 궤도 고리, 초승달 개머리판, 차원문 총구, 별
   galaxy: {
-    fx: { tracer: 0xc08cff, flash: 0xd0a0ff },
+    fx: { tracer: 0xc08cff, flash: 0xd0a0ff, sfx: 'cosmic', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, fm = (f0 + f1) / 2;
       b.ecyl(hw, hh, f0 + 0.012, L - 0.03, um, M.recv, 1, 20); b.ball(1, [f1 - 0.018, um, 0], M.recv, [0.034, hh, hw], 16); b.ball(1, [f0 + 0.012, um, 0], M.recv, [0.016, hh, hw], 16);
@@ -1146,7 +1155,7 @@ const KITS = {
   },
   // 오로라 — 반투명 프리즘 날이 감싼 크롬 몸
   aurora: {
-    fx: { tracer: 0xffffff, flash: 0xd8f4ff, rainbow: true },
+    fx: { tracer: 0xffffff, flash: 0xd8f4ff, rainbow: true, sfx: 'prism', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, hh = (u1 - u0) / 2, uc = R.uc ?? (u0 + u1) / 2, rc = Math.max(0.008, Math.min(0.019, Math.min(u1 - uc, uc - u0) - 0.004));
       b.cyl(rc, rc, f0, L, uc, M.steel, 0, 16); b.cyl(rc + 0.004, rc + 0.004, f0, 0.014, uc, M.bolt, 0, 16); b.cyl(rc + 0.004, rc + 0.003, f1 - 0.014, 0.014, uc, M.bolt, 0, 16);
@@ -1176,7 +1185,7 @@ const KITS = {
   },
   // 할로윈 — 속에서 불빛이 새는 호박등 총열덮개, 박쥐 날개 개머리판, 호박 총구, 낫 모양 칼
   halloween: {
-    fx: { tracer: 0xa64dff, flash: 0xff8a1a },
+    fx: { tracer: 0xa64dff, flash: 0xff8a1a, sfx: 'spooky', bundle: true },
     hg(b, M, R) {
       const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, bv = Math.min(0.005, hh * 0.22);
       const out = [[f0, u0 + hh * 0.3], [f0, u1 - hh * 0.3], [f0 + L * 0.06, u1], [f1 - L * 0.06, u1], [f1, u1 - hh * 0.3], [f1, u0 + hh * 0.3], [f1 - L * 0.06, u0], [f0 + L * 0.06, u0]];
@@ -1501,6 +1510,57 @@ const KITS = {
     },
   },
 };
+// ───────────── 기존 형태 키트 보강: 빛나는 부품과 도는 장식 (얼티밋급으로) ─────────────
+const KPLUS_MATS = {
+  carbon: { led: { color: 0xff6050, emissive: 0xff2010, emissiveIntensity: 2.6, roughness: 0.3 }, fan: { color: 0x2a2c30, metalness: 1, roughness: 0.25 } },
+  tiger: {}, neon: {}, lava: {}, halloween: {}, galaxy: {},
+  sakura: { lantern: { color: 0xffd0e0, emissive: 0xff5a9a, emissiveIntensity: 1.8, roughness: 0.6 } },
+  ice: { frost: { color: 0xc8f0ff, emissive: 0x4ac8ff, emissiveIntensity: 2.2, roughness: 0.2 } },
+  gold: { halo: { color: 0xffe08a, emissive: 0xffb020, emissiveIntensity: 1.4, metalness: 1, roughness: 0.1 } },
+  aurora: { glint: { color: 0xc8fff0, emissive: 0x6affc8, emissiveIntensity: 2, roughness: 0.2 } },
+};
+for (const [id, mats] of Object.entries(KPLUS_MATS)) { const f0 = KMATS[id]; KMATS[id] = (M) => ({ ...(f0 ? f0(M) : {}), ...mats }); }
+const spinAt = (b, f, u, sp, fn) => { const prev = b.cur; if (prev === '') b.part('spin' + ++spinN, [f, u, b.shift], sp); fn(); b.cur = prev; };
+const KPLUS = {
+  carbon: {
+    hg(b, M, R) { const { f0, f1, u0, w } = R, L = f1 - f0; for (const s of [-1, 1]) { b.box(0.0014, 0.0026, L * 0.7, f0 + L * 0.45, u0 + 0.008, M.led, s * (w / 2 + 0.0035)); for (let i = 0; i < 3; i++) b.box(0.0014, 0.004, 0.004, f1 - 0.012 - i * 0.008, u0 + 0.016, M.led, s * (w / 2 + 0.0035)); } },
+    muzzle(b, M, f, u, r, len, tip) { spinAt(b, f + len * 0.1, u, 9, () => { b.radial(6, () => new THREE.BoxGeometry(r * 0.25, r * 1.1, 0.002).rotateY(0.6).translate(0, r * 0.9, 0), f + len * 0.1, u, M.fan); }); b.tor(r * 1.55, r * 0.08, [f + len * 0.1, u, 0], M.led, 0, 0, 6.2832, 20); },
+    stock(b, M, R) { const { end, top, bot, w } = R; b.box(w + 0.004, (top - bot) * 0.5, 0.003, end - 0.001, (top + bot) / 2, M.led); },
+  },
+  tiger: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2; for (const s of [-1, 1]) for (let i = 0; i < 3; i++) b.box(0.0014, hh * 1.3, 0.0022, f0 + L * (0.42 + i * 0.07), um, M.eye, s * (w / 2 + 0.006), 0.5); },
+  },
+  sakura: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, L = f1 - f0, um = (u0 + u1) / 2, fm = f0 + L / 2, RR = Math.max(w / 2, (u1 - u0) / 2) + 0.016; spinAt(b, fm, um, 0.9, () => { for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.2832; b.ball(0.006, [fm + Math.sin(a * 2) * L * 0.25, um + Math.cos(a) * RR, Math.sin(a) * RR], M.petal, [1.2, 0.35, 1], 7); } }); },
+    muzzle(b, M, f, u, r, len) { b.rod([f + len * 0.4, u - r, 0], [f + len * 0.42, u - r - 0.02, 0], 0.0012, 0.0012, M.twig, 4); b.ball(0.008, [f + len * 0.42, u - r - 0.028, 0], M.lantern, [1, 1.25, 1], 10); },
+  },
+  ice: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, L = f1 - f0, um = (u0 + u1) / 2; for (const s of [-1, 1]) b.box(0.0014, 0.003, L * 0.8, f0 + L / 2, um, M.frost, s * (w / 2 + 0.0012)); },
+    muzzle(b, M, f, u, r, len, tip) { spinAt(b, tip + 0.004, u, 1.6, () => { b.radial(6, () => new THREE.BoxGeometry(r * 0.16, r * 1.6, 0.002).translate(0, r * 1.2, 0), tip + 0.004, u, M.frost); b.radial(6, () => new THREE.OctahedronGeometry(r * 0.22, 0).translate(0, r * 2.05, 0), tip + 0.004, u, M.crystal); }); },
+  },
+  neon: {
+    muzzle(b, M, f, u, r, len, tip) { spinAt(b, tip, u, -3, () => { b.tor(r * 1.9, r * 0.07, [tip, u, 0], M.glow, 0, 0, 6.2832, 28); b.radial(8, () => new THREE.BoxGeometry(r * 0.12, r * 0.45, 0.002).translate(0, r * 2.15, 0), tip, u, M.glow2); }); },
+  },
+  lava: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, L = f1 - f0, um = (u0 + u1) / 2, fm = f0 + L * 0.5, RR = Math.max(w / 2, (u1 - u0) / 2) + 0.01; spinAt(b, fm, um, 1.4, () => { b.tor(RR, 0.002, [fm, um, 0], M.core, 0.4, 0, 6.2832, 30); for (let i = 0; i < 3; i++) { const a = i * 2.094; b.lump(0.0035, [fm, um + Math.cos(a) * RR, Math.sin(a) * RR], M.core, [1, 1, 1], i); } }); },
+    muzzle(b, M, f, u, r, len) { for (let i = 0; i < 3; i++) b.ball(r * (0.22 - i * 0.05), [f + len * (0.3 + i * 0.12), u - r * (1.4 + i * 0.35), 0], M.core, [0.8, 1.4, 0.8], 8); },
+  },
+  gold: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, L = f1 - f0, um = (u0 + u1) / 2, fm = f0 + L * 0.3, RR = Math.max(w / 2, (u1 - u0) / 2) + 0.014; spinAt(b, fm, um, 0.7, () => { b.tor(RR, 0.0022, [fm, um, 0], M.halo, 0, 0, 6.2832, 32); for (let i = 0; i < 4; i++) { const a = (i / 4) * 6.2832 + 0.4; b.gem(0.0042, [fm, um + Math.cos(a) * RR, Math.sin(a) * RR], M.gem); } }); },
+  },
+  galaxy: {},
+  aurora: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, L = f1 - f0, um = (u0 + u1) / 2, fm = f0 + L / 2, RR = Math.max(w / 2, (u1 - u0) / 2) + 0.02; spinAt(b, fm, um, 0.8, () => { for (let i = 0; i < 5; i++) { const a = (i / 5) * 6.2832, x = Math.sin(a) * RR, y = um + Math.cos(a) * RR; b.crys([fm - 0.01, y, x], [fm + 0.012, y + Math.cos(a) * 0.006, x + Math.sin(a) * 0.006], 0.004, M.prism, 4); b.ball(0.0018, [fm + 0.012, y, x], M.glint, [1, 1, 1], 6); } }); },
+  },
+  halloween: {
+    muzzle(b, M, f, u, r, len, tip) { const fm = f + len * 0.5, RR = r * 2.6; spinAt(b, fm, u, 2.2, () => { for (let i = 0; i < 3; i++) { const a = (i / 3) * 6.2832, y = u + Math.cos(a) * RR, x = Math.sin(a) * RR, k = r * 0.08; b.prof([[fm - 9 * k, y + 2 * k], [fm - 4 * k, y - 1 * k], [fm, y + 1.5 * k], [fm + 4 * k, y - 1 * k], [fm + 9 * k, y + 2 * k], [fm + 5 * k, y - 3 * k], [fm, y - 1.5 * k], [fm - 5 * k, y - 3 * k]], 0.002, M.wing, 0, x); b.ball(k * 0.8, [fm, y, x + 0.0012], M.eye, [1, 1, 0.6], 6); } }); },
+  },
+};
+for (const [id, P] of Object.entries(KPLUS)) {
+  const K = KITS[id];
+  for (const part of ['hg', 'stock', 'orn']) if (P[part] && K[part]) { const o = K[part]; K[part] = (b, M, R) => { o(b, M, R); P[part](b, M, R); }; }
+  if (P.muzzle && K.muzzle) { const o = K.muzzle; K.muzzle = (b, M, f, u, r, len) => { const tip = o(b, M, f, u, r, len); P.muzzle(b, M, f, u, r, len, tip); return tip; }; }
+}
 export function skinFx(skin) { const id = SKINS[skin] && SKINS[skin].id, k = KITS[id]; return k ? k.fx : FX_FREE[id] || null; }
 
 // ───────────── 소총 계열: 돌격소총 / 소음소총(supp) / 점사소총(burst) / 지정사수소총(dmr) / 경기관총(lmg) / 중기관총(hmg) ─────────────
