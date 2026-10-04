@@ -307,6 +307,16 @@ function impactFx(kind, p, n, col) {
   else if (kind === 'reactor') { glow(x, y, z, 0xffb050, 0.12, 0.7, 0.26, { c1: 0xff3000 }); emitSpark(p, n, 8, 4, 0xff7a20, 0.45, 8); }
   else if (kind === 'star') { for (let i = 0; i < 3; i++) emitSpark(p, n, 3, 3.5, STARC[(Math.random() * 5) | 0], 0.45, 2); spark(x, y, z, 0.4, col, 0.12); }
   else if (kind === 'void') { glow(x, y, z, 0xa040ff, 0.6, 0.04, 0.26); emitSpark(p, n, 5, 1.6, 0xb05cff, 0.4, -2); }
+  else if (kind === 'race') { emitSpark(p, n, 8, 6, 0xff5a4a, 0.3, 10, 0.4); spark(x, y, z, 0.45, 0xff3020, 0.1); }
+  else if (kind === 'beast') { emitSpark(p, n, 6, 4, 0xffa02a, 0.35, 8); emitChip(p, n, 3, 2, 0x17110c, 0.5, 8); glow(x, y, z, 0xb6ff3a, 0.05, 0.3, 0.14); }
+  else if (kind === 'petal') { emitChip(p, n, 6, 1.6, 0xffc0d8, 1.2, 1.5, 1); spark(x, y, z, 0.4, 0xff8ab8, 0.12); }
+  else if (kind === 'frost') { emitChip(p, n, 6, 3, 0xd8f4ff, 0.7, 9); glow(x, y, z, 0x8fd8ff, 0.08, 0.5, 0.2); }
+  else if (kind === 'cyber') { emitSpark(p, n, 5, 4, 0x19e3ff, 0.3, 6); emitSpark(p, n, 4, 4, 0xff3df0, 0.3, 6); glow(x, y, z, 0x19e3ff, 0.05, 0.35, 0.12); }
+  else if (kind === 'magma') { glow(x, y, z, 0xffb050, 0.15, 0.6, 0.3, { c1: 0xc02000 }); emitSpark(p, n, 7, 3, 0xff7a1a, 0.6, 9); puff([x, y, z], [n[0] * 0.5, 0.6, n[2] * 0.5], 0x2a2018, 0.5, 0.6, 0.5); }
+  else if (kind === 'royal') { emitSpark(p, n, 9, 4.5, 0xffd84a, 0.45, 9); spark(x, y, z, 0.45, 0xfff0a0, 0.12); }
+  else if (kind === 'cosmic') { glow(x, y, z, 0xc08cff, 0.4, 0.04, 0.24); for (let i = 0; i < 2; i++) emitSpark(p, n, 3, 2.5, [0x7a3cff, 0xff46be][i], 0.45, 1); }
+  else if (kind === 'prism') { for (let i = 0; i < 3; i++) emitSpark(p, n, 3, 3.5, STARC[(Math.random() * 5) | 0], 0.4, 4); glow(x, y, z, 0xffffff, 0.05, 0.35, 0.14); }
+  else if (kind === 'spooky') { emitSpark(p, n, 5, 3, 0xa64dff, 0.4, 3); emitSpark(p, n, 4, 3, 0xff8a1a, 0.4, 3); glow(x, y, z, 0x9dff3a, 0.05, 0.3, 0.16); }
 }
 function muzzleFx(kind, a, d, col) { // 총구에서 스킨 색 불티가 튐 (3인칭·1인칭 공통, 세계 좌표)
   if (!kind) return;
@@ -326,6 +336,16 @@ function bundleKill(kind, x, y, z, col) {
     glow(x, y, z, 0xa040ff, 2.6, 0.05, 0.34); emitSpark([x, y, z], up, 16, 1.2, 0xb05cff, 0.35, -6, 1);
     setTimeout(() => { glow(x, y, z, 0xd08aff, 0.1, 2.6, 0.32, { c1: 0x6020ff }); shock(x, gy, z, 0xa040ff, 5, 0.45); emitSpark([x, y, z], up, 36, 7, 0xb05cff, 0.8, 4, 1); emitSpark([x, y, z], up, 16, 6, 0xff40b0, 0.7, 4, 1); puff([x, y, z], [0, 0.6, 0], 0x14081e, 2, 1.2, 0.7); }, 330);
   }
+  else if (kind === 'race') { shock(x, gy, z, 0xff3020, 4.5, 0.4); emitSpark([x, y, z], [1, 0.1, 0], 30, 9, 0xff5a4a, 0.5, 8, 0.3); emitSpark([x, y, z], [-1, 0.1, 0], 30, 9, 0xffffff, 0.5, 8, 0.3); for (let i = 0; i < 3; i++) glow(x, y - 0.4 + i * 0.4, z, 0xff3020, 0.6, 0.05, 0.3, { wait: i * 0.04 }); }
+  else if (kind === 'beast') { glow(x, y, z, 0xffa02a, 0.3, 2.2, 0.3, { c1: 0x803000 }); for (const sx of [-0.25, 0, 0.25]) emitSpark([x + sx, y + 0.4, z], [0, -1, 0], 10, 6, 0xffa02a, 0.5, 4, 0.15); emitChip([x, y, z], up, 20, 4, 0x17110c, 1, 8, 1); glow(x, y + 0.2, z, 0xb6ff3a, 0.4, 0.05, 0.6); }
+  else if (kind === 'petal') { emitChip([x, y + 0.4, z], up, 50, 3.2, 0xffc0d8, 2.6, 0.9, 1); emitChip([x, y + 0.4, z], up, 20, 3, 0xffffff, 2.4, 0.9, 1); glow(x, y, z, 0xff8ab8, 0.3, 2, 0.4); shock(x, gy, z, 0xff9ac0, 3.5, 0.6); }
+  else if (kind === 'frost') { shock(x, gy, z, 0x8fd8ff, 4, 0.5); emitChip([x, y, z], up, 40, 5, 0xd8f4ff, 1.2, 8, 1); glow(x, y, z, 0xe0f8ff, 0.3, 2.4, 0.3); puff([x, gy + 0.3, z], [0, 0.4, 0], 0xe8f6ff, 2.2, 1.2, 0.5); }
+  else if (kind === 'cyber') { shock(x, gy, z, 0x19e3ff, 4, 0.4); shock(x, gy + 0.02, z, 0xff3df0, 2.4, 0.5); for (let i = 0; i < 6; i++) glow(x, y - 0.8 + i * 0.3, z, i % 2 ? 0xff3df0 : 0x19e3ff, 0.9, 0.1, 0.25, { wait: i * 0.04 }); emitSpark([x, y, z], up, 30, 6, 0x19e3ff, 0.6, 5, 1); }
+  else if (kind === 'magma') { glow(x, y, z, 0xffe0a0, 0.4, 3, 0.45, { c1: 0xb02000 }); shock(x, gy, z, 0xff5a10, 5, 0.6); emitSpark([x, y, z], up, 44, 7, 0xff7a1a, 1.2, 10, 1); puff([x, y + 0.5, z], [0, 1.6, 0], 0x1c1612, 2.4, 1.8, 0.7); }
+  else if (kind === 'royal') { emitSpark([x, y + 0.3, z], up, 50, 6, 0xffd84a, 1.3, 9, 1); glow(x, y + 0.6, z, 0xfff0a0, 0.3, 1.6, 0.6, { v: [0, 1.2, 0] }); shock(x, gy, z, 0xffd84a, 4, 0.5); for (let i = 0; i < 5; i++) setTimeout(() => spark(x + (Math.random() - 0.5), y + 0.6 + Math.random() * 0.6, z + (Math.random() - 0.5), 0.6, 0xff2040, 0.15), i * 70); }
+  else if (kind === 'cosmic') { glow(x, y, z, 0xc08cff, 2.4, 0.05, 0.35); setTimeout(() => { glow(x, y, z, 0xff46be, 0.1, 2.2, 0.35, { c1: 0x4020ff }); emitSpark([x, y, z], up, 30, 6, 0xffffff, 1, 2, 1); emitSpark([x, y, z], up, 20, 5, 0x7a3cff, 1, 2, 1); shock(x, gy, z, 0xc08cff, 4.5, 0.5); }, 300); }
+  else if (kind === 'prism') { for (let i = 0; i < 5; i++) { emitSpark([x, y, z], up, 10, 6, STARC[i], 0.9, 4, 1); glow(x, y + 0.2 * i - 0.4, z, STARC[i], 0.7, 0.05, 0.35, { wait: i * 0.05 }); } shock(x, gy, z, 0xffffff, 4, 0.5); }
+  else if (kind === 'spooky') { glow(x, y, z, 0x9dff3a, 0.3, 2.2, 0.4, { c1: 0x4a1080 }); emitChip([x, y + 0.3, z], up, 24, 4, 0x07050a, 1.4, 2, 1); emitSpark([x, y, z], up, 24, 4, 0xff8a1a, 0.9, 2, 1); glow(x, y + 0.3, z, 0xa64dff, 0.6, 1.4, 1.2, { v: [0, 1.4, 0], drag: 0.6 }); shock(x, gy, z, 0xa64dff, 3.5, 0.6); }
 }
 function skinEmblem(sk) { // 내가 얼티밋 스킨으로 처치하면 조준점 아래에 스킨 엠블럼이 튀어나옴
   const e = $('skKill'); if (!e || !SKINS[sk]) return;
@@ -1600,6 +1620,8 @@ const CATN = { melee: '근접', side: '보조', smg: '기관단총', sg: '샷건
 let lockerOpen = false, lkW = 13, lkSkin = 0, lkYaw = 0.7, lkDrag = null, lkGun = null, lkKey = '', lkSpin = true, lkTab = 'skin';
 const lkGroup = new THREE.Group();
 lkGroup.visible = false; vmScene.add(lkGroup);
+const lkGlow = new THREE.PointLight(0xffffff, 0, 3, 2); lkGlow.visible = false; vmScene.add(lkGlow); // 무기고: 스킨 색으로 총 아래를 물들이는 빛
+const lkTint = new THREE.Color(1, 1, 1), lkTheme = new THREE.Color(1, 1, 1);
 const lkBack = (() => { // 무기고 배경: 총 뒤로 은은한 조명과 바닥 빛
   const cv = document.createElement('canvas'); cv.width = cv.height = 256;
   const g = cv.getContext('2d'), rg = g.createRadialGradient(128, 116, 0, 128, 116, 128);
@@ -1616,6 +1638,7 @@ function lkBuild() { // 가운데에 띄울 모델
   if (lkGun) lkGroup.remove(lkGun);
   const info = makeGun(lkW, lkSkin, myParts[lkW], myLv(lkSkin)), box3 = gunBox(info.group), c = box3.getCenter(new THREE.Vector3()), sz = box3.getSize(new THREE.Vector3());
   info.group.position.sub(c);
+  { const f = skinFx(lkSkin); lkTheme.setHex(f ? f.flash : 0xbfd0e8); lkTint.setRGB(1, 1, 1).lerp(lkTheme, f ? 0.65 : 0.1); }
   lkGun = new THREE.Group(); lkGun.add(info.group); lkGun.userData.len = Math.max(sz.z, sz.y * 1.7, 0.3);
   lkGroup.add(lkGun);
 }
@@ -1992,6 +2015,7 @@ function frame(now) {
   if (!booted) { booted = true; requestAnimationFrame(() => { const b = $('boot'); if (b) { b.classList.add('done'); setTimeout(() => b.remove(), 600); } }); } // 첫 화면이 그려지면 시작 화면을 걷음
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
+  lkGlow.visible = false; vmRim.color.set(0xcfe2ff); // 무기고에서 물들인 빛은 매 프레임 되돌림 (무기고면 아래에서 다시 칠함)
   if (!joined && paintUI.open) { // 캐릭터 그리기: 오른쪽에 그린 그림을 입은 캐릭터를 돌려 보여 줌
     const r = $('ptPrev').getBoundingClientRect(), asp = vmCam.aspect;
     const d = Math.min(9, Math.max(2.1 / (1.108 * Math.max(0.2, r.height / VH)), 1.05 / (1.108 * asp * Math.max(0.08, r.width / VW))));
@@ -2013,7 +2037,10 @@ function frame(now) {
     lkGroup.visible = true; vm.visible = false;
     { const D = d + 2.6, k = D / d; lkBack.position.set(lkGroup.position.x * k, lkGroup.position.y * k, -D); lkBack.scale.setScalar(D * 1.9); lkBack.visible = true; }
     tickSkins(now / 1000);
-    uiLight(); present(drawVm, now, GRADE_UI);
+    uiLight();
+    vmRim.color.copy(lkTheme); vmRim.intensity = 3.2; lkBack.material.color.copy(lkTint).multiplyScalar(1.25);
+    lkGlow.visible = true; lkGlow.color.copy(lkTheme); lkGlow.intensity = 1.6 + Math.sin(now / 600) * 0.3; lkGlow.distance = d * 1.6; lkGlow.position.set(lkGroup.position.x, lkGroup.position.y - d * 0.18, lkGroup.position.z + d * 0.25);
+    present(drawVm, now, GRADE_UI);
     return;
   }
   if (!joined) {
