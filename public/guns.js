@@ -40,16 +40,57 @@ const H = {
     for (let i = 0; i < 5; i++) { const x = rnd() * s, y = rnd() * s; for (let r = 9; r > 1; r -= 2) { g.strokeStyle = 'rgba(55,26,8,.35)'; g.lineWidth = 1; g.beginPath(); g.ellipse(x, y, r * 2.2, r, 0, 0, 7); g.stroke(); } }
   }),
 };
+// 쇠 겉면: 얼룩·잔흠집·점. 재질 색에 곱해지므로 바탕은 회색(160)이고, 흠집은 그보다 밝게 드러남
+H.metalAlb = () => canvas(512, (g, s) => {
+  g.fillStyle = '#a0a0a0'; g.fillRect(0, 0, s, s);
+  wrap(g, s, () => {
+    for (let i = 0; i < 34; i++) { const x = rnd() * s, y = rnd() * s, r = 30 + rnd() * 90, d = rnd() < 0.6, rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, d ? 'rgba(40,40,44,.2)' : 'rgba(225,228,235,.12)'); rg.addColorStop(1, d ? 'rgba(40,40,44,0)' : 'rgba(225,228,235,0)'); g.fillStyle = rg; g.fillRect(x - r, y - r, r * 2, r * 2); }
+    for (let i = 0; i < 230; i++) { const x = rnd() * s, y = rnd() * s, a = (rnd() - 0.5) * (rnd() < 0.8 ? 0.5 : 3), l = 5 + rnd() * rnd() * 90; g.strokeStyle = rnd() < 0.72 ? `rgba(255,255,255,${0.1 + rnd() * 0.32})` : `rgba(20,20,22,${0.15 + rnd() * 0.3})`; g.lineWidth = 0.35 + rnd() * 0.7; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+    for (let i = 0; i < 520; i++) { g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,.16)' : 'rgba(0,0,0,.2)'; g.fillRect(rnd() * s, rnd() * s, 0.8 + rnd(), 0.8 + rnd()); }
+  });
+});
+// 플라스틱 겉면: 잔 알갱이와 손이 닿아 번들거리는 옅은 얼룩
+H.polyAlb = () => canvas(256, (g, s) => {
+  g.fillStyle = '#a0a0a0'; g.fillRect(0, 0, s, s);
+  wrap(g, s, () => {
+    for (let i = 0; i < 16; i++) { const x = rnd() * s, y = rnd() * s, r = 20 + rnd() * 50, rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, rnd() < 0.5 ? 'rgba(30,30,32,.16)' : 'rgba(230,230,235,.1)'); rg.addColorStop(1, 'rgba(128,128,128,0)'); g.fillStyle = rg; g.fillRect(x - r, y - r, r * 2, r * 2); }
+    for (let i = 0; i < 1500; i++) { g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.14)'; g.fillRect(rnd() * s, rnd() * s, 1 + rnd(), 1 + rnd()); }
+    for (let i = 0; i < 26; i++) { const x = rnd() * s, y = rnd() * s, a = rnd() * 6.28, l = 4 + rnd() * 26; g.strokeStyle = `rgba(255,255,255,${0.08 + rnd() * 0.14})`; g.lineWidth = 0.5 + rnd(); g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+  });
+});
+// 질감 바탕(160)에 곱해져도 원하는 색이 나오게 색을 올려 줌
+const over = (hex) => { const c = new THREE.Color(hex), k = 1 / 0.352; return c.setRGB(Math.min(1, c.r * k), Math.min(1, c.g * k), Math.min(1, c.b * k)); };
 const TEXC = {};
+const nStip = () => T('nStipple', () => normalOf(H.stipple(), 1.4, 9));
 const T = (k, f) => TEXC[k] || (TEXC[k] = f());
 
 // ───────────── 재질 ─────────────
 const allMats = new Set();
 let ENV = null, PQ = 2, PHYS = true;
+// 모서리 닳음: 둥글린 모서리(aWear = 1)에서 칠이 벗겨져 쇠가 드러나 보이게 한다. wear = 정도(0 이면 없음), wearCol = 드러나는 색
+const wearNoise = () => T('wearNoise', () => texOf(canvas(256, (g, s) => {
+  g.fillStyle = '#000'; g.fillRect(0, 0, s, s);
+  wrap(g, s, () => { for (let i = 0; i < 420; i++) { const x = rnd() * s, y = rnd() * s, r = 3 + rnd() * rnd() * 30, rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, `rgba(255,255,255,${0.25 + rnd() * 0.5})`); rg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = rg; g.fillRect(x - r, y - r, r * 2, r * 2); } });
+}), false, 1));
 function std(o) {
+  o = { ...o };
+  const wear = o.wear === undefined ? 0.55 : o.wear, wearCol = o.wearCol === undefined ? 0x9aa0a8 : o.wearCol; delete o.wear; delete o.wearCol;
   const phys = o.clearcoat !== undefined || o.iridescence !== undefined;
-  if (phys && !PHYS) { o = { ...o }; for (const k of ['clearcoat', 'clearcoatRoughness', 'iridescence', 'iridescenceIOR']) delete o[k]; }
-  const m = phys && PHYS ? new THREE.MeshPhysicalMaterial(o) : new THREE.MeshStandardMaterial(o); if (ENV) m.envMap = ENV; m.envMapIntensity = 1.35; allMats.add(m); return m;
+  if (phys && !PHYS) for (const k of ['clearcoat', 'clearcoatRoughness', 'iridescence', 'iridescenceIOR']) delete o[k];
+  const m = phys && PHYS ? new THREE.MeshPhysicalMaterial(o) : new THREE.MeshStandardMaterial(o); if (ENV) m.envMap = ENV; m.envMapIntensity = 1.5; allMats.add(m);
+  if (wear > 0 && !o.flatShading && !o.transparent) {
+    const uW = { value: wear }, uC = { value: new THREE.Color(wearCol) };
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uWear = uW; sh.uniforms.uWearCol = uC; sh.uniforms.tWear = { value: wearNoise() };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aWear; varying float vWear; varying vec2 vWuv;').replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvWear = aWear; vWuv = uv;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWear; varying vec2 vWuv; uniform float uWear; uniform vec3 uWearCol; uniform sampler2D tWear; float wearK = 0.0;')
+        .replace('#include <map_fragment>', '#include <map_fragment>\n\twearK = smoothstep( 0.6, 0.86, vWear * ( 0.22 + texture2D( tWear, vWuv * 4.3 ).r * 1.2 ) ) * uWear;\n\tdiffuseColor.rgb = mix( diffuseColor.rgb, uWearCol, wearK );')
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = mix( roughnessFactor, 0.32, wearK );')
+        .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor = mix( metalnessFactor, 1.0, wearK );');
+    };
+    m.customProgramCacheKey = () => 'gunwear';
+  }
+  return m;
 }
 // 총에 비칠 주변 풍경(밝은 하늘, 어두운 땅, 조명판 몇 개)을 작게 만들어 반사에 쓴다
 export function initGunEnv(renderer) {
@@ -58,7 +99,7 @@ export function initGunEnv(renderer) {
   const st = new THREE.CanvasTexture(sky); st.colorSpace = THREE.SRGBColorSpace;
   sc.add(new THREE.Mesh(new THREE.SphereGeometry(20, 24, 12), new THREE.MeshBasicMaterial({ map: st, side: THREE.BackSide })));
   const panel = (x, y, z, w, h, v) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(v, v, v * 0.95), side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); sc.add(m); };
-  panel(-8, 9, 6, 9, 5, 7); panel(9, 6, -4, 6, 6, 4); panel(0, 12, -9, 12, 3, 5); panel(-10, 2, -8, 3, 8, 2.5);
+  panel(-8, 9, 6, 10, 5, 9); panel(9, 6, -4, 6, 7, 5.5); panel(0, 12, -9, 14, 3, 7); panel(-10, 2, -8, 3, 9, 3.5); panel(4, 10, 8, 5, 2.4, 6); panel(11, 1.5, 6, 2, 7, 3);
   const pm = new THREE.PMREMGenerator(renderer);
   ENV = pm.fromScene(sc, 0.035).texture;
   pm.dispose(); st.dispose();
@@ -67,13 +108,13 @@ export function initGunEnv(renderer) {
 
 // 스킨과 상관없이 같은 재질
 const FIX = {
-  rubber: std({ color: 0x0f1012, metalness: 0, roughness: 0.95 }),
-  dark: std({ color: 0x08090a, metalness: 0, roughness: 1 }),
-  glass: std({ color: 0x1d4f86, metalness: 0.6, roughness: 0.08, emissive: 0x0a2440 }),
+  rubber: std({ wear: 0, color: 0x0f1012, metalness: 0, roughness: 0.95 }),
+  dark: std({ wear: 0, color: 0x08090a, metalness: 0, roughness: 1 }),
+  glass: std({ wear: 0, color: 0x1d4f86, metalness: 0.6, roughness: 0.08, emissive: 0x0a2440 }),
   lens: new THREE.MeshStandardMaterial({ color: 0x6fd0ff, metalness: 0.3, roughness: 0.05, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
-  brass: std({ color: 0xc9a04a, metalness: 1, roughness: 0.3 }),
-  glove: std({ color: 0x22252a, metalness: 0, roughness: 0.9 }),
-  gloveHard: std({ color: 0x15171a, metalness: 0.1, roughness: 0.6 }),
+  brass: std({ wear: 0, color: 0xc9a04a, metalness: 1, roughness: 0.3 }),
+  glove: std({ wear: 0, color: 0x22252a, metalness: 0, roughness: 0.9 }),
+  gloveHard: std({ wear: 0, color: 0x15171a, metalness: 0.1, roughness: 0.6 }),
   dot: new THREE.MeshBasicMaterial({ color: 0xff3b30 }),
   white: new THREE.MeshBasicMaterial({ color: 0xf2f2ee }),
   reticle: new THREE.MeshBasicMaterial({ map: (() => texOf(canvas(64, (g) => { g.strokeStyle = '#ff4030'; g.lineWidth = 3; g.beginPath(); g.arc(32, 32, 20, 0, 7); g.stroke(); g.fillStyle = '#ff4030'; g.beginPath(); g.arc(32, 32, 3.5, 0, 7); g.fill(); for (const [x, y, w, h] of [[30.5, 4, 3, 10], [30.5, 50, 3, 10], [4, 30.5, 10, 3], [50, 30.5, 10, 3]]) g.fillRect(x, y, w, h); }), true))(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
@@ -90,21 +131,22 @@ allMats.delete(FIX.lens);
 function baseMats() {
   const br = () => T('nBrushed', () => normalOf(H.brushed(), 0.6, 3)), sp = () => T('nStipple', () => normalOf(H.stipple(), 1.4, 9));
   const wood = () => T('wood', () => texOf(H.wood(), true, 2)), woodN = () => T('nWood', () => normalOf(H.wood(), 1.2, 2));
+  const ma = () => T('metalAlb', () => texOf(H.metalAlb(), true, 2)), pa = () => T('polyAlb', () => texOf(H.polyAlb(), true, 5));
   const ns = new THREE.Vector2(0.35, 0.35);
   return {
-    recv: std({ color: 0x3d424b, metalness: 0.78, roughness: 0.38, normalMap: br(), normalScale: ns }),
-    steel: std({ color: 0x2e3238, metalness: 0.92, roughness: 0.3, normalMap: br(), normalScale: ns }),
-    bolt: std({ color: 0xc2c7ce, metalness: 1, roughness: 0.22 }),
-    slide: std({ color: 0x8d949c, metalness: 0.9, roughness: 0.3, normalMap: br(), normalScale: ns }),
-    poly: std({ color: 0x2b2e33, metalness: 0, roughness: 0.84, normalMap: sp(), normalScale: new THREE.Vector2(0.5, 0.5) }),
-    furn: std({ color: 0x33373d, metalness: 0.05, roughness: 0.74, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
-    mag: std({ color: 0x444a52, metalness: 0.6, roughness: 0.45 }),
-    wood: std({ color: 0xffffff, map: wood(), metalness: 0, roughness: 0.42, normalMap: woodN(), normalScale: new THREE.Vector2(0.4, 0.4) }),
-    woodDark: std({ color: 0x9a8a80, map: wood(), metalness: 0, roughness: 0.5, normalMap: woodN(), normalScale: new THREE.Vector2(0.4, 0.4) }),
-    olive: std({ color: 0x5c6647, metalness: 0.05, roughness: 0.78, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
-    tan: std({ color: 0xb29868, metalness: 0.05, roughness: 0.76, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
-    gray: std({ color: 0x7a828b, metalness: 0.25, roughness: 0.6, normalMap: br(), normalScale: ns }),
-    accent: std({ color: 0xc8372d, metalness: 0.2, roughness: 0.5 }),
+    recv: std({ color: over(0x5a626d), map: ma(), metalness: 0.86, roughness: 0.42, roughnessMap: smudge(), normalMap: br(), normalScale: ns }),
+    steel: std({ color: over(0x24272c), map: ma(), metalness: 0.96, roughness: 0.3, roughnessMap: smudge(), normalMap: br(), normalScale: ns, wear: 0.7 }),
+    bolt: std({ color: 0xc8cdd4, metalness: 1, roughness: 0.2, roughnessMap: smudge(), wear: 0 }),
+    slide: std({ color: over(0x7d848c), map: ma(), metalness: 0.92, roughness: 0.36, roughnessMap: smudge(), normalMap: br(), normalScale: ns, wearCol: 0xd0d5dc }),
+    poly: std({ wear: 0.3, wearCol: 0x62676e, color: over(0x1a1c20), map: pa(), metalness: 0, roughness: 0.8, normalMap: sp(), normalScale: new THREE.Vector2(0.5, 0.5) }),
+    furn: std({ wear: 0.3, wearCol: 0x6a6f76, color: over(0x212429), map: pa(), metalness: 0.04, roughness: 0.68, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
+    mag: std({ color: over(0x30353c), map: ma(), metalness: 0.7, roughness: 0.46, roughnessMap: smudge() }),
+    wood: std({ wear: 0.35, wearCol: 0xc99a62, color: 0xffffff, map: wood(), metalness: 0, roughness: 0.4, normalMap: woodN(), normalScale: new THREE.Vector2(0.4, 0.4), clearcoat: 0.5, clearcoatRoughness: 0.3 }),
+    woodDark: std({ wear: 0.35, wearCol: 0xa8845a, color: 0x9a8a80, map: wood(), metalness: 0, roughness: 0.48, normalMap: woodN(), normalScale: new THREE.Vector2(0.4, 0.4), clearcoat: 0.4, clearcoatRoughness: 0.35 }),
+    olive: std({ wear: 0.4, wearCol: 0x8f9878, color: over(0x586244), map: pa(), metalness: 0.04, roughness: 0.78, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
+    tan: std({ wear: 0.4, wearCol: 0xd9c7a0, color: over(0xa88f62), map: pa(), metalness: 0.04, roughness: 0.76, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
+    gray: std({ color: over(0x747c85), map: ma(), metalness: 0.3, roughness: 0.58, roughnessMap: smudge(), normalMap: br(), normalScale: ns }),
+    accent: std({ wear: 0.4, color: 0xc8372d, metalness: 0.2, roughness: 0.5 }),
   };
 }
 
@@ -257,13 +299,17 @@ const PAT = {
       for (const [x, y, r, a] of pt) { g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.moveTo(-r, 0); g.quadraticCurveTo(0, -r * 0.8, r, 0); g.quadraticCurveTo(0, r * 0.5, -r, 0); g.fill(); g.restore(); }
     });
   },
-  aurora: (g, s) => { // 물결치는 무지갯빛
-    const row = canvas(512, (q, w) => { for (let x = 0; x < w; x++) { q.fillStyle = `hsl(${(x / w) * 360},88%,${60 + Math.sin((x / w) * 6.283 * 6) * 6}%)`; q.fillRect(x, 0, 1, 4); } });
-    for (let y = 0; y < s; y += 2) { const o = Math.sin((y / s) * 6.283 * 2) * 46 + Math.sin((y / s) * 6.283 * 5 + 1) * 14; for (const dx of [-s, 0, s]) g.drawImage(row, 0, 0, 512, 2, dx + o, y, s, 2.2); }
+  aurora: (g, s, em) => { // 밤하늘에 드리운 오로라 장막 (em = 빛나는 장막만)
+    if (em) { g.fillStyle = '#000'; g.fillRect(0, 0, s, s); } else { const lg = g.createLinearGradient(0, 0, 0, s); lg.addColorStop(0, '#080c28'); lg.addColorStop(0.5, '#0d2a46'); lg.addColorStop(1, '#08142c'); g.fillStyle = lg; g.fillRect(0, 0, s, s); }
     wrap(g, s, () => {
-      for (let i = 0; i < 14; i++) { const y = rnd() * s; g.strokeStyle = `rgba(255,255,255,${0.1 + rnd() * 0.22})`; g.lineWidth = 3 + rnd() * 16; g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(s * 0.3, y - 60, s * 0.7, y + 60, s, y); g.stroke(); }
-      for (let i = 0; i < 9; i++) { const y = rnd() * s; g.strokeStyle = 'rgba(20,10,60,.16)'; g.lineWidth = 2 + rnd() * 7; g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(s * 0.3, y + 50, s * 0.7, y - 50, s, y); g.stroke(); }
-      g.fillStyle = 'rgba(255,255,255,.85)'; for (let i = 0; i < 130; i++) dot(g, rnd() * s, rnd() * s, 0.5 + rnd() * 1.1);
+      [[0.2, '90,255,170'], [0.52, '70,225,255'], [0.84, '190,120,255']].forEach(([cy, col], bi) => {
+        for (let x = 0; x < s; x += 2) {
+          const t = (x / s) * 6.283, y = cy * s + Math.sin(t * 2 + bi * 1.7) * 26 + Math.sin(t * 5 + bi) * 9, h = 78 + Math.sin(t * 3 + bi * 2.1) * 28 + Math.sin(t * 11 + bi) * 10;
+          const lg = g.createLinearGradient(0, y - h, 0, y + 14); lg.addColorStop(0, `rgba(${col},0)`); lg.addColorStop(0.72, `rgba(${col},${em ? 0.5 : 0.66})`); lg.addColorStop(0.93, `rgba(255,255,255,${em ? 0.45 : 0.72})`); lg.addColorStop(1, `rgba(${col},0)`);
+          g.fillStyle = lg; g.fillRect(x, y - h, 2.3, h + 14);
+        }
+      });
+      if (!em) { g.fillStyle = 'rgba(255,255,255,.9)'; for (let i = 0; i < 110; i++) dot(g, rnd() * s, rnd() * s, 0.4 + rnd() * 1.0); }
     });
   },
   halloween: (g, s, em) => { // 보랏빛 밤에 호박등·박쥐·거미줄 (em = 빛나는 얼굴만)
@@ -296,18 +342,18 @@ const PAT = {
 // 스킨별 재질: body = 몸통 무늬, grip = 손잡이, metal = 총열, bolt, accent. anim = 매 프레임 움직임
 // clearcoat 겉칠 · iridescence 무지갯빛 막은 화질 '낮음'에서는 빠진다
 const SKIN_DEF = {
-  desert: () => { const c = pcan(PAT.desert), m = texOf(c, true), n = nrm(c, 0.5); return { body: { color: 0xffffff, map: m, normalMap: n, metalness: 0.06, roughness: 0.82 }, body2: { color: 0xb9a888, map: m, normalMap: n, metalness: 0.06, roughness: 0.86 }, grip: { color: 0x3a3630, roughness: 0.85 }, metal: { color: 0x5a5144, metalness: 0.75, roughness: 0.48 }, accent: { color: 0xe2c078 } }; },
-  forest: () => { const c = pcan(PAT.forest), m = texOf(c, true), n = nrm(c, 0.5); return { body: { color: 0xffffff, map: m, normalMap: n, metalness: 0.05, roughness: 0.8 }, body2: { color: 0xa9b190, map: m, normalMap: n, metalness: 0.05, roughness: 0.86 }, grip: { color: 0x2c3024, roughness: 0.85 }, metal: { color: 0x2b2e28, metalness: 0.8, roughness: 0.45 }, accent: { color: 0x9db55a } }; },
-  gold: () => { const c = pcan(PAT.gold, 6); return { body: { color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 1.5), metalness: 1, roughness: 0.24, roughnessMap: smudge(), clearcoat: 0.6, clearcoatRoughness: 0.12 }, grip: { color: 0x1a1612, metalness: 0.2, roughness: 0.6 }, metal: { color: 0xf0c45a, metalness: 1, roughness: 0.18, roughnessMap: smudge() }, bolt: { color: 0xfff0b8, metalness: 1, roughness: 0.1 }, accent: { color: 0x1a1612 }, envI: 1.6 }; },
-  neon: () => { const c = pcan(PAT.neon, 6), mp = texOf(c, true), em = texOf(pcan((g, s) => PAT.neon(g, s, true), 0), true); return { body: { color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.2, normalMap: nrm(c, 0.6), metalness: 0.7, roughness: 0.32, roughnessMap: smudge(), clearcoat: 0.5, clearcoatRoughness: 0.2 }, grip: { color: 0x0b0e14, roughness: 0.7 }, metal: { color: 0x10141c, metalness: 0.9, roughness: 0.3 }, bolt: { color: 0x19e3ff, emissive: 0x19e3ff, emissiveIntensity: 0.8 }, accent: { color: 0xff3df0, emissive: 0xff3df0, emissiveIntensity: 1 }, anim: (m, t) => { m.body.emissiveIntensity = 0.95 + Math.sin(t * 3) * 0.5; } }; },
-  lava: () => { const c = pcan(PAT.lava), em = texOf(pcan((g, s) => PAT.lava(g, s, true), 0), true); return { body: { color: 0xffffff, map: texOf(c, true), emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.0, normalMap: nrm(c, 1.3), metalness: 0.15, roughness: 0.86 }, grip: { color: 0x17110f, roughness: 0.9 }, metal: { color: 0x2a1a14, metalness: 0.8, roughness: 0.4 }, bolt: { color: 0xff8a2a, emissive: 0xff5a00, emissiveIntensity: 0.9 }, accent: { color: 0xffd27a, emissive: 0xff7a1a, emissiveIntensity: 1 }, anim: (m, t) => { m.body.emissiveIntensity = 0.85 + Math.sin(t * 1.7) * 0.4 + Math.sin(t * 5.3) * 0.12; } }; },
-  ice: () => { const c = pcan(PAT.ice, 6); return { body: { color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 1.2), metalness: 0.35, roughness: 0.16, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.05 }, grip: { color: 0x2a4a66, roughness: 0.5 }, metal: { color: 0xd8f1ff, metalness: 0.9, roughness: 0.12 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.08 }, accent: { color: 0x2f8fff }, envI: 1.6 }; },
-  galaxy: () => { const mp = texOf(pcan(PAT.galaxy, 5), true), em = texOf(pcan((g, s) => PAT.galaxy(g, s, true), 0), true); return { body: { color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 0.8, metalness: 0.55, roughness: 0.26, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.08 }, grip: { color: 0x120e2c, roughness: 0.6 }, metal: { color: 0x2a1f5e, metalness: 0.95, roughness: 0.25 }, bolt: { color: 0xc59bff, metalness: 1, roughness: 0.15 }, accent: { color: 0xff46be, emissive: 0xff46be, emissiveIntensity: 0.8 }, anim: (m, t) => { mp.offset.x = em.offset.x = t * 0.03; mp.offset.y = em.offset.y = t * 0.012; m.body.emissiveIntensity = 0.75 + Math.sin(t * 2.1) * 0.25; } }; },
-  tiger: () => { const c = pcan(PAT.tiger); return { body: { color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.25), metalness: 0.1, roughness: 0.55, clearcoat: 0.35, clearcoatRoughness: 0.35 }, grip: { color: 0x17110c, roughness: 0.8 }, metal: { color: 0x1a1512, metalness: 0.85, roughness: 0.35 }, accent: { color: 0xf7e3c0 } }; },
-  carbon: () => { const c = pcan(PAT.carbon, 0); return { body: { color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.7), metalness: 0.5, roughness: 0.36, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.1 }, grip: { color: 0x121316, roughness: 0.7 }, metal: { color: 0xb0161e, metalness: 0.9, roughness: 0.28 }, bolt: { color: 0xe0282f, metalness: 1, roughness: 0.2 }, accent: { color: 0xf2f2ee }, envI: 1.4 }; },
-  sakura: () => { const c = pcan(PAT.sakura, 6); return { body: { color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.35), metalness: 0.08, roughness: 0.42, clearcoat: 0.8, clearcoatRoughness: 0.12 }, grip: { color: 0x4a2f3a, roughness: 0.7 }, metal: { color: 0xf2c4d2, metalness: 0.85, roughness: 0.25 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.15 }, accent: { color: 0xff5f95 } }; },
-  aurora: () => { const mp = texOf(pcan(PAT.aurora, 0), true); return { body: { color: 0xffffff, map: mp, metalness: 1, roughness: 0.16, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 1, iridescenceIOR: 1.6 }, grip: { color: 0x1a1c22, metalness: 0.4, roughness: 0.4 }, metal: { color: 0xe9edf2, metalness: 1, roughness: 0.08 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.05 }, accent: { color: 0xffffff }, envI: 1.7, anim: (m, t) => { mp.offset.x = t * 0.12; } }; },
-  halloween: () => { const c = pcan((g, s) => PAT.halloween(g, s, false), 8), mp = texOf(c, true), em = texOf(pcan((g, s) => PAT.halloween(g, s, true), 0), true); return { body: { color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.1, normalMap: nrm(c, 0.4), metalness: 0.2, roughness: 0.5, clearcoat: 0.4, clearcoatRoughness: 0.3 }, grip: { color: 0x1a1220, roughness: 0.8 }, metal: { color: 0x2c1d3a, metalness: 0.88, roughness: 0.32 }, bolt: { color: 0xff8a1a, metalness: 0.7, roughness: 0.3, emissive: 0x7a2c00, emissiveIntensity: 0.5 }, accent: { color: 0x9dff3a, emissive: 0x6fd020, emissiveIntensity: 0.9 }, anim: (M, t) => { const k = 1.75 + Math.sin(t * 9.1) * 0.22 + Math.sin(t * 23.7) * 0.16; M.glow.emissiveIntensity = k; M.body.emissiveIntensity = 0.75 + (k - 1.75) * 1.1 + 0.35; } }; }, // 촛불처럼 일렁임
+  desert: () => { const c = pcan(PAT.desert), m = texOf(c, true), n = nrm(c, 0.5); return { body: { wear: 0.5, color: 0xffffff, map: m, normalMap: n, metalness: 0.06, roughness: 0.82 }, body2: { wear: 0.5, color: 0xb9a888, map: m, normalMap: n, metalness: 0.06, roughness: 0.86 }, grip: { color: 0x3a3630, roughness: 0.85 }, metal: { color: 0x5a5144, metalness: 0.75, roughness: 0.48 }, accent: { color: 0xe2c078 } }; },
+  forest: () => { const c = pcan(PAT.forest), m = texOf(c, true), n = nrm(c, 0.5); return { body: { wear: 0.5, color: 0xffffff, map: m, normalMap: n, metalness: 0.05, roughness: 0.8 }, body2: { wear: 0.5, color: 0xa9b190, map: m, normalMap: n, metalness: 0.05, roughness: 0.86 }, grip: { color: 0x2c3024, roughness: 0.85 }, metal: { color: 0x2b2e28, metalness: 0.8, roughness: 0.45 }, accent: { color: 0x9db55a } }; },
+  gold: () => { const c = pcan(PAT.gold, 6); return { body: { wear: 0.45, wearCol: 0xfff2c0, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 1.5), metalness: 1, roughness: 0.24, roughnessMap: smudge(), clearcoat: 0.6, clearcoatRoughness: 0.12 }, grip: { color: 0x1a1612, metalness: 0.2, roughness: 0.6 }, metal: { color: 0xf0c45a, metalness: 1, roughness: 0.18, roughnessMap: smudge() }, bolt: { color: 0xfff0b8, metalness: 1, roughness: 0.1 }, accent: { color: 0x1a1612 }, envI: 1.6 }; },
+  neon: () => { const c = pcan(PAT.neon, 6), mp = texOf(c, true), em = texOf(pcan((g, s) => PAT.neon(g, s, true), 0), true); return { body: { wear: 0.15, color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.2, normalMap: nrm(c, 0.6), metalness: 0.7, roughness: 0.32, roughnessMap: smudge(), clearcoat: 0.5, clearcoatRoughness: 0.2 }, grip: { color: 0x0b0e14, roughness: 0.7 }, metal: { color: 0x10141c, metalness: 0.9, roughness: 0.3 }, bolt: { color: 0x19e3ff, emissive: 0x19e3ff, emissiveIntensity: 0.8 }, accent: { color: 0xff3df0, emissive: 0xff3df0, emissiveIntensity: 1 }, anim: (m, t) => { m.body.emissiveIntensity = 0.95 + Math.sin(t * 3) * 0.5; } }; },
+  lava: () => { const c = pcan(PAT.lava), em = texOf(pcan((g, s) => PAT.lava(g, s, true), 0), true); return { body: { wear: 0, color: 0xffffff, map: texOf(c, true), emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.0, normalMap: nrm(c, 1.3), metalness: 0.15, roughness: 0.86 }, grip: { color: 0x17110f, roughness: 0.9 }, metal: { color: 0x2a1a14, metalness: 0.8, roughness: 0.4 }, bolt: { color: 0xff8a2a, emissive: 0xff5a00, emissiveIntensity: 0.9 }, accent: { color: 0xffd27a, emissive: 0xff7a1a, emissiveIntensity: 1 }, anim: (m, t) => { m.body.emissiveIntensity = 0.85 + Math.sin(t * 1.7) * 0.4 + Math.sin(t * 5.3) * 0.12; } }; },
+  ice: () => { const c = pcan(PAT.ice, 6); return { body: { wear: 0, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 1.2), metalness: 0.35, roughness: 0.16, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.05 }, grip: { color: 0x2a4a66, roughness: 0.5 }, metal: { color: 0xd8f1ff, metalness: 0.9, roughness: 0.12 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.08 }, accent: { color: 0x2f8fff }, envI: 1.6 }; },
+  galaxy: () => { const mp = texOf(pcan(PAT.galaxy, 5), true), em = texOf(pcan((g, s) => PAT.galaxy(g, s, true), 0), true); return { body: { wear: 0, color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 0.8, metalness: 0.55, roughness: 0.26, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.08 }, grip: { color: 0x120e2c, roughness: 0.6 }, metal: { color: 0x2a1f5e, metalness: 0.95, roughness: 0.25 }, bolt: { color: 0xc59bff, metalness: 1, roughness: 0.15 }, accent: { color: 0xff46be, emissive: 0xff46be, emissiveIntensity: 0.8 }, anim: (m, t) => { mp.offset.x = em.offset.x = t * 0.03; mp.offset.y = em.offset.y = t * 0.012; m.body.emissiveIntensity = 0.75 + Math.sin(t * 2.1) * 0.25; } }; },
+  tiger: () => { const c = pcan(PAT.tiger); return { body: { wear: 0.4, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.25), metalness: 0.1, roughness: 0.55, clearcoat: 0.35, clearcoatRoughness: 0.35 }, grip: { color: 0x17110c, roughness: 0.8 }, metal: { color: 0x1a1512, metalness: 0.85, roughness: 0.35 }, accent: { color: 0xf7e3c0 } }; },
+  carbon: () => { const c = pcan(PAT.carbon, 0); return { body: { wear: 0.25, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.7), metalness: 0.5, roughness: 0.36, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.1 }, grip: { color: 0x121316, roughness: 0.7 }, metal: { color: 0xb0161e, metalness: 0.9, roughness: 0.28 }, bolt: { color: 0xe0282f, metalness: 1, roughness: 0.2 }, accent: { color: 0xf2f2ee }, envI: 1.4 }; },
+  sakura: () => { const c = pcan(PAT.sakura, 6); return { body: { wear: 0.12, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.35), metalness: 0.08, roughness: 0.42, clearcoat: 0.8, clearcoatRoughness: 0.12 }, grip: { color: 0x4a2f3a, roughness: 0.7 }, metal: { color: 0xf2c4d2, metalness: 0.85, roughness: 0.25 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.15 }, accent: { color: 0xff5f95 } }; },
+  aurora: () => { const mp = texOf(pcan((g, s) => PAT.aurora(g, s, false), 4), true), em = texOf(pcan((g, s) => PAT.aurora(g, s, true), 0), true); return { body: { color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 0.7, metalness: 0.75, roughness: 0.2, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.05, iridescence: 0.7, iridescenceIOR: 1.5, wear: 0 }, grip: { color: 0x10182a, metalness: 0.3, roughness: 0.45 }, metal: { color: 0xdfe8f2, metalness: 1, roughness: 0.1, wear: 0 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.05 }, accent: { color: 0x7dffc8, emissive: 0x3dffb0, emissiveIntensity: 0.8 }, envI: 1.6, anim: (m, t) => { mp.offset.x = em.offset.x = t * 0.035; m.body.emissiveIntensity = 0.62 + Math.sin(t * 1.3) * 0.22; } }; },
+  halloween: () => { const c = pcan((g, s) => PAT.halloween(g, s, false), 8), mp = texOf(c, true), em = texOf(pcan((g, s) => PAT.halloween(g, s, true), 0), true); return { body: { wear: 0.25, color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.1, normalMap: nrm(c, 0.4), metalness: 0.2, roughness: 0.5, clearcoat: 0.4, clearcoatRoughness: 0.3 }, grip: { color: 0x1a1220, roughness: 0.8 }, metal: { color: 0x2c1d3a, metalness: 0.88, roughness: 0.32 }, bolt: { color: 0xff8a1a, metalness: 0.7, roughness: 0.3, emissive: 0x7a2c00, emissiveIntensity: 0.5 }, accent: { color: 0x9dff3a, emissive: 0x6fd020, emissiveIntensity: 0.9 }, anim: (M, t) => { const k = 1.75 + Math.sin(t * 9.1) * 0.22 + Math.sin(t * 23.7) * 0.16; M.glow.emissiveIntensity = k; M.body.emissiveIntensity = 0.75 + (k - 1.75) * 1.1 + 0.35; } }; }, // 촛불처럼 일렁임
 };
 // 무료 스킨의 궤적·불꽃 색 (형태 키트가 있는 스킨은 키트에 적혀 있음)
 const FX_FREE = { desert: { tracer: 0xffd08a, flash: 0xffb45a }, forest: { tracer: 0xbfff8a, flash: 0xd9ff9a } };
@@ -331,7 +377,7 @@ function matsFor(skin, aw) {
   const M = { ...FIX, ...baseMats() }, id = SKINS[skin] ? SKINS[skin].id : 'std', def = SKIN_DEF[id] ? SKIN_DEF[id]() : null;
   if (def) {
     const mk = (o) => { const m = std(o); if (def.envI) m.envMapIntensity = def.envI; return m; };
-    const body = mk(def.body), body2 = def.body2 ? mk(def.body2) : body, grip = mk(def.grip), metal = mk(def.metal);
+    const body = mk(def.body), body2 = def.body2 ? mk(def.body2) : body, grip = mk({ wear: 0.25, wearCol: 0x6a6f76, normalMap: nStip(), normalScale: new THREE.Vector2(0.45, 0.45), ...def.grip }), metal = mk({ wear: 0.45, roughnessMap: smudge(), ...def.metal });
     Object.assign(M, { recv: body, slide: body, gray: body, mag: body2, olive: body2, tan: body2, wood: body2, woodDark: body2, furn: body2, poly: grip, steel: metal, bolt: mk(def.bolt || { color: 0xc2c7ce, metalness: 1, roughness: 0.22 }) });
     if (def.accent) M.accent = mk(def.accent);
     M.body = body;
@@ -373,6 +419,37 @@ function roundPts(pts, r) { // 꼭짓점을 둥글게
   }
   return out;
 }
+// 밀어낸 형태에서 둥글린 모서리 면(앞뒤 면도 옆벽도 아닌 비스듬한 면)을 찾아 aWear = 1 로 표시 → 모서리 닳음에 씀
+function tagBevel(geo, k = 1) {
+  const p = geo.attributes.position, n = p.count, w = new Float32Array(n), A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
+  for (let i = 0; i < n; i += 3) {
+    A.fromBufferAttribute(p, i); B.fromBufferAttribute(p, i + 1); C.fromBufferAttribute(p, i + 2);
+    B.sub(A); C.sub(A); B.cross(C); const l = B.length(); if (!l) continue;
+    const nz = Math.abs(B.z / l); if (nz > 0.12 && nz < 0.97) w[i] = w[i + 1] = w[i + 2] = k;
+  }
+  geo.setAttribute('aWear', new THREE.BufferAttribute(w, 1));
+}
+// 넓은 평면이 이기는 부드러운 법선: 같은 자리의 꼭짓점끼리, 꺾인 각이 60° 안쪽인 면들의 법선을 '그 면이 속한 평면의 넓이'로 가중해 합친다.
+// 넓은 옆면은 평평하게 남고 좁은 모서리 면만 둥글게 이어져, 모서리에 빛이 맺힌다
+function softNormals(pos, nor, n) {
+  const fc = n / 3, fn = new Float32Array(fc * 3), pid = new Int32Array(fc), planes = new Map(), area = [];
+  for (let f = 0; f < fc; f++) {
+    const i = f * 9, ax = pos[i], ay = pos[i + 1], az = pos[i + 2], ux = pos[i + 3] - ax, uy = pos[i + 4] - ay, uz = pos[i + 5] - az, vx = pos[i + 6] - ax, vy = pos[i + 7] - ay, vz = pos[i + 8] - az;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; const l = Math.hypot(nx, ny, nz) || 1e-12; nx /= l; ny /= l; nz /= l;
+    fn[f * 3] = nx; fn[f * 3 + 1] = ny; fn[f * 3 + 2] = nz;
+    const k = Math.round(nx * 60) + ',' + Math.round(ny * 60) + ',' + Math.round(nz * 60) + ',' + Math.round((nx * ax + ny * ay + nz * az) * 4000);
+    let id = planes.get(k); if (id === undefined) { id = area.length; planes.set(k, id); area.push(0); }
+    pid[f] = id; area[id] += l;
+  }
+  const vmap = new Map(), vf = [];
+  for (let v = 0; v < n; v++) { const k = Math.round(pos[v * 3] * 20000) + ',' + Math.round(pos[v * 3 + 1] * 20000) + ',' + Math.round(pos[v * 3 + 2] * 20000); let a = vmap.get(k); if (!a) { a = []; vmap.set(k, a); } a.push((v / 3) | 0); vf.push(a); }
+  const seen = [];
+  for (let v = 0; v < n; v++) {
+    const f = (v / 3) | 0, fx = fn[f * 3], fy = fn[f * 3 + 1], fz = fn[f * 3 + 2]; let x = 0, y = 0, z = 0; seen.length = 0;
+    for (const g of vf[v]) { const id = pid[g]; if (seen.includes(id)) continue; const gx = fn[g * 3], gy = fn[g * 3 + 1], gz = fn[g * 3 + 2]; if (fx * gx + fy * gy + fz * gz < 0.5) continue; seen.push(id); const w = area[id]; x += gx * w; y += gy * w; z += gz * w; }
+    const l = Math.hypot(x, y, z) || 1; nor[v * 3] = x / l; nor[v * 3 + 1] = y / l; nor[v * 3 + 2] = z / l;
+  }
+}
 class Builder {
   constructor() { this.parts = []; this.cur = ''; this.shift = 0; this.pivots = {}; }
   // 이후에 넣는 부품은 이 이름의 움직이는 묶음에 들어감. pivot 을 주면 그 점을 중심으로 도는 묶음(spin…)이 됨
@@ -391,8 +468,10 @@ class Builder {
     P.forEach((p, i) => (i ? s.lineTo(p[0], p[1]) : s.moveTo(p[0], p[1])));
     s.closePath();
     for (const h of opt.holes || []) { const hp = new THREE.Path(); h.forEach((p, i) => (i ? hp.lineTo(p[0], p[1]) : hp.moveTo(p[0], p[1]))); hp.closePath(); s.holes.push(hp); }
+    if (bevel >= 0.003 && w >= 0.024 && !opt.flat) bevel = Math.min(0.0105, Math.max(bevel, w * 0.19)); // 두꺼운 부품은 옆면 모서리를 넉넉히 둥글려 판자처럼 보이지 않게
     const depth = Math.max(0.001, w - bevel * 2);
-    const geo = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2, bevelOffset: -bevel, curveSegments: 6 });
+    const geo = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: bevel >= 0.006 ? 3 : 2, bevelOffset: -bevel, curveSegments: 6 });
+    tagBevel(geo, bevel > 0.0048 ? 0.5 : 1); // 넓게 둥글린 면은 거의 닳지 않게
     geo.translate(0, 0, -depth / 2);
     geo.rotateY(Math.PI / 2);
     geo.translate(x, 0, 0);
@@ -432,7 +511,13 @@ class Builder {
     return this.add(geo, mat);
   }
   box(w, h, l, f, u, mat, x = 0, rx = 0, rz = 0) {
-    const geo = new THREE.BoxGeometry(w, h, l);
+    const mn = Math.min(w, h, l);
+    let geo;
+    if (mn >= 0.0075 && mat.isMeshStandardMaterial) { // 큰 상자는 모서리를 둥글림
+      const r = Math.min(0.0022, mn * 0.2), sh = new THREE.Shape(); roundPts([[-l / 2, -h / 2], [l / 2, -h / 2], [l / 2, h / 2], [-l / 2, h / 2]], r).forEach((q, i) => (i ? sh.lineTo(q[0], q[1]) : sh.moveTo(q[0], q[1]))); sh.closePath();
+      geo = new THREE.ExtrudeGeometry(sh, { depth: w - r * 2, bevelEnabled: true, bevelSize: r, bevelThickness: r, bevelSegments: 2, bevelOffset: -r, curveSegments: 2 });
+      tagBevel(geo); geo.translate(0, 0, -(w - r * 2) / 2); geo.rotateY(Math.PI / 2);
+    } else geo = new THREE.BoxGeometry(w, h, l);
     if (rx) geo.rotateX(rx);
     if (rz) geo.rotateZ(rz);
     geo.translate(x, u, -f);
@@ -474,20 +559,22 @@ class Builder {
       for (const [mat, list] of mm) {
         let n = 0;
         for (const p of list) n += p.g.attributes.position.count;
-        const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+        const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), wr = new Float32Array(n), lit = mat.isMeshStandardMaterial && !mat.flatShading;
         let o = 0;
         for (const p of list) {
           const g = p.g, c = g.attributes.position.count, pa = g.attributes.position.array;
-          pos.set(pa, o * 3); nor.set(g.attributes.normal.array, o * 3);
+          pos.set(pa, o * 3); nor.set(g.attributes.normal.array, o * 3); if (g.attributes.aWear) wr.set(g.attributes.aWear.array, o);
           if (p.keepUV) uv.set(g.attributes.uv.array, o * 2);
           else for (let i = 0; i < c; i++) { uv[(o + i) * 2] = -pa[i * 3 + 2] * 2 + pa[i * 3] * 0.6; uv[(o + i) * 2 + 1] = pa[i * 3 + 1] * 2 + 0.5; } // 옆에서 본 평면으로 무늬를 입힘
           o += c; g.dispose();
         }
         if (pv) for (let i = 0; i < n; i++) { pos[i * 3] -= grp.position.x; pos[i * 3 + 1] -= grp.position.y; pos[i * 3 + 2] -= grp.position.z; }
+        if (lit && n % 3 === 0) softNormals(pos, nor, n);
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
         geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
         geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        if (lit) geo.setAttribute('aWear', new THREE.BufferAttribute(wr, 1));
         const mesh = new THREE.Mesh(geo, mat);
         if (mat === FIX.mask) { mesh.renderOrder = -1; mesh.visible = false; mesh.name = 'fpMask'; } // 1인칭 총에서만 켬
         grp.add(mesh);

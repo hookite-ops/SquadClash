@@ -67,14 +67,15 @@ const vmCam = new THREE.PerspectiveCamera(58, 1, 0.01, 10);
 const vmHemi = new THREE.HemisphereLight(0xffffff, 0x556070, 1.7);
 const vmSun = new THREE.DirectionalLight(0xffffff, 1.4);
 vmSun.position.set(-0.6, 2, 1.5);
-vmScene.add(vmHemi, vmSun);
+const vmRim = new THREE.DirectionalLight(0xcfe2ff, 0); vmRim.position.set(1.5, 0.9, -2.2); // 뒤쪽에서 윤곽을 살리는 빛 (무기고에서 세게, 경기 중에는 약하게)
+vmScene.add(vmHemi, vmSun, vmRim);
 // 손에 든 총의 빛을 맵에 맞춤: 빛 색은 맵 분위기를 따르고, 해 방향은 시점에 따라 돌며, 그늘에 들어가면 어두워짐
 const VML = { hemi: 1.7, sun: 1.4, shade: 0, t: 0, dir: new THREE.Vector3(-0.3, 0.8, 0.5).normalize() };
 const _vq = new THREE.Quaternion(), _wc = new THREE.Color(0xffffff), _gc = new THREE.Color(0x556070);
 let UIL = false; // 무기고 빛을 쓰고 있었는지
 let DUST = 0, SURF = 0; // 발먼지 색 (먼지가 이는 땅이 아니면 0), 맵 바닥의 발소리 종류
 function applyTheme() {
-  const T = world.theme; UIL = false;
+  const T = world.theme; UIL = false; vmRim.intensity = T.night ? 0.25 : 0.45;
   vmHemi.color.set(T.hemi[0]).lerp(_wc, 0.4); vmHemi.groundColor.set(T.hemi[1]).lerp(_gc, 0.45);
   vmSun.color.set(T.sun[0]).lerp(_wc, 0.25);
   VML.hemi = T.night ? 1.0 : 1.55; VML.sun = T.night ? 0.75 : Math.min(1.9, 0.6 + T.sun[1] * 0.42);
@@ -98,7 +99,7 @@ function updateVmLight(dt, now) { // 해가 가려졌는지(그늘) 가끔 확�
     post.setGlare(_sv, _sunC.r * k, _sunC.g * k, _sunC.b * k, th * camera.aspect, th);
   }
 }
-function uiLight() { vmHemi.color.set(0xffffff); vmHemi.groundColor.set(0x556070); vmHemi.intensity = 1.7; vmSun.color.set(0xffffff); vmSun.intensity = 1.4; vmSun.position.set(-0.6, 2, 1.5); if (postOn) post.setGlare(null, 0, 0, 0); UIL = true; } // 무기고·캐릭터 화면은 늘 같은 빛
+function uiLight() { vmHemi.color.set(0xffffff); vmHemi.groundColor.set(0x556070); vmHemi.intensity = 1.5; vmSun.color.set(0xfff6ea); vmSun.intensity = 2.3; vmSun.position.set(-0.7, 1.9, 1.6); vmRim.intensity = 2.0; if (postOn) post.setGlare(null, 0, 0, 0); UIL = true; } // 무기고·캐릭터 화면은 늘 같은 빛
 applyTheme();
 
 // 게임이 쓰는 화면 영역: 가로로 쥐면 화면 전체, 세로로 쥐면(터치 기기) 아래쪽 절반만 씀

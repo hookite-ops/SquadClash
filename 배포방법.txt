@@ -166,7 +166,12 @@ GitHub 자동 배포 (한 번만 설정하면, 저장소 main 에 올라올 때�
 - public/paint.js      그림을 그리는 캐릭터 (몸 모양, 그리기 화면, 그림 주고받기)
 - public/world.js      맵 그래픽 (질감, 지형, 바다, 나무, 그림자, 하늘, 소품, 표지판)
 - public/guns.js       무기 모델 18종, 파츠 모양, 스킨 무늬, 스킨별 형태(KITS) (칼, 보조무기 5, 기관단총 2, 샷건 2, 소총 4, 저격총 2, 기관총 2)
-- public/game.js       화면·조작·효과·소리
+- public/game.js       화면·조작·HUD
+- public/post.js       화면 후처리 (빛 번짐, 선명도, 색 보정)
+- public/textures.js   맵 질감과 벽·바닥 얼룩 그림
+- public/avatar.js     캐릭터 관절과 동작
+- public/fx.js         폭발·연막·예광탄·먼지 효과
+- public/audio.js      소리 (전부 코드로 합성)
 - public/index.html    메뉴와 화면 구성
 
 게임 규칙을 바꾸고 싶다면
