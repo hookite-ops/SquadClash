@@ -1056,7 +1056,7 @@ export function buildWorld(scene, renderer, opt = {}) {
   // 팀 진영 바닥 색 (생존전에는 없음)
   const zones = [0, 1].map((t) => {
     const w = 8;
-    const z = new THREE.Mesh(new THREE.PlaneGeometry(w, hz * 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: opt.lin ? 0.042 : 0.16, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
+    const z = new THREE.Mesh(new THREE.PlaneGeometry(w, hz * 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: opt.lin ? 0.03 : 0.16, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
     flat(z, t ? hx - 4 : -hx + 4, 0);
     z.visible = !isle;
     return z;
@@ -1123,7 +1123,7 @@ export function buildWorld(scene, renderer, opt = {}) {
     for (const im of instanced) im.dispose();
     for (const t of owned) t.dispose();
   };
-  return { group, zones, sun, hemi, dispose, update, splat, far: isle ? 1700 : 520, mood: opt.mood || 0, grade: T.grade || null, night: !!T.night, theme: T };
+  return { group, zones, sun, hemi, dispose, update, splat, far: isle ? 1700 : 520, mood: opt.mood || 0, grade: T.grade || null, night: !!T.night, theme: T, tkey: theme };
 }
 
 // 캐릭터 발밑 그림자
