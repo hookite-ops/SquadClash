@@ -29,8 +29,8 @@ export const W_KNIFE = 0, W_PISTOL = 1, W_DEFAULT_PRIM = 13;
 // 스킨 — free 는 누구나, 나머지는 코드로 해금. 순서(번호)가 저장·전송에 쓰이니 뒤에만 추가할 것
 export const SKINS = [
   { id: 'std', name: '기본', free: true },
-  { id: 'desert', name: '사막', free: true },
-  { id: 'forest', name: '숲 위장', free: true },
+  { id: 'desert', name: '디지털 사막', free: true },
+  { id: 'forest', name: '우드랜드', free: true },
   { id: 'carbon', name: '카본 레드', tier: '희귀' },
   { id: 'tiger', name: '맹호', tier: '희귀' },
   { id: 'sakura', name: '벚꽃', tier: '희귀' },
@@ -41,6 +41,15 @@ export const SKINS = [
   { id: 'galaxy', name: '은하', tier: '전설' },
   { id: 'aurora', name: '오로라', tier: '전설' },
   { id: 'halloween', name: '할로윈', tier: '한정' },
+  // 아래는 무늬만 바뀌는 위장(camo). 콜 오브 듀티의 마스터리 위장처럼 광택·흐르는 빛·반짝임이 움직인다. 번호가 바뀌지 않게 항상 끝에 붙인다
+  { id: 'urban', name: '디지털 도심', free: true, camo: true },
+  { id: 'platinum', name: '플래티넘', tier: '마스터리', camo: true },
+  { id: 'damascus', name: '다마스커스', tier: '마스터리', camo: true },
+  { id: 'obsidian', name: '흑요석', tier: '마스터리', camo: true },
+  { id: 'diamond', name: '다이아몬드', tier: '마스터리', camo: true },
+  { id: 'atomic', name: '아토믹', tier: '마스터리', camo: true },
+  { id: 'orion', name: '오리온', tier: '마스터리', camo: true },
+  { id: 'darkmatter', name: '다크 매터', tier: '마스터리', camo: true },
 ];
 // ───────────── 파츠(부착물) ─────────────
 // 무기마다 자리(slot)별로 하나씩, 모두 합쳐 PART_MAX 개까지 단다. 수치는 곱하는 값 (1 = 그대로):
