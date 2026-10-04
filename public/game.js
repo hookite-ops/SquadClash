@@ -1546,8 +1546,12 @@ $('xhair').value = store.get('xh', '#ffffff'); setXhair($('xhair').value || '#ff
 // 메뉴와 창의 단추를 누를 때 나는 소리
 document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#menu button, #menu select, #locker button, #ctl button, #paint button, #layBar button, #shopBox .x, #shopFoot [data-btn], #boardBtns span, #leaveBox span, #radio span, #info .chip, #exitChip')) { initAudio(); sfxUI('click'); } });
 // ───────────── 무기고: 스킨 미리 보기·장착·코드 등록 ─────────────
-const SWATCH = { std: 'linear-gradient(90deg,#4a505a,#22252a)', desert: 'linear-gradient(90deg,#c9b083,#8d7a56)', forest: 'linear-gradient(90deg,#4c5a36,#2f3a24 40%,#7f8a5a)', carbon: 'repeating-linear-gradient(45deg,#16181c 0 4px,#4a4f58 4px 8px)', tiger: 'repeating-linear-gradient(100deg,#f6a12a 0 9px,#17110c 9px 14px)', sakura: 'linear-gradient(90deg,#ffd3e2,#f291b4)', ice: 'linear-gradient(120deg,#cdf3ff,#6fb7ea,#e8fbff)', neon: 'linear-gradient(90deg,#0b0e14,#19e3ff 45%,#ff3df0 55%,#0b0e14)', lava: 'linear-gradient(90deg,#17110f,#ff7a1a 50%,#17110f)', gold: 'linear-gradient(110deg,#a8780f,#ffe9a0 45%,#d8a93a)', galaxy: 'linear-gradient(110deg,#0a0822,#7a3cff 50%,#ff46be)', aurora: 'linear-gradient(90deg,#ff5a5a,#ffd23f,#5aff8a,#5ab8ff,#c08bff)', halloween: 'linear-gradient(90deg,#2e1646,#f07a12 50%,#2e1646)' };
-const TIERN = { 희귀: 1, 영웅: 2, 전설: 3, 한정: 4 };
+const SWATCH = { std: 'linear-gradient(90deg,#4a505a,#22252a)', carbon: 'repeating-linear-gradient(45deg,#16181c 0 4px,#4a4f58 4px 8px)', tiger: 'repeating-linear-gradient(100deg,#f6a12a 0 9px,#17110c 9px 14px)', sakura: 'linear-gradient(90deg,#ffd3e2,#f291b4)', ice: 'linear-gradient(120deg,#cdf3ff,#6fb7ea,#e8fbff)', neon: 'linear-gradient(90deg,#0b0e14,#19e3ff 45%,#ff3df0 55%,#0b0e14)', lava: 'linear-gradient(90deg,#17110f,#ff7a1a 50%,#17110f)', gold: 'linear-gradient(110deg,#a8780f,#ffe9a0 45%,#d8a93a)', galaxy: 'linear-gradient(110deg,#0a0822,#7a3cff 50%,#ff46be)', aurora: 'linear-gradient(90deg,#ff5a5a,#ffd23f,#5aff8a,#5ab8ff,#c08bff)', halloween: 'linear-gradient(90deg,#2e1646,#f07a12 50%,#2e1646)',
+  desert: 'conic-gradient(from 90deg at 30% 40%,#cdb98f 25%,#806b4c 0 50%,#a8916a 0 75%,#584834 0) 0 0/10px 10px', forest: 'radial-gradient(circle at 20% 30%,#4e5a33 30%,transparent 32%),radial-gradient(circle at 70% 70%,#5f4630 25%,transparent 27%),radial-gradient(circle at 60% 20%,#1d1d19 14%,transparent 16%),#9c9465',
+  urban: 'conic-gradient(from 90deg at 30% 40%,#a9aeb3 25%,#4a4f56 0 50%,#787e85 0 75%,#24272c 0) 0 0/10px 10px', platinum: 'linear-gradient(110deg,#8d939e,#f4f7fb 40%,#b9c0cb 60%,#eef1f6)', damascus: 'repeating-linear-gradient(160deg,#3a2414 0 3px,#a8723a 3px 6px,#f0d79a 6px 8px,#5c3a1e 8px 11px)',
+  obsidian: 'linear-gradient(120deg,#08070c 40%,#d8d8e8 45%,#08070c 48%,#1a1428)', diamond: 'linear-gradient(120deg,#cfe9ff,#ffffff 30%,#a8d8ff 50%,#f0e6ff 70%,#ffffff)', atomic: 'linear-gradient(120deg,#5a0008,#d81e1a 35%,#ff6a1a 55%,#ffd45a 70%,#8e0a10)',
+  orion: 'linear-gradient(110deg,#ff8ad8,#8ad8ff 30%,#b9ffd8 50%,#ffe28a 70%,#c08bff)', darkmatter: 'linear-gradient(120deg,#05040c,#3a1a7a 40%,#b05cff 50%,#ff3da8 55%,#05040c)' };
+const TIERN = { 희귀: 1, 영웅: 2, 전설: 3, 한정: 4, 마스터리: 5 };
 const CATN = { melee: '근접', side: '보조', smg: '기관단총', sg: '샷건', ar: '소총', sr: '저격총', mg: '기관총' };
 let lockerOpen = false, lkW = 13, lkSkin = 0, lkYaw = 0.7, lkDrag = null, lkGun = null, lkKey = '', lkSpin = true, lkTab = 'skin';
 const lkGroup = new THREE.Group();
@@ -1575,7 +1579,7 @@ function lkRefresh() {
   for (const b of $('lkLeft').querySelectorAll('button')) b.classList.toggle('on', +b.dataset.w === lkW);
   const k = SKINS[lkSkin];
   $('lkName').textContent = WEAPONS[lkW].name;
-  $('lkSkin').textContent = `${k.name} · ${k.free ? '무료' : k.tier + ' · 형태 변경'}${unlocked.has(lkSkin) ? '' : ' · 잠김'}`; $('lkSkin').className = 't' + (TIERN[k.tier] || 0);
+  $('lkSkin').textContent = `${k.name} · ${k.free ? '무료' : k.tier + (k.camo ? ' · 움직이는 위장' : ' · 형태 변경')}${unlocked.has(lkSkin) ? '' : ' · 잠김'}`; $('lkSkin').className = 't' + (TIERN[k.tier] || 0);
   for (const b of $('lkSkins').children) { const i = +b.dataset.s; b.classList.toggle('on', i === lkSkin); b.classList.toggle('eq', mySk[lkW] === i); b.classList.toggle('lock', !unlocked.has(i)); }
   for (const b of $('lkTabs').children) b.classList.toggle('on', b.dataset.tab === lkTab);
   $('lkTabSkin').classList.toggle('hide', lkTab !== 'skin'); $('lkTabPart').classList.toggle('hide', lkTab !== 'part');
@@ -1648,7 +1652,7 @@ function openLocker() {
   if ($('lkLeft').children.length < 3) {
     WEAPONS.forEach((W, i) => { const b = document.createElement('button'); b.dataset.w = i; b.textContent = W.name; const sm = document.createElement('small'); sm.textContent = CATN[W.cat] || ''; b.append(sm); b.onclick = () => { lkW = i; lkSkin = mySk[i]; lkRefresh(); }; $('lkLeft').append(b); });
     SKINS.forEach((k, i) => {
-      const b = document.createElement('button'); b.className = 'sk'; b.dataset.s = i;
+      const b = document.createElement('button'); b.className = 'sk' + (k.tier === '마스터리' ? ' m' : ''); b.dataset.s = i;
       const sw = document.createElement('i'); sw.style.background = SWATCH[k.id] || '#444';
       const nm = document.createElement('span'); nm.textContent = k.name;
       const tr = document.createElement('em'); tr.textContent = k.free ? '무료' : k.tier; tr.className = 't' + (TIERN[k.tier] || 0);

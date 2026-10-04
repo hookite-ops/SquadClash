@@ -184,24 +184,6 @@ const veins = () => T('veins', () => texOf(canvas(256, (g, s) => {
   wrap(g, s, () => { g.lineCap = 'round'; for (const [w, a] of [[9, 0.16], [4, 0.4], [1.4, 1]]) for (let i = 0; i < 7; i++) { const y = (i + 0.5) * (s / 7); g.strokeStyle = `rgba(255,255,255,${a})`; g.lineWidth = w; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= s; x += 16) g.lineTo(x, y + Math.sin((x / s) * 6.283 * (1 + (i % 3)) + i * 1.9) * 11 + Math.sin((x / s) * 6.283 * 4 + i) * 4); g.stroke(); } });
 }), true, 1));
 const PAT = {
-  desert: (g, s) => { // 사막 위장: 모래빛 얼룩, 붓질, 자갈
-    g.fillStyle = '#c4aa7b'; g.fillRect(0, 0, s, s);
-    wrap(g, s, () => {
-      for (let i = 0; i < 22; i++) blob(g, rnd() * s, rnd() * s, 34 + rnd() * 56, ['#a98c5e', '#dbcaa2', '#93774e'][i % 3], 0.6);
-      for (let i = 0; i < 40; i++) blob(g, rnd() * s, rnd() * s, 8 + rnd() * 16, ['#6f5b3e', '#e6d9b8', '#84693f'][i % 3], 0.5);
-      for (let i = 0; i < 220; i++) { const x = rnd() * s, y = rnd() * s, r = 0.8 + rnd() * 1.8; g.fillStyle = 'rgba(70,52,30,.45)'; dot(g, x + 0.8, y + 0.8, r); g.fillStyle = 'rgba(243,232,204,.8)'; dot(g, x, y, r); }
-      g.lineCap = 'round'; for (let i = 0; i < 60; i++) { const x = rnd() * s, y = rnd() * s, l = 10 + rnd() * 30; g.strokeStyle = `rgba(96,76,48,${0.12 + rnd() * 0.16})`; g.lineWidth = 1 + rnd() * 2; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + l * 0.5, y + (rnd() - 0.5) * 8, x + l, y + (rnd() - 0.5) * 6); g.stroke(); }
-    });
-  },
-  forest: (g, s) => { // 숲 위장: 큰 얼룩 위에 작은 얼룩과 잎, 잔가지
-    g.fillStyle = '#4c5a36'; g.fillRect(0, 0, s, s);
-    wrap(g, s, () => {
-      for (let i = 0; i < 24; i++) blob(g, rnd() * s, rnd() * s, 30 + rnd() * 48, ['#2f3a24', '#6d7248', '#3b2f22', '#7f8a5a'][i % 4]);
-      for (let i = 0; i < 44; i++) blob(g, rnd() * s, rnd() * s, 7 + rnd() * 15, ['#1f2718', '#8c9562', '#54402c', '#5b6a3c'][i % 4]);
-      for (let i = 0; i < 70; i++) { const x = rnd() * s, y = rnd() * s, r = 5 + rnd() * 8, a = rnd() * 6.28; g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = i % 2 ? 'rgba(150,164,98,.55)' : 'rgba(26,34,20,.6)'; g.beginPath(); g.moveTo(-r, 0); g.quadraticCurveTo(0, -r * 0.55, r, 0); g.quadraticCurveTo(0, r * 0.55, -r, 0); g.fill(); g.strokeStyle = 'rgba(20,26,14,.5)'; g.lineWidth = 0.6; g.beginPath(); g.moveTo(-r, 0); g.lineTo(r, 0); g.stroke(); g.restore(); }
-      for (let i = 0; i < 26; i++) { let x = rnd() * s, y = rnd() * s, a = rnd() * 6.28; g.strokeStyle = 'rgba(40,30,20,.55)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 5; k++) { a += (rnd() - 0.5) * 0.9; x += Math.cos(a) * 9; y += Math.sin(a) * 9; g.lineTo(x, y); } g.stroke(); }
-    });
-  },
   gold: (g, s) => { // 결을 낸 금판에 도드라지게 새긴 덩굴무늬와 띠 장식
     const lg = g.createLinearGradient(0, 0, 0, s); lg.addColorStop(0, '#e6bb4c'); lg.addColorStop(0.5, '#cf9d2e'); lg.addColorStop(1, '#e2b545'); g.fillStyle = lg; g.fillRect(0, 0, s, s);
     for (let i = 0; i < 1500; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '255,244,190' : '110,72,8'},${0.05 + rnd() * 0.1})`; g.fillRect(rnd() * s - 30, rnd() * s, 20 + rnd() * 80, 0.7); }
@@ -339,11 +321,138 @@ const PAT = {
     });
   },
 };
+// ───────────── 위장(camo): 콜 오브 듀티식 디지털·우드랜드와 마스터리 위장 ─────────────
+// 칸마다 계산하는 무늬는 이어지는 잡음(주기가 정수인 값 잡음)으로 만들어 가장자리가 맞물린다. u, v = 0~1
+const hsh = (x, y, sd) => { let h = (x * 374761393 + y * 668265263 + sd * 982451653) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+const wrp = (a, p) => ((a % p) + p) % p;
+function vnoise(x, y, px, py, sd) {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+  const x0 = wrp(ix, px), x1 = wrp(ix + 1, px), y0 = wrp(iy, py), y1 = wrp(iy + 1, py);
+  const a = hsh(x0, y0, sd), b = hsh(x1, y0, sd), c = hsh(x0, y1, sd), d = hsh(x1, y1, sd);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+// 여러 겹 잡음 (px, py = 첫 겹의 칸 수, 겹마다 두 배)
+function fbm(u, v, px, py, oct, sd) { let s = 0, a = 0.5, n = 0; for (let o = 0; o < oct; o++) { s += vnoise(u * px, v * py, px, py, sd + o * 17) * a; n += a; a *= 0.5; px *= 2; py *= 2; } return s / n; }
+const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const hex3 = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
+// 색 띠: stops = [[위치, 0xRRGGBB], ...]
+function ramp(stops) { const S = stops.map(([t, h]) => [t, hex3(h)]); return (t, o) => { t = Math.min(1, Math.max(0, t)); let i = 1; while (i < S.length - 1 && t > S[i][0]) i++; const [t0, a] = S[i - 1], [t1, b] = S[i], k = (t - t0) / (t1 - t0 || 1); o[0] = a[0] + (b[0] - a[0]) * k; o[1] = a[1] + (b[1] - a[1]) * k; o[2] = a[2] + (b[2] - a[2]) * k; return o; }; }
+// 칸마다 fn(u, v, out) 으로 색을 정해 그림 한 장을 만든다
+function field(n, fn) {
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  const g = c.getContext('2d'), img = g.createImageData(n, n), d = img.data, o = [0, 0, 0];
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { fn(x / n, y / n, o); const i = (y * n + x) * 4; d[i] = o[0]; d[i + 1] = o[1]; d[i + 2] = o[2]; d[i + 3] = 255; }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+const FN = () => Math.min(512, 256 * PQ); // 칸 계산 무늬의 해상도 (화질 '낮음'이면 절반)
+// 이어지는 보로노이(결정면): 점마다 가장 가까운 점·두 번째 점까지의 거리
+function voro(n, sd) { const P = []; for (let i = 0; i < n; i++) P.push([hsh(i, 1, sd), hsh(i, 2, sd), hsh(i, 3, sd), hsh(i, 4, sd) * 6.283]); return (u, v) => { let d1 = 9, d2 = 9, k = 0, ex = 0, ey = 0; for (let i = 0; i < n; i++) { let dx = u - P[i][0], dy = v - P[i][1]; dx -= Math.round(dx); dy -= Math.round(dy); const d = dx * dx + dy * dy; if (d < d1) { d2 = d1; d1 = d; k = i; ex = dx; ey = dy; } else if (d < d2) d2 = d; } return [Math.sqrt(d1), Math.sqrt(d2), k, ex, ey, P[k][2], P[k][3]]; }; }
+// 비스듬히 지나가는 빛 띠 (마스터리 위장의 광택 훑기)
+const sweepTex = (w = 0.045) => texOf(field(128, (u, v, o) => { const d = (u + v) % 1, k = Math.exp(-(((d - 0.5) / w) ** 2)) + Math.exp(-(((d - 0.62) / (w * 0.35)) ** 2)) * 0.5; o[0] = o[1] = o[2] = Math.min(255, k * 255); }), true, 1);
+// 디지털 위장: 8칸 네모를 잡음 높이로 네 가지 색에 나눔 (큰 덩어리 + 잔 네모가 섞인 MARPAT 느낌)
+function digital(pal, sd) {
+  return (g, s) => {
+    const N = 64, cs = s / N, tex = (cx, cy) => fbm(cx / N, cy / N, 4, 4, 4, sd) * 0.8 + fbm(cx / N, cy / N, 16, 16, 2, sd + 5) * 0.2 + (hsh(cx, cy, sd + 9) - 0.5) * 0.16;
+    for (let cy = 0; cy < N; cy++) for (let cx = 0; cx < N; cx++) {
+      const h = tex(cx, cy), i = h < 0.4 ? 3 : h < 0.48 ? 2 : h < 0.57 ? 1 : 0, j = hsh(cx, cy, sd + 3);
+      g.fillStyle = pal[i]; g.fillRect(cx * cs, cy * cs, cs + 0.3, cs + 0.3);
+      if (j < 0.12) { g.fillStyle = 'rgba(255,255,255,.05)'; g.fillRect(cx * cs, cy * cs, cs, cs); } else if (j > 0.9) { g.fillStyle = 'rgba(0,0,0,.07)'; g.fillRect(cx * cs, cy * cs, cs, cs); }
+    }
+    g.fillStyle = 'rgba(0,0,0,.08)'; for (let i = 0; i < 260; i++) g.fillRect((rnd() * N | 0) * cs, (rnd() * N | 0) * cs, cs, cs * 0.25); // 칠 결
+  };
+}
+const CAMO = {
+  desert: digital(['#cdb98f', '#a8916a', '#806b4c', '#584834'], 11),
+  urban: digital(['#a9aeb3', '#787e85', '#4a4f56', '#24272c'], 23),
+  forest: (g, s) => { // 우드랜드: 휘어진 큰 얼룩 네 가지 색 (카키 바탕, 초록, 갈색, 검정 붓질)
+    const pal = [hex3(0x9c9465), hex3(0x4e5a33), hex3(0x5f4630), hex3(0x1d1d19)];
+    g.imageSmoothingEnabled = true;
+    g.drawImage(field(FN(), (u, v, o) => {
+      const wu = u + (fbm(u, v, 3, 3, 3, 40) - 0.5) * 0.18, wv = v + (fbm(u, v, 3, 3, 3, 41) - 0.5) * 0.18;
+      const a = sstep(0.5, 0.53, fbm(wu, wv * 1.2, 3, 3, 4, 42)), b = sstep(0.57, 0.6, fbm(wu * 1.1, wv, 3, 3, 4, 47)), c = sstep(0.64, 0.665, fbm(wu, wv, 4, 4, 4, 53));
+      for (let k = 0; k < 3; k++) { let x = pal[0][k]; x += (pal[1][k] - x) * a; x += (pal[2][k] - x) * b; x += (pal[3][k] - x) * c; o[k] = x; }
+    }), 0, 0, s, s);
+  },
+  platinum: (g, s) => { // 결을 낸 백금판에 가늘게 새긴 육각 무늬
+    g.drawImage(field(FN(), (u, v, o) => { const b = fbm(u, v, 2, 96, 3, 60), k = 0.8 + b * 0.24 + (fbm(u, v, 3, 3, 2, 61) - 0.5) * 0.1; o[0] = 214 * k; o[1] = 219 * k; o[2] = 228 * k; }), 0, 0, s, s);
+    g.lineWidth = 1.1;
+    for (let y = 0, r = 0; y < s + 32; y += 27.7, r++) for (let x = r % 2 ? 16 : 0; x < s + 32; x += 32) {
+      g.beginPath(); for (let k = 0; k < 6; k++) { const a = k * 1.0472 + 0.5236; g[k ? 'lineTo' : 'moveTo'](x + Math.cos(a) * 15.5, y + Math.sin(a) * 15.5); } g.closePath();
+      g.strokeStyle = 'rgba(70,76,90,.32)'; g.stroke(); g.save(); g.translate(0.8, 0.8); g.strokeStyle = 'rgba(255,255,255,.35)'; g.stroke(); g.restore();
+    }
+  },
+  damascus: (g, s) => { // 접쇠(다마스커스) 물결: 휘어진 겹 무늬, 구리·금빛
+    const R = ramp([[0, 0x22160c], [0.3, 0x5c3a1e], [0.55, 0xa8723a], [0.78, 0xe2c27e], [0.92, 0xfff0c6], [1, 0xfff8e4]]);
+    g.drawImage(field(FN(), (u, v, o) => { const w = fbm(u, v, 2, 2, 4, 70) * 1.5 + fbm(u, v, 5, 5, 3, 71) * 0.35, ph = v * 16 + u * 3 + w * 2.2, t = 0.5 + 0.5 * Math.sin(6.2832 * ph), l2 = 0.5 + 0.5 * Math.sin(6.2832 * ph * 3 + 1.3), q = Math.pow(t, 1.4) * 0.72 + l2 * 0.16 + fbm(u, v, 32, 32, 2, 72) * 0.12; R(q, o); }), 0, 0, s, s);
+  },
+  obsidian: (g, s) => { // 흑요석: 검은 유리에 은빛 대리석 실금, 깊은 보랏빛
+    g.drawImage(field(FN(), (u, v, o) => {
+      const wu = u + fbm(u, v, 2, 2, 4, 80) * 0.5, wv = v + fbm(u, v, 2, 2, 4, 81) * 0.5, r = 1 - Math.abs(2 * fbm(wu, wv, 3, 3, 5, 82) - 1), r2 = 1 - Math.abs(2 * fbm(wu, wv, 6, 6, 3, 83) - 1);
+      const vein = sstep(0.935, 0.99, r) + sstep(0.965, 0.997, r2) * 0.5, cl = fbm(u, v, 3, 3, 3, 84);
+      o[0] = 8 + cl * 18 + vein * 215; o[1] = 7 + cl * 8 + vein * 215; o[2] = 12 + cl * 30 + vein * 225;
+    }), 0, 0, s, s);
+  },
+  diamond: (g, s) => { // 다이아몬드: 깎은 결정면마다 다른 밝기, 빛나는 모서리
+    const V = voro(150, 90);
+    g.drawImage(field(FN(), (u, v, o) => {
+      const [d1, d2, k, ex, ey, h, a] = V(u, v), sh = Math.min(1, Math.max(0, 0.5 + (ex * Math.cos(a) + ey * Math.sin(a)) * 14)), e = 1 - sstep(0, 0.006, d2 - d1), tone = hsh(k, 7, 91);
+      const L = Math.min(1, 0.32 + h * 0.45 + sh * 0.3) + e * 0.6, tc = tone < 0.18 ? [255, 214, 236] : tone < 0.4 ? [196, 228, 255] : tone < 0.5 ? [220, 206, 255] : [236, 244, 255];
+      o[0] = Math.min(255, tc[0] * L); o[1] = Math.min(255, tc[1] * L); o[2] = Math.min(255, tc[2] * L);
+    }), 0, 0, s, s);
+  },
+  diamondEm: (g, s) => { // 반짝이는 별빛 (빛나는 층)
+    g.fillStyle = '#000'; g.fillRect(0, 0, s, s);
+    wrap(g, s, () => { g.globalCompositeOperation = 'lighter'; for (let i = 0; i < 70; i++) { const x = kr(i + 300) * s, y = kr(i + 400) * s, r = 4 + kr(i + 500) * 10, rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(0.25, 'rgba(190,230,255,.6)'); rg.addColorStop(1, 'rgba(120,180,255,0)'); g.fillStyle = rg; g.fillRect(x - r, y - r, r * 2, r * 2); g.fillStyle = 'rgba(230,245,255,.85)'; g.fillRect(x - r * 1.8, y - 0.6, r * 3.6, 1.2); g.fillRect(x - 0.6, y - r * 1.8, 1.2, r * 3.6); } g.globalCompositeOperation = 'source-over'; });
+  },
+  atomic: (g, s, em) => { // 아토믹: 반짝이는 붉은 액체가 소용돌이치는 결
+    const R = ramp(em ? [[0, 0x000000], [0.62, 0x000000], [0.8, 0x9a1808], [0.92, 0xff7a20], [1, 0xffe6a0]] : [[0, 0x3a0004], [0.25, 0x8e0a10], [0.5, 0xd81e1a], [0.72, 0xff6a1a], [0.88, 0xffcf5a], [1, 0xfff4d8]]);
+    g.drawImage(field(FN(), (u, v, o) => { const q = fbm(u, v, 3, 3, 4, 100), r = fbm(u, v, 3, 3, 4, 101), f = fbm(u + q * 0.4, v + r * 0.4, 3, 3, 5, 102), t = 0.5 + 0.5 * Math.sin(f * 30); R(Math.pow(t, 1.6) * 0.82 + f * 0.25, o); }), 0, 0, s, s);
+  },
+  orion: (g, s, em) => { // 오리온: 무지갯빛 진주 물결과 가는 빛줄기
+    const c = new THREE.Color();
+    g.drawImage(field(FN(), (u, v, o) => {
+      const q = fbm(u, v, 2, 2, 4, 110), f = fbm(u + q * 0.5, v + q * 0.3, 3, 3, 5, 111), line = Math.pow(0.5 + 0.5 * Math.sin(f * 40), 12);
+      if (em) { const k = Math.min(1, line * 0.9 + sstep(0.62, 0.8, f) * 0.35); o[0] = o[1] = o[2] = k * 255; return; }
+      c.setHSL((f * 2.4 + v * 0.35) % 1, 0.7, 0.5 + line * 0.3); const w = 0.25 + q * 0.2; o[0] = (c.r * (1 - w) + w) * 255; o[1] = (c.g * (1 - w) + w) * 255; o[2] = (c.b * (1 - w) + w) * 255;
+    }), 0, 0, s, s);
+  },
+  darkmatter: (g, s, em) => { // 다크 매터: 검은 결정 위로 흐르는 보라·파랑·붉은 빛 조각
+    if (!em) {
+      g.drawImage(field(FN(), (u, v, o) => { const n = fbm(u, v, 3, 3, 5, 120), m = fbm(u + n * 0.3, v, 4, 4, 3, 121); o[0] = 6 + Math.pow(m, 3) * 70; o[1] = 4 + Math.pow(n, 3) * 18; o[2] = 14 + Math.pow(n, 2.2) * 70; }), 0, 0, s, s);
+      wrap(g, s, () => { for (let i = 0; i < 46; i++) { const x = kr(i + 600) * s, y = kr(i + 700) * s, r = 14 + kr(i + 800) * 34, a = kr(i + 900) * 6.28; g.fillStyle = `rgba(${60 + kr(i) * 60 | 0},${30 + kr(i + 1) * 30 | 0},${120 + kr(i + 2) * 100 | 0},${0.08 + kr(i + 3) * 0.14})`; g.beginPath(); g.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r); g.lineTo(x + Math.cos(a + 2.4) * r * 0.5, y + Math.sin(a + 2.4) * r * 0.5); g.lineTo(x + Math.cos(a + 3.9) * r * 0.8, y + Math.sin(a + 3.9) * r * 0.8); g.closePath(); g.fill(); g.strokeStyle = 'rgba(170,140,255,.18)'; g.lineWidth = 0.8; g.stroke(); } });
+      return;
+    }
+    g.fillStyle = '#000'; g.fillRect(0, 0, s, s);
+    const C = ['168,80,255', '70,120,255', '255,60,170', '255,70,60'];
+    wrap(g, s, () => {
+      g.globalCompositeOperation = 'lighter'; g.lineCap = 'round';
+      for (let i = 0; i < 40; i++) { const x = kr(i + 1000) * s, y = kr(i + 1100) * s, l = 30 + kr(i + 1200) * 90, c = C[i % 4], a = -0.55 + (kr(i + 1300) - 0.5) * 0.3; for (const [w, al] of [[5, 0.12], [2, 0.4], [0.8, 1]]) { g.strokeStyle = `rgba(${c},${al})`; g.lineWidth = w; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); } }
+      for (let i = 0; i < 90; i++) { const x = kr(i + 1400) * s, y = kr(i + 1500) * s, r = 1.5 + kr(i + 1600) * 5, c = C[i % 4], a = kr(i + 1700) * 6.28; g.fillStyle = `rgba(${c},.9)`; g.beginPath(); g.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r); g.lineTo(x + Math.cos(a + 2.2) * r * 0.6, y + Math.sin(a + 2.2) * r * 0.6); g.lineTo(x + Math.cos(a + 4) * r * 0.7, y + Math.sin(a + 4) * r * 0.7); g.closePath(); g.fill(); const rg = g.createRadialGradient(x, y, 0, x, y, r * 3); rg.addColorStop(0, `rgba(${c},.35)`); rg.addColorStop(1, `rgba(${c},0)`); g.fillStyle = rg; g.fillRect(x - r * 3, y - r * 3, r * 6, r * 6); }
+      g.globalCompositeOperation = 'source-over';
+    });
+  },
+};
+// 광택 훑기: sweep 빛 띠가 일정하게 지나가며, 띠의 세기는 t 에 따라 숨쉬듯 바뀜
+const sweepAnim = (tex, base, amp, speed = 0.32) => (m, t) => { tex.offset.x = t * speed; m.body.emissiveIntensity = base + amp * (0.6 + 0.4 * Math.sin(t * 1.9)); };
 // 스킨별 재질: body = 몸통 무늬, grip = 손잡이, metal = 총열, bolt, accent. anim = 매 프레임 움직임
 // clearcoat 겉칠 · iridescence 무지갯빛 막은 화질 '낮음'에서는 빠진다
 const SKIN_DEF = {
-  desert: () => { const c = pcan(PAT.desert), m = texOf(c, true), n = nrm(c, 0.5); return { body: { wear: 0.5, color: 0xffffff, map: m, normalMap: n, metalness: 0.06, roughness: 0.82 }, body2: { wear: 0.5, color: 0xb9a888, map: m, normalMap: n, metalness: 0.06, roughness: 0.86 }, grip: { color: 0x3a3630, roughness: 0.85 }, metal: { color: 0x5a5144, metalness: 0.75, roughness: 0.48 }, accent: { color: 0xe2c078 } }; },
-  forest: () => { const c = pcan(PAT.forest), m = texOf(c, true), n = nrm(c, 0.5); return { body: { wear: 0.5, color: 0xffffff, map: m, normalMap: n, metalness: 0.05, roughness: 0.8 }, body2: { wear: 0.5, color: 0xa9b190, map: m, normalMap: n, metalness: 0.05, roughness: 0.86 }, grip: { color: 0x2c3024, roughness: 0.85 }, metal: { color: 0x2b2e28, metalness: 0.8, roughness: 0.45 }, accent: { color: 0x9db55a } }; },
+  desert: () => { const c = pcan(CAMO.desert, 10), m = texOf(c, true), n = nrm(c, 0.35); return { body: { wear: 0.5, wearCol: 0xb0a690, color: 0xffffff, map: m, normalMap: n, metalness: 0.06, roughness: 0.78 }, body2: { wear: 0.5, color: 0xc2b294, map: m, normalMap: n, metalness: 0.06, roughness: 0.84 }, grip: { color: 0x4a4234, roughness: 0.85 }, metal: { color: 0x4f473b, metalness: 0.78, roughness: 0.44 }, accent: { color: 0xe2c078 } }; },
+  forest: () => { const c = pcan(CAMO.forest, 10), m = texOf(c, true), n = nrm(c, 0.3); return { body: { wear: 0.5, color: 0xffffff, map: m, normalMap: n, metalness: 0.05, roughness: 0.8 }, body2: { wear: 0.5, color: 0xb2b49a, map: m, normalMap: n, metalness: 0.05, roughness: 0.86 }, grip: { color: 0x2c3024, roughness: 0.85 }, metal: { color: 0x2b2e28, metalness: 0.8, roughness: 0.45 }, accent: { color: 0x9db55a } }; },
+  urban: () => { const c = pcan(CAMO.urban, 10), m = texOf(c, true), n = nrm(c, 0.35); return { body: { wear: 0.55, wearCol: 0xd0d5dc, color: 0xffffff, map: m, normalMap: n, metalness: 0.1, roughness: 0.72 }, body2: { wear: 0.5, color: 0xb8bcc2, map: m, normalMap: n, metalness: 0.1, roughness: 0.8 }, grip: { color: 0x1c1e22, roughness: 0.85 }, metal: { color: 0x2a2d32, metalness: 0.85, roughness: 0.4 }, accent: { color: 0xd8dde3 } }; },
+  // ── 마스터리 위장: 모두 빛 층(emissive)이 있고, 매 프레임 세기를 다시 정한다 (각성 효과가 그 위에 곱해짐) ──
+  platinum: () => { const c = pcan(CAMO.platinum, 5), sw = sweepTex(); return { body: { wear: 0.3, wearCol: 0xffffff, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.9), metalness: 1, roughness: 0.14, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.06, emissive: 0xe8f0ff, emissiveMap: sw, emissiveIntensity: 0.4 }, grip: { color: 0x15171b, metalness: 0.3, roughness: 0.5 }, metal: { color: 0xeef1f6, metalness: 1, roughness: 0.1 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.05 }, accent: { color: 0x9fb6d8 }, envI: 1.9, anim: sweepAnim(sw, 0.15, 0.55) }; },
+  damascus: () => { const c = pcan(CAMO.damascus, 5), sw = sweepTex(0.05); return { body: { wear: 0.25, wearCol: 0xfff2c8, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 1.1), metalness: 1, roughness: 0.24, roughnessMap: smudge(), clearcoat: 0.7, clearcoatRoughness: 0.1, emissive: 0xffd890, emissiveMap: sw, emissiveIntensity: 0.4 }, grip: { color: 0x1d140d, metalness: 0.25, roughness: 0.55 }, metal: { color: 0x3a2618, metalness: 1, roughness: 0.22 }, bolt: { color: 0xf3cf8a, metalness: 1, roughness: 0.1 }, accent: { color: 0xe2a24a }, envI: 1.7, anim: sweepAnim(sw, 0.12, 0.5) }; },
+  obsidian: () => { const c = pcan(CAMO.obsidian, 4), sw = sweepTex(0.035); return { body: { wear: 0, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 0.6), metalness: 0.35, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02, emissive: 0xc8b8ff, emissiveMap: sw, emissiveIntensity: 0.3 }, grip: { color: 0x0a0a0d, metalness: 0.4, roughness: 0.35 }, metal: { color: 0x121216, metalness: 1, roughness: 0.12 }, bolt: { color: 0xe6e8ee, metalness: 1, roughness: 0.06 }, accent: { color: 0xffffff }, envI: 2, anim: sweepAnim(sw, 0.1, 0.45, 0.26) }; },
+  diamond: () => { const c = pcan(CAMO.diamond, 4), em = texOf(pcan(CAMO.diamondEm, 0), true); return { body: { wear: 0, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 1.6), metalness: 0.55, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.02, iridescence: 1, iridescenceIOR: 2.0, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1 }, grip: { color: 0x1c2534, metalness: 0.3, roughness: 0.4 }, metal: { color: 0xe4f4ff, metalness: 1, roughness: 0.06 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.03 }, accent: { color: 0x9fe4ff, emissive: 0x5fc8ff, emissiveIntensity: 0.6 }, envI: 2.2,
+    anim: (m, t) => { const st = Math.floor(t * 4), k = t * 4 - st; em.offset.set(kr(st) * 0.9, kr(st + 77) * 0.9); m.body.emissiveIntensity = 0.25 + Math.sin(k * Math.PI) * 1.6; } }; }, // 반짝임이 자리를 옮기며 깜박임
+  atomic: () => { const c = pcan(CAMO.atomic, 4), mp = texOf(c, true), em = texOf(pcan((g, s) => CAMO.atomic(g, s, true), 0), true); return { body: { wear: 0, color: 0xffffff, map: mp, normalMap: nrm(c, 0.5), metalness: 0.55, roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.04, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1 }, grip: { color: 0x200608, metalness: 0.3, roughness: 0.45 }, metal: { color: 0x7a0a0e, metalness: 1, roughness: 0.16 }, bolt: { color: 0xffb070, metalness: 1, roughness: 0.1, emissive: 0xff4a10, emissiveIntensity: 0.5 }, accent: { color: 0xffd45a, emissive: 0xff7a1a, emissiveIntensity: 0.9 }, envI: 1.8,
+    anim: (m, t) => { mp.offset.set(t * 0.018, t * 0.01); em.offset.set(t * 0.018, t * 0.01); m.body.emissiveIntensity = 0.8 + Math.sin(t * 2.4) * 0.35 + Math.sin(t * 6.1) * 0.08; } }; }, // 결이 천천히 흐름
+  orion: () => { const c = pcan(CAMO.orion, 4), mp = texOf(c, true), em = texOf(pcan((g, s) => CAMO.orion(g, s, true), 0), true), hc = new THREE.Color(); return { body: { wear: 0, color: 0xffffff, map: mp, normalMap: nrm(c, 0.4), metalness: 0.7, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 1, iridescenceIOR: 1.8, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1 }, grip: { color: 0x141a2c, metalness: 0.3, roughness: 0.4 }, metal: { color: 0xd8e2f6, metalness: 1, roughness: 0.08 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.04 }, accent: { color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.6 }, envI: 2,
+    anim: (m, t) => { mp.offset.x = t * 0.025; em.offset.set(-t * 0.04, t * 0.012); m.body.emissive.copy(hc.setHSL((t * 0.09) % 1, 0.95, 0.6)); m.accent.emissive.copy(hc); m.body.emissiveIntensity = 1.0 + Math.sin(t * 1.6) * 0.3; } }; }, // 빛 색이 무지개로 돎
+  darkmatter: () => { const c = pcan(CAMO.darkmatter, 5), mp = texOf(c, true), em = texOf(pcan((g, s) => CAMO.darkmatter(g, s, true), 0), true); return { body: { wear: 0, color: 0xffffff, map: mp, normalMap: nrm(c, 0.8), metalness: 0.65, roughness: 0.16, clearcoat: 1, clearcoatRoughness: 0.05, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.2 }, grip: { color: 0x0c0a16, metalness: 0.3, roughness: 0.45 }, metal: { color: 0x1a1030, metalness: 1, roughness: 0.14 }, bolt: { color: 0xb070ff, metalness: 1, roughness: 0.1, emissive: 0x7a30ff, emissiveIntensity: 0.6 }, accent: { color: 0xff3da8, emissive: 0xff3da8, emissiveIntensity: 1 }, envI: 1.8,
+    anim: (m, t) => { mp.offset.x = -t * 0.008; em.offset.set(t * 0.07, -t * 0.04); m.body.emissiveIntensity = 1.1 + Math.sin(t * 2.2) * 0.35 + Math.sin(t * 7.3) * 0.1; } }; }, // 빛 조각이 비스듬히 흘러감
   gold: () => { const c = pcan(PAT.gold, 6); return { body: { wear: 0.45, wearCol: 0xfff2c0, color: 0xffffff, map: texOf(c, true), normalMap: nrm(c, 1.5), metalness: 1, roughness: 0.24, roughnessMap: smudge(), clearcoat: 0.6, clearcoatRoughness: 0.12 }, grip: { color: 0x1a1612, metalness: 0.2, roughness: 0.6 }, metal: { color: 0xf0c45a, metalness: 1, roughness: 0.18, roughnessMap: smudge() }, bolt: { color: 0xfff0b8, metalness: 1, roughness: 0.1 }, accent: { color: 0x1a1612 }, envI: 1.6 }; },
   neon: () => { const c = pcan(PAT.neon, 6), mp = texOf(c, true), em = texOf(pcan((g, s) => PAT.neon(g, s, true), 0), true); return { body: { wear: 0.15, color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.2, normalMap: nrm(c, 0.6), metalness: 0.7, roughness: 0.32, roughnessMap: smudge(), clearcoat: 0.5, clearcoatRoughness: 0.2 }, grip: { color: 0x0b0e14, roughness: 0.7 }, metal: { color: 0x10141c, metalness: 0.9, roughness: 0.3 }, bolt: { color: 0x19e3ff, emissive: 0x19e3ff, emissiveIntensity: 0.8 }, accent: { color: 0xff3df0, emissive: 0xff3df0, emissiveIntensity: 1 }, anim: (m, t) => { m.body.emissiveIntensity = 0.95 + Math.sin(t * 3) * 0.5; } }; },
   lava: () => { const c = pcan(PAT.lava), em = texOf(pcan((g, s) => PAT.lava(g, s, true), 0), true); return { body: { wear: 0, color: 0xffffff, map: texOf(c, true), emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.0, normalMap: nrm(c, 1.3), metalness: 0.15, roughness: 0.86 }, grip: { color: 0x17110f, roughness: 0.9 }, metal: { color: 0x2a1a14, metalness: 0.8, roughness: 0.4 }, bolt: { color: 0xff8a2a, emissive: 0xff5a00, emissiveIntensity: 0.9 }, accent: { color: 0xffd27a, emissive: 0xff7a1a, emissiveIntensity: 1 }, anim: (m, t) => { m.body.emissiveIntensity = 0.85 + Math.sin(t * 1.7) * 0.4 + Math.sin(t * 5.3) * 0.12; } }; },
@@ -355,8 +464,10 @@ const SKIN_DEF = {
   aurora: () => { const mp = texOf(pcan((g, s) => PAT.aurora(g, s, false), 4), true), em = texOf(pcan((g, s) => PAT.aurora(g, s, true), 0), true); return { body: { color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 0.7, metalness: 0.75, roughness: 0.2, roughnessMap: smudge(), clearcoat: 1, clearcoatRoughness: 0.05, iridescence: 0.7, iridescenceIOR: 1.5, wear: 0 }, grip: { color: 0x10182a, metalness: 0.3, roughness: 0.45 }, metal: { color: 0xdfe8f2, metalness: 1, roughness: 0.1, wear: 0 }, bolt: { color: 0xffffff, metalness: 1, roughness: 0.05 }, accent: { color: 0x7dffc8, emissive: 0x3dffb0, emissiveIntensity: 0.8 }, envI: 1.6, anim: (m, t) => { mp.offset.x = em.offset.x = t * 0.035; m.body.emissiveIntensity = 0.62 + Math.sin(t * 1.3) * 0.22; } }; },
   halloween: () => { const c = pcan((g, s) => PAT.halloween(g, s, false), 8), mp = texOf(c, true), em = texOf(pcan((g, s) => PAT.halloween(g, s, true), 0), true); return { body: { wear: 0.25, color: 0xffffff, map: mp, emissive: 0xffffff, emissiveMap: em, emissiveIntensity: 1.1, normalMap: nrm(c, 0.4), metalness: 0.2, roughness: 0.5, clearcoat: 0.4, clearcoatRoughness: 0.3 }, grip: { color: 0x1a1220, roughness: 0.8 }, metal: { color: 0x2c1d3a, metalness: 0.88, roughness: 0.32 }, bolt: { color: 0xff8a1a, metalness: 0.7, roughness: 0.3, emissive: 0x7a2c00, emissiveIntensity: 0.5 }, accent: { color: 0x9dff3a, emissive: 0x6fd020, emissiveIntensity: 0.9 }, anim: (M, t) => { const k = 1.75 + Math.sin(t * 9.1) * 0.22 + Math.sin(t * 23.7) * 0.16; M.glow.emissiveIntensity = k; M.body.emissiveIntensity = 0.75 + (k - 1.75) * 1.1 + 0.35; } }; }, // 촛불처럼 일렁임
 };
-// 무료 스킨의 궤적·불꽃 색 (형태 키트가 있는 스킨은 키트에 적혀 있음)
-const FX_FREE = { desert: { tracer: 0xffd08a, flash: 0xffb45a }, forest: { tracer: 0xbfff8a, flash: 0xd9ff9a } };
+// 형태 키트가 없는 스킨(무료·위장)의 궤적·불꽃 색 (형태 키트가 있는 스킨은 키트에 적혀 있음)
+const FX_FREE = { desert: { tracer: 0xffd08a, flash: 0xffb45a }, forest: { tracer: 0xbfff8a, flash: 0xd9ff9a }, urban: { tracer: 0xdfe8f2, flash: 0xfff0d0 },
+  platinum: { tracer: 0xeaf2ff, flash: 0xf4f8ff }, damascus: { tracer: 0xffc46a, flash: 0xffd890 }, obsidian: { tracer: 0xd8ccff, flash: 0xffffff }, diamond: { tracer: 0x9fe8ff, flash: 0xe0f8ff },
+  atomic: { tracer: 0xff4a1a, flash: 0xff8a3a }, orion: { tracer: 0xffffff, flash: 0xe0e8ff, rainbow: true }, darkmatter: { tracer: 0xb05cff, flash: 0xd08aff } };
 // 형태 키트가 쓰는 스킨 전용 재질
 const KMATS = {
   tiger: () => ({ fang: { color: 0xf3ead2, metalness: 0.1, roughness: 0.32 }, eye: { color: 0xb6ff3a, emissive: 0x9dff3a, emissiveIntensity: 1.3, roughness: 0.2 } }),
