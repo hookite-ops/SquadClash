@@ -3,7 +3,8 @@ import * as THREE from './vendor/three.module.js';
 import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, MAPS, setMap, BOXES, SITES, siteAt, dirFrom, rayWorld, rayPlayer, hitNormal, HIT_M, segHitsSphere, groundAt, waterAt, boxesNear, PARTS, PART_SLOTS, PART_MAX, partSlots, partOk, cleanParts, effWeapon, SKIN_LV, SKIN_LV_NAME, skinLevel } from './shared.js';
 import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox } from './guns.js';
 import { buildBody, paintTex, isPaint, initPaintEditor, paintUI } from './paint.js';
-import { buildWorld, blobShadow, MOODS } from './world.js';
+import { buildWorld, blobShadow, MOODS, setWorldQuality } from './world.js';
+import { makePost, TONE } from './post.js';
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -22,11 +23,22 @@ const RADIO = ['A 지점으로!', 'B 지점으로!', '적 발견!', '도와줘!'
 const gfx = ['low', 'mid', 'high'].includes(store.get('gfx', '')) ? store.get('gfx', '') : (isTouch ? 'mid' : 'high');
 
 // ───────────── 화면 ─────────────
-const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: gfx === 'high', powerPreference: 'high-performance' });
+const QLOCK = /[?&]qlock/.test(location.search); // 테스트용: 느려도 화질을 자동으로 낮추지 않음
+const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, gfx === 'low' ? 1 : gfx === 'mid' ? 1.5 : 2));
 renderer.autoClear = false;
+renderer.toneMapping = TONE; // 밝은 곳이 하얗게 날아가지 않고 부드럽게 눌림
 setGunQuality(gfx);
 initGunEnv(renderer);
+setWorldQuality(gfx, renderer);
+// 후처리(빛 번짐·선명도·색 보정). 화질 '낮음'은 쓰지 않고 바로 화면에 그림
+const post = gfx === 'low' ? null : makePost(renderer, { samples: gfx === 'high' ? 4 : 0, levels: gfx === 'high' ? 5 : 3 });
+let postOn = !!post && post.active;
+const GRADE_UI = { bloom: 0.4, thresh: 1.0, sat: 1.04, con: 1.03, vig: 0.34, grain: 0.008 }; // 무기고·캐릭터 그리기 화면
+function present(draw, now, grade) { // 그리기 함수를 후처리를 거쳐(또는 바로) 화면에 내보냄
+  if (postOn) { post.setGrade(grade); post.begin(); draw(); post.end(now / 1000); }
+  else { renderer.setRenderTarget(null); draw(); }
+}
 // 스킨: 무기마다 고른 스킨 번호, 등록한 코드, 쓸 수 있는 스킨
 const jget = (k, d) => { try { const v = JSON.parse(store.get(k, '')); return v ?? d; } catch { return d; } };
 let mySk = WEAPONS.map((_, i) => { const v = jget('sk', [])[i]; return SKINS[v] ? v : 0; });
@@ -42,16 +54,45 @@ const unlocked = new Set(SKINS.map((k, i) => (k.free ? i : -1)).filter((i) => i 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 500);
 camera.rotation.order = 'YXZ';
-const worldOpt = { shadows: gfx !== 'low', shadowSize: gfx === 'high' ? 2048 : 1024, lowFar: gfx === 'low', farK: gfx === 'low' ? 0.55 : gfx === 'mid' ? 0.8 : 1, mood: 0 };
+const worldOpt = { shadows: gfx !== 'low', shadowSize: gfx === 'high' ? 2048 : 1024, lowFar: gfx === 'low', farK: gfx === 'low' ? 0.55 : gfx === 'mid' ? 0.8 : 1, mood: 0, hdr: postOn && post.hdr, lin: postOn };
 let world = buildWorld(scene, renderer, worldOpt);
 camera.far = world.far;
 
 const vmScene = new THREE.Scene();
 const vmCam = new THREE.PerspectiveCamera(58, 1, 0.01, 10);
-vmScene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.7));
+const vmHemi = new THREE.HemisphereLight(0xffffff, 0x556070, 1.7);
 const vmSun = new THREE.DirectionalLight(0xffffff, 1.4);
 vmSun.position.set(-0.6, 2, 1.5);
-vmScene.add(vmSun);
+vmScene.add(vmHemi, vmSun);
+// 손에 든 총의 빛을 맵에 맞춤: 빛 색은 맵 분위기를 따르고, 해 방향은 시점에 따라 돌며, 그늘에 들어가면 어두워짐
+const VML = { hemi: 1.7, sun: 1.4, shade: 0, t: 0, dir: new THREE.Vector3(-0.3, 0.8, 0.5).normalize() };
+const _vq = new THREE.Quaternion(), _wc = new THREE.Color(0xffffff), _gc = new THREE.Color(0x556070);
+let UIL = false; // 무기고 빛을 쓰고 있었는지
+function applyTheme() {
+  const T = world.theme; UIL = false;
+  vmHemi.color.set(T.hemi[0]).lerp(_wc, 0.4); vmHemi.groundColor.set(T.hemi[1]).lerp(_gc, 0.45);
+  vmSun.color.set(T.sun[0]).lerp(_wc, 0.25);
+  VML.hemi = T.night ? 1.0 : 1.55; VML.sun = T.night ? 0.75 : Math.min(1.9, 0.6 + T.sun[1] * 0.42);
+  VML.dir.set(T.sun[2][0], T.sun[2][1], T.sun[2][2]).normalize();
+}
+const _sv = new THREE.Vector3(), _sunC = new THREE.Color();
+function updateVmLight(dt, now) { // 해가 가려졌는지(그늘) 가끔 확인 → 총의 밝기와, 해 쪽을 볼 때 화면에 번지는 빛
+  if (now - VML.t > 140) {
+    VML.t = now;
+    VML.want = rayWorld([camera.position.x, camera.position.y, camera.position.z], [VML.dir.x, VML.dir.y, VML.dir.z], 90) < 90 ? 1 : 0;
+  }
+  VML.shade += ((VML.want || 0) - VML.shade) * Math.min(1, dt * 6);
+  _sv.copy(VML.dir).applyQuaternion(_vq.copy(camera.quaternion).invert());
+  vmSun.position.copy(_sv);
+  vmSun.intensity = VML.sun * (1 - VML.shade * 0.72); vmHemi.intensity = VML.hemi * (1 - VML.shade * 0.18);
+  if (postOn) {
+    const T = world.theme, k = (1 - VML.shade) * (T.night ? 0.05 : 0.1), th = Math.tan((camera.fov * Math.PI) / 360);
+    _sunC.set(T.sun[0]);
+    post.setGlare(_sv, _sunC.r * k, _sunC.g * k, _sunC.b * k, th * camera.aspect, th);
+  }
+}
+function uiLight() { vmHemi.color.set(0xffffff); vmHemi.groundColor.set(0x556070); vmHemi.intensity = 1.7; vmSun.color.set(0xffffff); vmSun.intensity = 1.4; vmSun.position.set(-0.6, 2, 1.5); if (postOn) post.setGlare(null, 0, 0, 0); UIL = true; } // 무기고·캐릭터 화면은 늘 같은 빛
+applyTheme();
 
 // 게임이 쓰는 화면 영역: 가로로 쥐면 화면 전체, 세로로 쥐면(터치 기기) 아래쪽 절반만 씀
 let VW = window.innerWidth, VH = window.innerHeight, VT = 0; // 너비, 높이, 위쪽 여백
@@ -1057,7 +1098,7 @@ function setMood(i) { // 날씨·시간대가 바뀌면 섬을 다시 그림
   worldOpt.mood = i;
   if (!MAPS[curMap].br) return;
   world.dispose(); world = buildWorld(scene, renderer, worldOpt);
-  camera.far = world.far; camera.updateProjectionMatrix(); buildMiniBase(); applySides();
+  camera.far = world.far; camera.updateProjectionMatrix(); buildMiniBase(); applySides(); applyTheme();
 }
 function leaveCar() { // 차 왼쪽으로 내림 (막혀 있으면 오른쪽, 그것도 막혔으면 제자리)
   const rx = Math.cos(car.yaw), rz = -Math.sin(car.yaw);
@@ -1075,7 +1116,7 @@ function loadMap(i) { // 다른 맵으로 바꾸기
   world.dispose();
   world = buildWorld(scene, renderer, worldOpt);
   camera.far = world.far; camera.updateProjectionMatrix();
-  buildSites(); buildMiniBase(); applySides();
+  buildSites(); buildMiniBase(); applySides(); applyTheme();
   for (const h of holes) h.visible = false;
   for (const sm of smokes) scene.remove(sm.g);
   smokes.length = 0;
@@ -1888,6 +1929,8 @@ function movePlayer(dt, now) {
   }
 }
 const eye = [0, 0, 0];
+let dbgCam = null; // 테스트·촬영용 자유 시점 { p: [x, y, z], yaw, pitch }
+function applyDbgCam() { if (!dbgCam) return false; camera.rotation.order = 'YXZ'; camera.position.set(dbgCam.p[0], dbgCam.p[1], dbgCam.p[2]); camera.rotation.set(dbgCam.pitch || 0, dbgCam.yaw || 0, 0); return true; }
 const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3();
 function smoked(a, b) { for (const s of smokes) if (s.t < s.last && segHitsSphere(a, b, [s.x, s.y, s.z], s.r)) return true; return false; }
 function aimedEnemy(maxT) {
@@ -2040,6 +2083,18 @@ function updateFx(dt) {
 }
 
 let lastT = performance.now(), lastSend = 0, menuAng = 0, perfT = 0, perfN = 0;
+const drawVm = () => { renderer.setClearColor(0x161a21, 1); renderer.clear(); renderer.render(vmScene, vmCam); };
+const drawWorld = () => { renderer.clear(); renderer.render(scene, camera); };
+const drawGame = () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(vmScene, vmCam); };
+// 느린 기기면 화질을 한 단계씩 낮춤: 계단 현상 줄이기 끔 → 해상도 → 빛 번짐 줄임 → 해상도 → 후처리 끔
+function stepDown() {
+  const pr = renderer.getPixelRatio();
+  if (postOn && post.samples > 0) post.config({ samples: 0 });
+  else if (pr > 1.5) { renderer.setPixelRatio(1.5); resize(); }
+  else if (postOn && post.levels > 3) post.config({ levels: 3 });
+  else if (pr > 1) { renderer.setPixelRatio(1); resize(); }
+  else if (postOn) { postOn = false; post.dispose(); }
+}
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - lastT) / 1000);
@@ -2051,7 +2106,7 @@ function frame(now) {
     pvGroup.position.set((((r.left + r.right) / 2 / VW) * 2 - 1) * 0.554 * d * asp, -((((r.top + r.bottom) / 2 - VT) / VH) * 2 - 1) * 0.554 * d - 0.95, -d);
     pvGroup.rotation.y = paintUI.yaw;
     pvGroup.visible = true; vm.visible = false; lkGroup.visible = false;
-    renderer.setClearColor(0x161a21, 1); renderer.clear(); renderer.render(vmScene, vmCam);
+    uiLight(); present(drawVm, now, GRADE_UI);
     return;
   }
   if (!joined && lockerOpen) { // 무기고: 어두운 배경에 총만 크게
@@ -2063,7 +2118,7 @@ function frame(now) {
     lkGun.rotation.set(0.1, lkYaw, 0);
     lkGroup.visible = true; vm.visible = false;
     tickSkins(now / 1000);
-    renderer.setClearColor(0x161a21, 1); renderer.clear(); renderer.render(vmScene, vmCam);
+    uiLight(); present(drawVm, now, GRADE_UI);
     return;
   }
   if (!joined) {
@@ -2071,8 +2126,11 @@ function frame(now) {
     const big = ARENA.hx > 100;
     camera.position.set(Math.cos(menuAng) * ARENA.hx * (big ? 0.7 : 0.95), big ? ARENA.hx * 0.36 : 30, Math.sin(menuAng) * ARENA.hz * (big ? 0.7 : 1.05));
     camera.lookAt(4, big ? 6 : 0, 0);
+    applyDbgCam();
     world.update(camera.position, dt);
-    renderer.clear(); renderer.render(scene, camera);
+    if (UIL) applyTheme();
+    updateVmLight(dt, now);
+    present(drawWorld, now, world.grade);
     return;
   }
   if (me.alive && !matchEnded && car.id) { // 운전 중: 차 뒤에서 따라가는 시점
@@ -2152,11 +2210,12 @@ function frame(now) {
       sfxTone(1250, 0.05, Math.max(0.05, v) * 0.16, 'square');
     }
   } else bombMesh.visible = false;
-  // 느린 기기면 화질을 자동으로 낮춤
+  // 느린 기기면 화질을 자동으로 낮춤 (3초 평균이 초당 33장에 못 미치면 한 단계)
   perfT += dt; perfN++;
-  if (perfT > 3) { if (perfT / perfN > 0.03 && renderer.getPixelRatio() > 1) { renderer.setPixelRatio(1); resize(); } perfT = 0; perfN = 0; }
+  if (perfT > 3) { if (perfT / perfN > 0.03 && !QLOCK) stepDown(); perfT = 0; perfN = 0; }
   updateOthers(dt, now);
   updateFx(dt);
+  applyDbgCam();
   world.update(camera.position, dt);
   if (AC && !!ambient !== (mode === 'br')) setAmbient(mode === 'br');
   if (mode === 'br') {
@@ -2210,7 +2269,7 @@ function frame(now) {
   else { gp.rotation.y = 0; gp.rotation.z = 0; }
   tickSkins(now / 1000);
   if (flash.visible) { const m = gp.userData.muzzle; flash.position.set(gp.position.x + m[0], gp.position.y + m[1], gp.position.z + m[2] - 0.03); if (now > flash._off) flash.visible = false; }
-  vm.visible = me.alive && !scopeOn && !matchEnded && !me.drop && !car.id;
+  vm.visible = me.alive && !scopeOn && !matchEnded && !me.drop && !car.id && !dbgCam;
   const tf = me.alive && me.scoped ? (W.scope && !scopeOn ? 62 : W.zoom || VM[W.vm].fov) : me.alive && car.id ? 75 + Math.min(10, Math.abs(car.sp) * 0.5) : me.alive && me.sprint ? 81 : 75;
   if (Math.abs(camera.fov - tf) > 0.05) { camera.fov += (tf - camera.fov) * Math.min(1, dt * 14); camera.updateProjectionMatrix(); }
   if (hudCache.spr !== me.sprint) { hudCache.spr = me.sprint; $('sprintTag').classList.toggle('on', me.sprint); }
@@ -2220,10 +2279,11 @@ function frame(now) {
     send({ t: 'in', p: [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2)], r: [+me.yaw.toFixed(3), +me.pitch.toFixed(3)], w: me.w, c: me.crouch ? 1 : 0, a: me.drop ? 1 : 0, vy: car.id ? +car.yaw.toFixed(3) : undefined });
   }
   updateHud(now);
-  renderer.clear(); renderer.render(scene, camera);
-  renderer.clearDepth(); renderer.render(vmScene, vmCam);
+  if (UIL) applyTheme();
+  updateVmLight(dt, now);
+  present(drawGame, now, world.grade);
 }
 requestAnimationFrame(frame);
 
 // 테스트·디버그용
-window.__sc = { send, setWeapon, setParts, ew, gainSkinXp, impact, killFx, skXp, get parts() { return myParts; }, get mySk() { return mySk; }, unlocked, me, inv, others, dropMeshes, loot, zone, camera, car, vehs, get air() { return airdrop; }, get near() { return nearLoot; }, get world() { return world; }, get map() { return curMap; }, input, bomb, smokes, nadeMeshes, get myId() { return myId; }, get phase() { return phase; }, get attack() { return attack; }, get myTeam() { return myTeam; }, get mode() { return mode; }, get joined() { return joined; }, get roster() { return roster; }, get score() { return score; }, get shop() { return shopOpen; } };
+window.__sc = { set cam(v) { dbgCam = v; }, get cam() { return dbgCam; }, loadMap, setMood, post, get postOn() { return postOn; }, groundAt, renderer, scene, send, setWeapon, setParts, ew, gainSkinXp, impact, killFx, skXp, get parts() { return myParts; }, get mySk() { return mySk; }, unlocked, me, inv, others, dropMeshes, loot, zone, camera, car, vehs, get air() { return airdrop; }, get near() { return nearLoot; }, get world() { return world; }, get map() { return curMap; }, input, bomb, smokes, nadeMeshes, get myId() { return myId; }, get phase() { return phase; }, get attack() { return attack; }, get myTeam() { return myTeam; }, get mode() { return mode; }, get joined() { return joined; }, get roster() { return roster; }, get score() { return score; }, get shop() { return shopOpen; } };
