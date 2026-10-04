@@ -36,6 +36,27 @@ function decalTex() { // 벽·바닥에 덧붙이는 무늬 모음 (한 장)
   if (!TEXC.map._decal) { const t = new THREE.CanvasTexture(decalAtlas()); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = TEXC.aniso; TEXC.map._decal = t; }
   return TEXC.map._decal;
 }
+function facadeTex() { // 멀리 보이는 건물 벽: 창이 줄지어 난 벽면. [색 그림, 불 켜진 창만 남긴 그림] (8칸 × 8층이 한 장)
+  if (!TEXC.map._fac) {
+    const N = 8, P = 32, cv = document.createElement('canvas'), ev = document.createElement('canvas'); cv.width = cv.height = ev.width = ev.height = N * P;
+    const g = cv.getContext('2d'), e = ev.getContext('2d');
+    g.fillStyle = '#cfc8c2'; g.fillRect(0, 0, N * P, N * P); e.fillStyle = '#000'; e.fillRect(0, 0, N * P, N * P);
+    let sd = 20260;
+    const R = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    for (let j = 0; j < N; j++) {
+      g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(0, j * P, N * P, 2); g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(0, j * P + 2, N * P, 1); // 층 사이 띠
+      for (let i = 0; i < N; i++) {
+        const x = i * P + 7, y = j * P + 8, lit = R() < 0.3, cool = R() < 0.25;
+        g.fillStyle = '#8f8880'; g.fillRect(x - 1, y - 1, 20, 18); // 창틀
+        g.fillStyle = lit ? (cool ? '#cfe6f2' : '#ffd890') : ['#27303c', '#2f3946', '#222a34'][(i + j * 3) % 3]; g.fillRect(x, y, 18, 16);
+        if (lit) { e.fillStyle = cool ? '#a8c8dc' : '#ffc070'; e.fillRect(x, y, 18, 16); } else { g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x, y, 18, 5); }
+        g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x + 8, y, 2, 16); // 창살
+      }
+    }
+    TEXC.map._fac = wrapTex(cv, true); TEXC.map._facE = wrapTex(ev, true);
+  }
+  return [TEXC.map._fac, TEXC.map._facE];
+}
 // 재질마다 붙일 수 있는 무늬 (DECALS 번호). 같은 번호를 여러 번 적으면 그만큼 자주 나옴
 const DECAL_ON = {
   sand: [0, 0, 1, 1, 2, 4, 7], sand2: [0, 1, 1, 2, 4, 7], sandWall: [0, 1, 2, 4, 4],
@@ -126,6 +147,12 @@ function broadGeo() { // 활엽수: 줄기 + 각진 덩어리 여럿 (아래쪽�
   });
   const tr = new THREE.CylinderGeometry(0.19, 0.33, 3.2, 7); tr.translate(0, 1.6, 0);
   return { trunk: vegAttr(tr, (px, py) => lerpC(0.72, 1.05, py / 3.2), treeSway), top: mergeGeos(parts) };
+}
+function bushGeo() { // 덤불: 각진 덩어리 다섯을 뭉침 (아래쪽이 어둡고 바람에 살짝 흔들림)
+  return mergeGeos([[0.9, 0, 0.42, 0], [0.66, 0.72, 0.3, 0.18], [0.6, -0.62, 0.28, 0.36], [0.56, 0.08, 0.26, -0.7], [0.5, -0.28, 0.82, -0.16]].map(([r, x, y, z], i) => {
+    const g = new THREE.IcosahedronGeometry(r, 0); g.rotateY(i * 1.3); g.scale(1, 0.85, 1); g.translate(x, y, z); g.computeVertexNormals();
+    return vegAttr(g, (px, py, pz, ny) => lerpC(0.5, 1.16, py / 1.25) * (0.9 + 0.14 * ny), (py) => Math.max(0, py) * 0.012);
+  }));
 }
 function palmGeo(h) { // 야자수: 살짝 휜 마디 줄기 + 휘어 늘어진 잎
   const bend = 0.55, tr = new THREE.CylinderGeometry(0.13, 0.25, h, 7, 12).toNonIndexed(); tr.translate(0, h / 2, 0);
@@ -814,12 +841,12 @@ export function buildWorld(scene, renderer, opt = {}) {
       });
     } else if (d.t === 'rocks' || d.t === 'bushes' || d.t === 'pile') {
       const rock = d.t !== 'bushes';
-      const geo = rock ? new THREE.DodecahedronGeometry(1, 0) : new THREE.IcosahedronGeometry(1, 0), mat = lam({ color: 0xffffff, flatShading: true });
+      const geo = rock ? new THREE.DodecahedronGeometry(1, 0) : bushGeo(), mat = rock ? lam({ color: 0xffffff, flatShading: true }) : windy(new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true }));
       let n = 0;
       for (const list of chunked(d.list).values()) addInst(geo, mat, list, (t, i, im) => {
         const s = t[3]; n++;
         if (rock) { E.set(t[4] * 0.3, t[4], t[4] * 0.2); Q.setFromEuler(E); V.set(t[0], t[2] + s * 0.3, t[1]); Sc.set(s, s * 0.75, s); C.setHex(0x8d8a82).multiplyScalar(0.85 + (n % 5) * 0.06); }
-        else { Q.identity(); V.set(t[0], t[2] + s * 0.3, t[1]); Sc.set(s * 1.2, s * 0.75, s * 1.2); C.setHex(0x3f7d37).multiplyScalar(0.8 + (n % 6) * 0.07); }
+        else { Q.setFromAxisAngle(UP, Math.abs(t[0] * 7.3 + t[1] * 3.1) % 6.283); V.set(t[0], t[2] - s * 0.05, t[1]); Sc.set(s, s * 0.9, s); C.setHex(0x4a8a3c).multiplyScalar(0.8 + (n % 6) * 0.07); }
         M.compose(V, Q, Sc); im.setMatrixAt(i, M); im.setColorAt(i, C);
       }, rock, rock ? 380 : 170);
     } else if (d.t === 'poles') { // 전봇대
@@ -894,13 +921,17 @@ export function buildWorld(scene, renderer, opt = {}) {
     for (let x = -62; x < 18; x += 13) for (let y = 9; y < 14; y += 2.6) mg.box(['cR', 'cB', 'cG', 'cY', 'cO', 'cW'][(Math.abs(x) + y * 3 | 0) % 6], x, y, -hz - 19, x + 12, y + 2.6, -hz - 11, MATS.cR);
   } else if (theme === 'town') {
     // 담장 밖 마을, 탑, 모래 언덕, 야자수
-    around(16, 7, 11, (x, z, i) => { const w = 8 + rnd() * 5, d = 8 + rnd() * 4, h = 6.5 + rnd() * 4.5; mg.box(i % 2 ? 'sand2' : 'sand', x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2, MATS.sand); if (i % 3 === 0) half(Math.min(w, d) * 0.3, x, h, z); });
+    around(16, 7, 11, (x, z, i) => { const w = 8 + rnd() * 5, d = 8 + rnd() * 4, h = 6.5 + rnd() * 4.5; mg.box(i % 2 ? 'sand2' : 'sand', x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2, MATS.sand); if (i % 3 === 0) half(Math.min(w, d) * 0.3, x, h, z);
+      mg.box(T.cap, x - w / 2 - 0.14, h - 0.02, z - d / 2 - 0.14, x + w / 2 + 0.14, h + 0.22, z + d / 2 + 0.14); // 지붕 테두리
+      const ew = Math.abs(x) > hx, len = ew ? d : w, n = Math.max(2, Math.floor(len / 3)), f = ew ? (x > 0 ? x - w / 2 : x + w / 2) : (z > 0 ? z - d / 2 : z + d / 2), sg = (ew ? x : z) > 0 ? -1 : 1, c = ew ? z : x; // 경기장 쪽 벽에 창
+      const wb = (k, a0, a1, y0, y1, dep) => (ew ? mg.box(k, sg > 0 ? f : f - dep, y0, c + a0, sg > 0 ? f + dep : f, y1, c + a1) : mg.box(k, c + a0, y0, sg > 0 ? f : f - dep, c + a1, y1, sg > 0 ? f + dep : f));
+      for (const y of [h - 2.7, h - 5.5]) { if (y < 1) continue; for (let k = 0; k < n; k++) { const a = ((k + 0.5) / n) * len - len / 2; wb('winDark', a - 0.5, a + 0.5, y, y + 1.15, 0.06); wb(T.cap, a - 0.74, a + 0.74, y - 0.1, y, 0.13); } } });
     mg.box('sand', hx + 13, 0, hz + 2, hx + 17, 20, hz + 6, MATS.sand); half(2.3, hx + 15, 20, hz + 4); mg.box('sand2', -hx - 17, 0, -hz - 6, -hx - 13, 17, -hz - 2, MATS.sand); half(2.3, -hx - 15, 17, -hz - 4);
     for (const [x, z, r] of [[-190, 40, 56], [180, -70, 62], [30, 190, 60], [-40, -190, 66], [210, 90, 54], [-210, -60, 58]]) { const g = new THREE.SphereGeometry(r, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2); g.scale(1, 0.28, 1); g.translate(x, -1, z); mg.add('dune', g); }
     around(14, 4, 7, (x, z) => palm(x, 0, z, 6.5 + rnd() * 2));
   } else if (theme === 'station') {
     // 담장 밖: 전철 기둥과 멀리 보이는 시가지
-    around(26, 18, 60, (x, z, i) => { const w = 10 + rnd() * 14, d = 10 + rnd() * 12, h = 8 + rnd() * 22; mg.box('cityFar', x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2); });
+    around(26, 18, 60, (x, z, i) => { const w = 3 * Math.round((10 + rnd() * 14) / 3), d = 3 * Math.round((10 + rnd() * 12) / 3), h = 3.2 * Math.round((8 + rnd() * 22) / 3.2); mg.box('cityFar', x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2, { tu: 24, tv: 25.6 }); mg.box('dark', x - w / 2 - 0.25, h - 0.02, z - d / 2 - 0.25, x + w / 2 + 0.25, h + 0.45, z + d / 2 + 0.25); }); // 창이 줄지어 난 건물 (3m 칸, 3.2m 층에 맞춘 크기)
     for (let x = -hx; x <= hx; x += 24) for (const z of [20.4, -2.4, -20.4]) { mg.box('steel', x - 0.1, 0, z - 0.1, x + 0.1, 6.4, z + 0.1); mg.box('steel', x - 0.06, 6.2, z - 0.06, x + 0.06, 6.3, z + (z > 0 ? -4.4 : 4.4)); }
     for (const z of [18, 0, -18]) mg.box('dark', -hx, 5.6, z - 0.02, hx, 5.63, z + 0.02);
   } else if (theme === 'castle') {
@@ -915,10 +946,61 @@ export function buildWorld(scene, renderer, opt = {}) {
       for (let y = 9; y < h - 3; y += 3.4) for (let a = -Math.floor((Math.abs(x) > hx ? d : w) / 2) + 2; a < (Math.abs(x) > hx ? d : w) / 2 - 2; a += 3) { if (rnd() > 0.38) continue; const k = rnd() < 0.7 ? 'winWarm' : 'glassLit';
         if (Math.abs(x) > hx) mg.box(k, face - 0.03, y, z + a, face + 0.03, y + 1.5, z + a + 1.8); else mg.box(k, x + a, y, face - 0.03, x + a + 1.8, y + 1.5, face + 0.03); } });
   }
+  // 벽에 붙이는 것들이 다른 물체에 파묻히거나 창문과 겹치지 않는지
+  const covered = (x, y, z, self) => { for (const b of boxesNear(x, z, 0.06)) if (b !== self && !b.nv && x > b.min[0] && x < b.max[0] && y > b.min[1] && y < b.max[1] && z > b.min[2] && z < b.max[2]) return true; return false; };
+  const winPts = []; for (const d of map.decor) if (d.t === 'wins') for (const w of d.list) winPts.push(w);
+  const nearWin = (x, y, z, r) => { for (const w of winPts) if (Math.abs(w[0] - x) < r && Math.abs(w[2] - z) < r && Math.abs(w[1] + 0.8 - y) < r + 0.6) return true; return false; };
+  // ── 벽에 붙은 소품 (눈으로만 보이는 장식): 빗물관·실외기·전선관·벽등 / 서까래 / 깃발 ──
+  if (!low && !isle) {
+    const urban = theme === 'dock' || theme === 'station' || theme === 'city', WALLK = urban ? { con: 1, wall: 1, brick: 1, plaster: 1 } : town ? { sand: 1, sand2: 1, sandWall: 1 } : theme === 'castle' ? { stone: 1 } : {};
+    let nProp = 0;
+    for (const b of BOXES) {
+      if (!WALLK[b.m] || b.nv || nProp > 170) continue;
+      const [x0, yb, z0] = b.min, [x1, y1, z1] = b.max, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, y0 = Math.max(yb, groundAt(cx, cz)), fh = y1 - y0;
+      if (fh < 3.2) continue;
+      let sd = (Math.abs(Math.round(x0 * 17 + z0 * 71 + y1 * 29 + z1 * 3)) % 9949) + 7; const R = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+      for (let f = 0; f < 4; f++) { // 옆면 넷: +x, -x, +z, -z
+        const alongZ = f < 2, fw = alongZ ? z1 - z0 : x1 - x0;
+        if (fw < 3.4) { R(); continue; }
+        const n = f === 0 ? [1, 0, 0] : f === 1 ? [-1, 0, 0] : f === 2 ? [0, 0, 1] : [0, 0, -1];
+        // 면 위의 점 (u = 면을 따라 간 거리, y = 높이, out = 벽에서 나온 거리) → 세계 좌표
+        const at = (u, y, out) => (alongZ ? [(n[0] > 0 ? x1 : x0) + n[0] * out, y, z0 + u] : [x0 + u, y, (n[2] > 0 ? z1 : z0) + n[2] * out]);
+        const free = (u, y) => { const p = at(u, y, 0.25); return !covered(p[0], p[1], p[2], b) && !nearWin(p[0], p[1], p[2], 1.5); };
+        // 벽에 붙은 상자: u·y 가운데, 너비 w(면을 따라)·높이 h·두께 t
+        const pbox = (k, u, y, w, h, t, out = 0) => { const a = at(u - w / 2, y - h / 2, out), c = at(u + w / 2, y + h / 2, out + t); mg.box(k, Math.min(a[0], c[0]), a[1], Math.min(a[2], c[2]), Math.max(a[0], c[0]), c[1], Math.max(a[2], c[2]), undefined, false); };
+        const r = R();
+        if (urban) {
+          if (r < 0.3) { // 빗물관: 지붕에서 바닥까지
+            const u = 0.5 + R() * (fw - 1);
+            if (free(u, y0 + 1.2) && free(u, y1 - 0.5)) { pbox('pipe', u, (y0 + y1) / 2, 0.1, fh, 0.1, 0.03); for (let y = y0 + 0.8; y < y1 - 0.3; y += 1.7) pbox('steel', u, y, 0.18, 0.06, 0.15); pbox('pipe', u, y0 + 0.12, 0.12, 0.12, 0.3, 0.03); nProp++; }
+          } else if (r < 0.52 && fh > 3.6) { // 실외기
+            const u = 0.9 + R() * (fw - 1.8), y = y0 + 2.75 + R() * Math.min(1.2, fh - 3.6);
+            if (free(u, y) && free(u - 0.45, y) && free(u + 0.45, y)) { pbox('acBody', u, y, 0.86, 0.56, 0.32, 0.04); pbox('dark', u - 0.1, y, 0.5, 0.42, 0.02, 0.36); pbox('steel', u - 0.3, y - 0.34, 0.06, 0.12, 0.3); pbox('steel', u + 0.3, y - 0.34, 0.06, 0.12, 0.3); pbox('pipe', u + 0.36, y - 0.9, 0.05, 1.2, 0.05, 0.02); nProp++; }
+          } else if (r < 0.74) { // 전선관과 배전함
+            const y = y0 + 2.45 + R() * 0.5, u0 = 0.4 + R() * fw * 0.2, u1 = fw - 0.4 - R() * fw * 0.2;
+            if (u1 - u0 > 2 && free(u0, y) && free((u0 + u1) / 2, y) && free(u1, y)) { pbox('pipe', (u0 + u1) / 2, y, u1 - u0, 0.05, 0.05, 0.02); pbox('acBody', u0 + 0.2, y - 0.16, 0.34, 0.44, 0.12, 0.02); for (let u = u0 + 1; u < u1; u += 1.6) pbox('steel', u, y, 0.07, 0.09, 0.07); nProp++; }
+          } else if (r < 0.9 && T.night) { // 벽등 (밤 맵에서 빛남)
+            const u = 0.8 + R() * (fw - 1.6), y = y0 + 3.0;
+            if (free(u, y)) { pbox('dark', u, y + 0.1, 0.34, 0.06, 0.3); pbox('lamp', u, y, 0.26, 0.1, 0.22, 0.04); const p = at(u, y - 0.05, 0.2); halos.push([p[0], p[1], p[2], 1.9, 0xffe2b0]); nProp++; }
+          }
+        } else if (town) {
+          if (r < 0.5) { // 지붕 서까래 끝이 벽 밖으로 삐져나옴
+            const y = y1 - 0.42; let any = false;
+            for (let u = 0.6; u < fw - 0.4; u += 1.15) if (free(u, y)) { pbox('doorWood', u, y, 0.15, 0.15, 0.34); any = true; }
+            if (any) nProp++;
+          }
+        } else if (theme === 'castle') {
+          if (r < 0.24 && fh > 4.6) { // 성벽에 건 깃발
+            const u = 1 + R() * (fw - 2), top = Math.min(y1 - 0.5, y0 + 6.2);
+            if (free(u, top - 0.3) && free(u, top - 2.2)) { const k = R() < 0.5 ? 'bannerA' : 'bannerB'; pbox('doorWood', u, top, 1.2, 0.08, 0.1, 0.02); pbox(k, u, top - 1.25, 0.95, 2.4, 0.04, 0.05); pbox('bannerTrim', u, top - 2.52, 0.95, 0.14, 0.045, 0.05); pbox('bannerTrim', u, top - 0.9, 0.36, 0.36, 0.045, 0.052); nProp++; }
+          }
+        }
+      }
+    }
+  }
   // ── 덧붙이는 무늬: 벽의 얼룩·금·벗겨진 자리·표지, 바닥의 기름 얼룩·맨홀·금 (화질 '낮음'은 뺌). 전부 한 덩어리로 그림 ──
   if (!low) {
     const dP = [], dN = [], dU = [], dC = [];
-    const covered = (x, y, z, self) => { for (const b of boxesNear(x, z, 0.06)) if (b !== self && !b.nv && x > b.min[0] && x < b.max[0] && y > b.min[1] && y < b.max[1] && z > b.min[2] && z < b.max[2]) return true; return false; };
     const put = (kind, c, ax, ay, n, w, h, tint) => { // c 가운데, ax 오른쪽·ay 위쪽 방향, n 바깥 방향
       const u0 = (kind % 4) / 4 + 0.008, u1 = u0 + 0.234, v1 = 1 - (kind >> 2) / 4 - 0.008, v0 = v1 - 0.234;
       const P = [[-1, -1, u0, v0], [1, -1, u1, v0], [1, 1, u1, v1], [-1, 1, u0, v1]].map(([a, b2, u, v]) => [c[0] + ax[0] * a * w / 2 + ay[0] * b2 * h / 2 + n[0] * 0.014, c[1] + ax[1] * a * w / 2 + ay[1] * b2 * h / 2 + n[1] * 0.014, c[2] + ax[2] * a * w / 2 + ay[2] * b2 * h / 2 + n[2] * 0.014, u, v]);
@@ -956,7 +1038,7 @@ export function buildWorld(scene, renderer, opt = {}) {
           if (box) { const uu = fw - w / 2 - 0.5; if (alongZ) c[2] = n[0] > 0 ? z1 - uu : z0 + uu; else c[0] = n[2] > 0 ? x0 + uu : x1 - uu; }
           let bad = false;
           for (const [a, b2] of [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1]]) if (covered(c[0] + ax[0] * a * w * 0.46 + n[0] * 0.06, c[1] + b2 * h * 0.46, c[2] + ax[2] * a * w * 0.46 + n[2] * 0.06, b)) { bad = true; break; }
-          if (bad) continue;
+          if (bad || nearWin(c[0], c[1], c[2], Math.max(w, h) * 0.5 + 0.9)) continue;
           put(kind, c, ax, [0, 1, 0], n, w, h, W1); nWall++;
         }
       }
@@ -964,7 +1046,7 @@ export function buildWorld(scene, renderer, opt = {}) {
     if (!isle) { // 바닥
       let sd = 4711 + MAP * 97; const R = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
       const gk = theme === 'town' ? [15, 15, 15, 14, 14] : theme === 'castle' ? [15, 15, 15, 15] : [12, 12, 14, 14, 14, 13];
-      const tints = theme === 'town' ? [[0.93, 0.85, 0.68]] : theme === 'castle' ? [[0.8, 0.62, 0.2], [0.66, 0.4, 0.16], [0.55, 0.6, 0.24]] : [[0.72, 0.72, 0.7]];
+      const tints = theme === 'town' ? [[0.78, 0.66, 0.46], [0.62, 0.5, 0.34], [0.5, 0.42, 0.3]] : theme === 'castle' ? [[0.8, 0.62, 0.2], [0.66, 0.4, 0.16], [0.55, 0.6, 0.24]] : [[0.72, 0.72, 0.7]];
       let want = Math.round((hx * hz * 4) / 210), holes = 0;
       for (let tries = 0; tries < want * 5 && want > 0; tries++) {
         const kind = gk[Math.floor(R() * gk.length)], D = DECALS[kind], sc = 0.75 + R() * 0.6, w = D[0] * sc, x = (R() * 2 - 1) * (hx - 3), z = (R() * 2 - 1) * (hz - 3), rot = kind === 13 ? 0 : R() * 6.283;
@@ -992,7 +1074,7 @@ export function buildWorld(scene, renderer, opt = {}) {
   const mats = {
     car0: refl(lam({ color: 0xb23a32 }), 0.16), car1: refl(lam({ color: 0x2f5fa0 }), 0.16), car2: refl(lam({ color: 0xd9dbdd }), 0.12), car3: refl(lam({ color: 0x2b2f36 }), 0.2), car4: refl(lam({ color: 0x3f8a5a }), 0.16),
     busBody: refl(lam({ color: 0x2f8f6a }), 0.12), glassPane: refl(new THREE.MeshLambertMaterial({ color: 0x9fd0e6, transparent: true, opacity: 0.38 }), 0.55),
-    winWarm: glow(0xffd58a, 0.62), cityFar: lam({ color: 0x8f7f7a }), skyline: lam({ color: 0x141a2c }), hill: lam({ color: 0x5f8a4a }), pine: windy(lam({ color: 0x2f6b3c })), pine2: windy(lam({ color: 0x3f7f44 })), leafTree: windy(lam({ color: 0x4b8f3a })), pineTrunk: windy(lam({ color: 0x5b432c })), palmTrunk: windy(lam({ color: 0x8a6c48 })),
+    winWarm: glow(0xffd58a, 0.62), cityFar: theme === 'station' ? (() => { const [fm, fe] = facadeTex(); return lam({ map: fm, color: 0xa8968e, emissiveMap: fe, emissive: 0xffffff, emissiveIntensity: opt.hdr ? 1.5 : 0.9 }); })() : null, skyline: lam({ color: 0x141a2c }), hill: lam({ color: 0x5f8a4a }), pine: windy(lam({ color: 0x2f6b3c })), pine2: windy(lam({ color: 0x3f7f44 })), leafTree: windy(lam({ color: 0x4b8f3a })), pineTrunk: windy(lam({ color: 0x5b432c })), palmTrunk: windy(lam({ color: 0x8a6c48 })),
     yellow: lam({ color: 0xe0a91f }), dark: lam({ color: 0x2a2e34 }), steel: refl(lam({ color: 0x6d7680 }), 0.22), tire: lam({ color: 0x17181a }),
     truckBlue: refl(lam({ color: 0x2c5fa5 }), 0.12), glass: refl(lam({ color: 0x1c2733 }), 0.7), crane: lam({ color: 0xc9772b }),
     glassLit: glow(0xbfe0f2, 0.55), lamp: glow(0xfff3c4, 1.15),
@@ -1007,6 +1089,7 @@ export function buildWorld(scene, renderer, opt = {}) {
     bollard: lam({ color: 0x2a2e34 }), sleeper: lam({ color: 0x4a3a2c }), tentRoof: lam({ color: 0xd9c9a6 }), whitePaint: lam({ color: 0xf0efe9 }), redPaint: lam({ color: 0xc23b32 }),
     siloMetal: refl(lam({ color: 0xb9c1c8 }), 0.3), stoneCol: lam({ color: 0x9a948a }), sail: new THREE.MeshLambertMaterial({ color: 0xe9e2d0, side: THREE.DoubleSide }),
     shipHull: lam({ color: 0x24303c }), shipRed: lam({ color: 0x8a2f2a }),
+    pipe: lam({ color: 0x4a5058 }), acBody: lam({ color: 0xc4c8cc }), bannerA: lam({ color: 0x6a2f86 }), bannerB: lam({ color: 0x2f6f4a }), bannerTrim: lam({ color: 0xd9b23a }),
   };
   const noShadow = new Set(['winWarm', 'cityFar', 'skyline', 'hill', 'glassPane', 'glassLit', 'lamp', 'dune', 'lanternA', 'lanternB', 'lanternC', 'rugA', 'rugB', 'sleeper', 'shipHull', 'shipRed']);
   for (const k of mg.by.keys()) {
@@ -1053,14 +1136,18 @@ export function buildWorld(scene, renderer, opt = {}) {
     else if (d.t === 'sign') wallSign(d.text, d.w, d.h, d.x, d.y, d.z, d.ry, { bg: d.bg, border: d.border, color: d.color, size: d.size });
   }
 
-  // 팀 진영 바닥 색 (생존전에는 없음)
+  // 팀 진영 바닥 색 (생존전에는 없음): 바닥 밝기에 비례해 팀 색이 엷게 감돌게 하고(그늘에서만 진해 보이지 않게 곱하기로 섞음), 안쪽 경계에 또렷한 띠를 두름
+  const zoneK = opt.lin ? 0.3 : 0.014;
   const zones = [0, 1].map((t) => {
-    const w = 8;
-    const z = new THREE.Mesh(new THREE.PlaneGeometry(w, hz * 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: opt.lin ? 0.03 : 0.16, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
-    flat(z, t ? hx - 4 : -hx + 4, 0);
+    const w = 8, x0 = t ? hx - w : -hx, xe = t ? x0 : x0 + w;
+    const z = new THREE.Mesh(new THREE.PlaneGeometry(0.28, hz * 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: opt.lin ? 0.3 : 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
+    flat(z, xe, 0, 0, 0.02);
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(w, hz * 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthWrite: false, fog: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, polygonOffset: true, polygonOffsetFactor: -1 }));
+    fill.position.set(x0 + w / 2 - xe, 0, 0); z.add(fill); z.userData.fill = fill;
     z.visible = !isle;
     return z;
   });
+  const setZoneColors = (a, b) => { [a, b].forEach((hex, i) => { zones[i].material.color.setHex(hex); zones[i].userData.fill.material.color.setHex(hex).multiplyScalar(zoneK); }); };
 
   // 풀: 카메라 둘레에만 심고, 움직이면 다시 심는다 (색은 땅 색을 따라감)
   let grass = null;
@@ -1123,7 +1210,7 @@ export function buildWorld(scene, renderer, opt = {}) {
     for (const im of instanced) im.dispose();
     for (const t of owned) t.dispose();
   };
-  return { group, zones, sun, hemi, dispose, update, splat, far: isle ? 1700 : 520, mood: opt.mood || 0, grade: T.grade || null, night: !!T.night, theme: T, tkey: theme };
+  return { group, zones, setZoneColors, sun, hemi, dispose, update, splat, far: isle ? 1700 : 520, mood: opt.mood || 0, grade: T.grade || null, night: !!T.night, theme: T, tkey: theme };
 }
 
 // 캐릭터 발밑 그림자

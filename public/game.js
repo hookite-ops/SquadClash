@@ -30,12 +30,13 @@ const QLOCK = /[?&]qlock/.test(location.search); // 테스트용: 느려도 화�
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, gfx === 'low' ? 1 : gfx === 'mid' ? 1.5 : 2));
 renderer.autoClear = false;
+renderer.info.autoReset = false; // 한 프레임에 그린 양을 모두 더해서 셈 (frame 에서 직접 초기화)
 renderer.toneMapping = TONE; // 밝은 곳이 하얗게 날아가지 않고 부드럽게 눌림
 setGunQuality(gfx);
 initGunEnv(renderer);
 setWorldQuality(gfx, renderer);
 // 후처리(빛 번짐·선명도·색 보정). 화질 '낮음'은 쓰지 않고 바로 화면에 그림
-const post = gfx === 'low' ? null : makePost(renderer, { samples: gfx === 'high' ? 4 : 0, levels: gfx === 'high' ? 5 : 3 });
+const post = gfx === 'low' ? null : makePost(renderer, { samples: gfx === 'high' ? 4 : 2, levels: gfx === 'high' ? 5 : 3 });
 let postOn = !!post && post.active;
 const GRADE_UI = { bloom: 0.4, thresh: 1.0, sat: 1.04, con: 1.03, vig: 0.34, grain: 0.008 }; // 무기고·캐릭터 그리기 화면
 function present(draw, now, grade) { // 그리기 함수를 후처리를 거쳐(또는 바로) 화면에 내보냄
@@ -481,7 +482,7 @@ const canFight = () => !matchEnded && (mode === 'tdm' || phase === 'live' || pha
 const clsOf = (p) => (mode === 'br' ? (p.id === myId ? 'tme' : 'tn') : TEAM_CLS[p.team]);
 function applySides() { // 진영 바닥 색: 폭탄전은 서쪽이 공격팀
   const west = mode === 'bomb' ? attack : 0;
-  world.zones[0].material.color.setHex(TEAM_COL[west]); world.zones[1].material.color.setHex(TEAM_COL[west ^ 1]);
+  world.setZoneColors(TEAM_COL[west], TEAM_COL[west ^ 1]);
 }
 applySides();
 function canAct() {
@@ -667,6 +668,7 @@ function onMsg(m) {
       }
       if (m.by === myId && b && m.to !== myId) {
         gainSkinXp(m.w, m.head);
+        { const h = $('hitm'); h.classList.add('on', 'kill'); clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove('on', 'kill'), 280); } // 처치: 붉고 큰 표시
         const nowT = performance.now();
         multiKill = nowT - lastKillAt < 4500 ? multiKill + 1 : 1; lastKillAt = nowT;
         const streak = ['', '', '더블 킬! ', '트리플 킬! ', '쿼드라 킬! '][multiKill] ?? '대활약! ';
@@ -795,7 +797,8 @@ setInterval(() => send({ t: 'ping', c: performance.now() }), 2000);
 function banner(text, col) {
   const b = $('banner');
   b.textContent = text; b.style.color = '#' + col.toString(16).padStart(6, '0'); b.style.opacity = 1;
-  clearTimeout(b._t); b._t = setTimeout(() => { b.style.opacity = 0; }, 1600);
+  b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); // 나타날 때 톡 튀어나오는 움직임을 다시 시작
+  clearTimeout(b._t); b._t = setTimeout(() => { b.style.opacity = 0; }, 1700);
 }
 function feed(a, b, wi, head) {
   const d = document.createElement('div');
@@ -804,6 +807,7 @@ function feed(a, b, wi, head) {
   sb.className = clsOf(b); sb.textContent = b.name;
   if (wi === ZONE_WEAPON) d.append(sb, ' ▸ 구역 밖에서 탈락');
   else d.append(sa, ` ▸ ${wi === NADE_WEAPON ? '수류탄' : wi === VEH_WEAPON ? '차량' : WEAPONS[wi] ? WEAPONS[wi].name : '?'}${head ? ' ◎' : ''} ▸ `, sb);
+  if (a.id === myId || b.id === myId) d.className = 'mine';
   const f = $('feed');
   f.append(d);
   while (f.children.length > 4) f.firstChild.remove();
@@ -1019,8 +1023,15 @@ function updateHud(now) {
   const hp = me.alive ? me.hp : 0;
   if (hudCache.hpW !== hp) { hudCache.hpW = hp; $('hpFill').style.width = hp + '%'; $('hpFill').style.background = hp > 50 ? '#4ade80' : hp > 25 ? '#ffd23f' : '#ff4d5a'; }
   const W = ew(me.w);
-  const am = W.melee ? '근접' : me.reloadEnd ? '장전 중…' : `${me.ammo[me.w]} / ${W.mag}`;
-  if (hudCache.ammo !== am) { hudCache.ammo = am; $('ammo').textContent = am; $('ammo').style.color = !W.melee && !me.reloadEnd && me.ammo[me.w] <= W.mag * 0.25 ? '#ff4d5a' : ''; }
+  const amN = W.melee ? '근접' : me.reloadEnd ? '장전' : String(me.ammo[me.w]), amT = W.melee ? '' : `/ ${W.mag}`, lowAm = !W.melee && !me.reloadEnd && me.ammo[me.w] <= W.mag * 0.25;
+  if (hudCache.amN !== amN) { hudCache.amN = amN; $('ammoN').textContent = amN; }
+  if (hudCache.amT !== amT) { hudCache.amT = amT; $('ammoT').textContent = amT; }
+  if (hudCache.amL !== lowAm) { hudCache.amL = lowAm; $('ammo').classList.toggle('low', lowAm); }
+  const rl = me.alive && !!me.reloadEnd; // 장전하는 동안 조준점 아래에 막대
+  if (hudCache.rl !== rl) { hudCache.rl = rl; $('reloadBar').classList.toggle('hide', !rl); }
+  if (rl) $('reloadFill').style.width = Math.round(clamp(1 - (me.reloadEnd - now) / W.reload, 0, 1) * 100) + '%';
+  const hintA = me.alive && !rl && !W.melee && !car.id && !me.scoped ? (me.ammo[me.w] === 0 ? '탄약 없음' : lowAm ? (isTouch ? '탄약 부족 · 장전' : '탄약 부족 · R 장전') : '') : '';
+  if (hudCache.hintA !== hintA) { hudCache.hintA = hintA; $('ammoHint').textContent = hintA; $('ammoHint').classList.toggle('hide', !hintA); }
   if (hudCache.prot !== me.prot) { hudCache.prot = me.prot; $('prot').classList.toggle('hide', !me.prot || !me.alive); }
   if (!me.alive && !matchEnded) setTxt('deadIn', mode === 'bomb' ? '다음 라운드에 다시 참가합니다' : mode === 'br' ? '다음 경기에 다시 참가합니다' : `${Math.max(0, Math.ceil((respawnAt - now) / 1000))}초 뒤 리스폰`);
   const crossOn = me.alive && !car.id;
@@ -1540,6 +1551,15 @@ const CATN = { melee: '근접', side: '보조', smg: '기관단총', sg: '샷건
 let lockerOpen = false, lkW = 13, lkSkin = 0, lkYaw = 0.7, lkDrag = null, lkGun = null, lkKey = '', lkSpin = true, lkTab = 'skin';
 const lkGroup = new THREE.Group();
 lkGroup.visible = false; vmScene.add(lkGroup);
+const lkBack = (() => { // 무기고 배경: 총 뒤로 은은한 조명과 바닥 빛
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+  const g = cv.getContext('2d'), rg = g.createRadialGradient(128, 116, 0, 128, 116, 128);
+  rg.addColorStop(0, 'rgba(92,112,146,.55)'); rg.addColorStop(0.45, 'rgba(52,64,86,.3)'); rg.addColorStop(1, 'rgba(22,26,33,0)'); g.fillStyle = rg; g.fillRect(0, 0, 256, 256);
+  g.save(); g.translate(128, 178); g.scale(1, 0.16); const fg = g.createRadialGradient(0, 0, 0, 0, 0, 108); fg.addColorStop(0, 'rgba(170,196,236,.22)'); fg.addColorStop(1, 'rgba(170,196,236,0)'); g.fillStyle = fg; g.fillRect(-128, -128, 256, 256); g.restore();
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, fog: false }));
+  m.visible = false; vmScene.add(m); return m;
+})();
 function lkBuild() { // 가운데에 띄울 모델
   const key = lkW + ':' + lkSkin + ':' + myParts[lkW].join('.') + ':' + myLv(lkSkin);
   if (key === lkKey) return;
@@ -1645,7 +1665,7 @@ function openLocker() {
 }
 function closeLocker() {
   if (!lockerOpen) return;
-  lockerOpen = false; lkGroup.visible = false;
+  lockerOpen = false; lkGroup.visible = false; lkBack.visible = false;
   $('locker').classList.add('hide'); if (!joined) $('menu').classList.remove('hide');
 }
 $('openLocker').onclick = openLocker; $('lkClose').onclick = closeLocker; $('lkClose2').onclick = closeLocker; $('lkX').onclick = closeLocker;
@@ -1823,7 +1843,7 @@ function tryFire(now) {
   me.rqY += W.kick * (rh * W.kh + (Math.random() - 0.5) * 0.18) * aim;
   me.bloom = Math.min(1.6, me.bloom + (W.auto || W.burst ? 0.2 : 0.4));
   me.kickAnim = 1;
-  flash.material.color.setHex(myFx.flash).multiplyScalar(HDRK * 0.85);
+  flash.material.color.setHex(myFx.flash).multiplyScalar(HDRK > 1 ? 1.25 : 1);
   flash.visible = !W.quiet || Math.random() < 0.35; flash.rotation.z = Math.random() * 6.283; flash.scale.setScalar((0.85 + Math.random() * 0.5) * (W.quiet ? 0.45 : 1)); flash._off = now + 50;
   if (flash.visible) { vmFlash.color.setHex(myFx.flash); vmFlash.intensity = W.quiet ? 0.5 : 2.4; lightFlash(muzzle[0], muzzle[1], muzzle[2], myFx.flash, W.quiet ? 6 : 24, 13, 0.07); }
   if (!scopeOn) { // 탄피가 오른쪽으로 튀어나감
@@ -1875,7 +1895,8 @@ function updateOthers(dt, now) {
     const sp = Math.hypot(o.vx, o.vz), sy = Math.sin(o.yaw), cy = Math.cos(o.yaw);
     let seated = false;
     if (vehs.size) for (const v of vehs.values()) if (v.driver === o.id) { seated = true; o.g.position.y = o.y + 0.25; o.g.rotation.y = v.yaw; break; }
-    const far = Math.hypot(o.x - camera.position.x, o.z - camera.position.z) > 120; // 멀리 있는 캐릭터는 자세 계산을 건너뜀
+    const camD = Math.hypot(o.x - camera.position.x, o.z - camera.position.z), far = camD > 120; // 멀리 있는 캐릭터는 자세 계산을 건너뜀
+    { const k = clamp(camD / 5, 0.42, 1); o.tag.scale.set(1.5 * k, 0.375 * k, 1); o.tag.position.y = 2.02 + 0.18 * k; } // 코앞에서는 이름표를 작게
     if (!far || !o.posed) { o.posed = true; animRig(o, dt, { speed: seated ? 0 : sp, vf: -sy * o.vx - cy * o.vz, vs: cy * o.vx - sy * o.vz, pitch: o.pitch, crouch: o.c && !seated, air: Math.abs(o.vy) > 2.4 && !(o.chute && o.chute.visible), sprint: sp > 6.3 && now - o.shotAt > 600, seated }); }
     const sc0 = o.prot ? 1.04 : 1;
     o.g.scale.set(sc0, sc0, sc0);
@@ -1904,8 +1925,11 @@ function stepDown() {
   else if (pr > 1) { renderer.setPixelRatio(1); resize(); }
   else if (postOn) { postOn = false; post.dispose(); }
 }
+let booted = false;
 function frame(now) {
   requestAnimationFrame(frame);
+  renderer.info.reset();
+  if (!booted) { booted = true; requestAnimationFrame(() => { const b = $('boot'); if (b) { b.classList.add('done'); setTimeout(() => b.remove(), 600); } }); } // 첫 화면이 그려지면 시작 화면을 걷음
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
   if (!joined && paintUI.open) { // 캐릭터 그리기: 오른쪽에 그린 그림을 입은 캐릭터를 돌려 보여 줌
@@ -1927,6 +1951,7 @@ function frame(now) {
     if (lkSpin) lkYaw = Math.PI / 2 + Math.sin(now / 1900) * 0.95; // 옆모습을 중심으로 천천히 흔들어 보여 줌
     lkGun.rotation.set(0.1, lkYaw, 0);
     lkGroup.visible = true; vm.visible = false;
+    { const D = d + 2.6, k = D / d; lkBack.position.set(lkGroup.position.x * k, lkGroup.position.y * k, -D); lkBack.scale.setScalar(D * 1.9); lkBack.visible = true; }
     tickSkins(now / 1000);
     uiLight(); present(drawVm, now, GRADE_UI);
     return;
