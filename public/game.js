@@ -2,7 +2,8 @@
 import * as THREE from './vendor/three.module.js';
 import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, MAPS, setMap, BOXES, SITES, siteAt, dirFrom, rayWorld, rayPlayer, hitNormal, HIT_M, segHitsSphere, groundAt, waterAt, boxesNear, PARTS, PART_SLOTS, PART_MAX, partSlots, partOk, cleanParts, effWeapon, SKIN_LV, SKIN_LV_NAME, skinLevel } from './shared.js';
 import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox } from './guns.js';
-import { buildBody, paintTex, isPaint, initPaintEditor, paintUI } from './paint.js';
+import { paintTex, isPaint, initPaintEditor, paintUI } from './paint.js';
+import { makeRig, rigHold, rigShot, rigFlinch, rigMuzzle, animate as animRig, setAvatarFlash } from './avatar.js';
 import { buildWorld, blobShadow, MOODS, setWorldQuality } from './world.js';
 import { makePost, TONE } from './post.js';
 
@@ -145,26 +146,17 @@ function makeAvatar(info) {
   const g = new THREE.Group();
   g.rotation.order = 'YXZ';
   const br = info.ci !== undefined;
-  const { body, head, legs, arms, mat } = buildBody(paintTexOf(info), br ? brMat[info.ci] : teamMat[info.team]); // body = 쓰러질 때 통째로 기울이는 부분
-  g.add(body);
-  const tag = nameSprite(info.name, br ? 0 : info.team);
-  g.add(tag, blobShadow());
+  const rig = makeRig(paintTexOf(info), br ? brMat[info.ci] : teamMat[info.team]); // 뼈대와 동작은 avatar.js
+  g.add(rig.body);
+  const tag = nameSprite(info.name, br ? 0 : info.team), shadow = blobShadow();
+  g.add(tag, shadow);
   g.visible = false;
   scene.add(g);
-  const av = { g, body, head, legs, arms, tag, mat, bot: !!info.bot, guns: [], w: -1, c: false, cs: 1, buf: [], x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: 100, alive: false, wasAlive: false, deadT: 9, prot: false, walk: 0, stepT: 0, shotAt: 0, team: info.team, name: info.name, chute: null, ci: info.ci, id: info.id, sk: info.sk || null, att: info.att || null, sl: info.sl || null };
+  const av = Object.assign(rig, { g, tag, shadow, bot: !!info.bot, c: false, buf: [], x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 100, alive: false, wasAlive: false, deadT: 9, fallDir: 0, prot: false, stepT: 0, shotAt: 0, team: info.team, name: info.name, chute: null, ci: info.ci, id: info.id, sk: info.sk || null, att: info.att || null, sl: info.sl || null });
   holdGun(av, W_PISTOL);
   return av;
 }
-function holdGun(o, wi) { // 다른 사람이 든 무기 바꾸기 (모델은 처음 필요할 때 만든다)
-  if (!WEAPONS[wi] || o.w === wi) return;
-  if (!o.guns[wi]) {
-    const sk = o.sk ? o.sk[wi] : 0, gg = makeGun(wi, sk, o.att ? o.att[wi] : null, o.sl ? o.sl[sk] : 1).group, small = WEAPONS[wi].vm === 'pistol' || WEAPONS[wi].vm === 'knife';
-    gg.scale.setScalar(1.3); gg.position.set(0.19, 0.07, small ? -0.7 : -0.52);
-    o.arms.add(gg); o.guns[wi] = gg;
-  }
-  o.guns.forEach((gg, i) => { if (gg) gg.visible = i === wi; });
-  o.w = wi;
-}
+function holdGun(o, wi) { const sk = o.sk ? o.sk[wi] : 0; rigHold(o, wi, sk, o.att ? o.att[wi] : null, o.sl ? o.sl[sk] : 1); } // 다른 사람이 든 무기 바꾸기
 
 // ───────────── 폭탄전: 설치 지점 · 폭탄 ─────────────
 const siteMarks = new THREE.Group();
@@ -244,6 +236,7 @@ function softTex(stops, lines) {
   return new THREE.CanvasTexture(cv);
 }
 const flashTex = softTex([[0, 'rgba(255,255,255,1)'], [0.25, 'rgba(255,255,255,.85)'], [0.6, 'rgba(255,255,255,.3)'], [1, 'rgba(255,255,255,0)']], true); // 흰 바탕 — 색은 스킨에 따라 입힘
+setAvatarFlash(flashTex);
 const FX0 = { tracer: 0xffffff, flash: 0xffd27a }, _fxc = new THREE.Color();
 function fxOf(skin, lv = 1) { // 스킨의 궤적·불꽃 색. 스킨 레벨 2부터 궤적, 3부터 불꽃·탄착 색 (오로라는 무지갯빛으로 계속 바뀜)
   const f = lv >= 2 ? skinFx(skin) : null;
@@ -656,7 +649,7 @@ function heard(x, z, range) { // 내 위치 기준 [크기 0~1, 좌우]
 // ───────────── 상태 ─────────────
 const me = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 100, alive: false, w: W_PISTOL, lastW: W_KNIFE, burstLeft: 0, burstAt: 0, spin: 0, ammo: WEAPONS.map((w) => w.mag), reloadEnd: 0, lastShot: 0, shotN: 0, onGround: true, prot: false, scoped: false, kickAnim: 0, bob: 0, draw: 0, swx: 0, swy: 0, crouch: false, sprint: false, slideT: 0, slx: 0, slz: 0, drop: false, inspAt: -1e9, rackN: 0, eyeH: PLAYER.eye, adsP: 0, rqP: 0, rqY: 0, rcP: 0, rcY: 0, bloom: 0, snipeQ: 0, snipeHold: false, sprT: 0, stepT: 0, shake: 0, flashUntil: 0, flashDur: 1 };
 const inv = { money: 0, prim: 0, side: W_PISTOL, armor: 0, n: [0, 0, 0], med: 0 };
-const others = new Map();
+const others = new Map(), _mz = new THREE.Vector3();
 let roster = [];
 let ws = null, myId = 0, myTeam = 0, joined = false, lastJoin = null, timeOff = null, ping = 0;
 let score = [0, 0], timeLeft = 0, matchEnded = false, respawnAt = 0, killLimit = 30;
@@ -814,6 +807,7 @@ function onMsg(m) {
       if (!quiet) o.shotAt = performance.now(); // 소음 무기는 미니맵에 안 뜸
       const d = dirFrom(o.yaw, o.pitch);
       const a = [o.x + d[0] * 0.9, o.y + (o.c ? 0.9 : 1.3), o.z + d[2] * 0.9];
+      if (o.alive && !WEAPONS[m.w].melee) { rigShot(o, quiet); if (rigMuzzle(o, _mz)) { a[0] = _mz.x; a[1] = _mz.y; a[2] = _mz.z; } }
       const osk = o.sk ? o.sk[m.w] : 0, ofx = fxOf(osk, o.sl ? o.sl[osk] : 1);
       for (const e of m.e) { addTracer(a, e, ofx === FX0 ? 0xfff1b0 : ofx.tracer, ofx === FX0 ? 0.1 : 0.14); impact(e, ofx.flash, ofx.tint); if (o.team !== myTeam) whiz(a, e); }
       const [v, pan] = heard(o.x, o.z, quiet ? 26 : mode === 'br' ? 220 : 90);
@@ -826,7 +820,7 @@ function onMsg(m) {
         h.classList.toggle('head', m.head); h.classList.add('on');
         clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove('on'), 90);
         sfxTone(m.head ? 1500 : 950, 0.07, 0.16, 'square');
-        const ho = others.get(m.to); if (ho) hitBurst(ho.x, ho.y + (m.head ? 1.6 : 1.15), ho.z);
+        const ho = others.get(m.to); if (ho) { hitBurst(ho.x, ho.y + (m.head ? 1.6 : 1.15), ho.z); rigFlinch(ho); }
         const sp = document.createElement('span'); // 준 피해 숫자
         sp.textContent = m.dmg; if (m.head) sp.className = 'h';
         sp.style.left = 14 + Math.random() * 16 + 'px'; sp.style.top = -34 + Math.random() * 14 + 'px';
@@ -852,6 +846,11 @@ function onMsg(m) {
         $('deadBy').textContent = m.w === ZONE_WEAPON ? '안전 구역 밖에서 쓰러졌습니다' : a && a.id !== myId ? `${a.name} 에게 당했습니다` : '';
         $('dead').firstElementChild.textContent = mode === 'br' ? '탈락했습니다' : '처치당했습니다';
         $('dead').classList.remove('hide');
+      }
+      { // 쓰러지는 방향: 앞에서 맞으면 뒤로, 뒤에서 맞으면 앞으로, 옆에서 맞으면 옆으로
+        const vo = others.get(m.to), ko = m.by === myId ? me : others.get(m.by);
+        if (vo && ko && ko !== vo) { const dx = vo.x - ko.x, dz = vo.z - ko.z, l = Math.hypot(dx, dz) || 1, dot = (-Math.sin(vo.yaw) * dx - Math.cos(vo.yaw) * dz) / l; vo.fallDir = dot < -0.45 ? 0 : dot > 0.45 ? 1 : 2; }
+        else if (vo) vo.fallDir = 0;
       }
       { // 스킨 4레벨부터 처치 효과
         const vo = m.to === myId ? me : others.get(m.to), ko = others.get(m.by), ksk = WEAPONS[m.w] ? (m.by === myId ? mySk[m.w] : ko && ko.sk ? ko.sk[m.w] : 0) : 0;
@@ -1684,7 +1683,7 @@ const paintEd = initPaintEditor($, () => store.get('paint', ''), (data) => {
 function openPaint(label) {
   if (joined) return;
   closeLocker();
-  if (!pvAv) { pvAv = { ...buildBody(paintUI.tex, teamMat[1]), guns: [], w: -1, sk: mySk }; pvGroup.add(pvAv.body); holdGun(pvAv, 13); }
+  if (!pvAv) { pvAv = makeRig(paintUI.tex, teamMat[1]); pvGroup.add(pvAv.body); rigHold(pvAv, 13, mySk[13]); }
   $('menu').classList.add('hide'); paintEd.open(label);
 }
 $('openPaint').onclick = () => { pendingJoin = null; openPaint('완료'); };
@@ -1930,7 +1929,17 @@ function movePlayer(dt, now) {
 }
 const eye = [0, 0, 0];
 let dbgCam = null; // 테스트·촬영용 자유 시점 { p: [x, y, z], yaw, pitch }
-function applyDbgCam() { if (!dbgCam) return false; camera.rotation.order = 'YXZ'; camera.position.set(dbgCam.p[0], dbgCam.p[1], dbgCam.p[2]); camera.rotation.set(dbgCam.pitch || 0, dbgCam.yaw || 0, 0); return true; }
+function applyDbgCam() {
+  if (!dbgCam) return false;
+  camera.rotation.order = 'YXZ';
+  if (dbgCam.follow !== undefined) { // 캐릭터 하나를 따라다니며 봄: { follow: id, d: 거리, a: 정면에서 벗어난 각, h: 높이 }
+    const o = others.get(dbgCam.follow); if (!o) return false;
+    const yaw = o.yaw + (dbgCam.a || 0), d = dbgCam.d || 3;
+    camera.position.set(o.x - Math.sin(yaw) * d, o.y + (dbgCam.h || 1.4), o.z - Math.cos(yaw) * d); camera.rotation.set(dbgCam.pitch || -0.06, yaw + Math.PI, 0);
+    return true;
+  }
+  camera.position.set(dbgCam.p[0], dbgCam.p[1], dbgCam.p[2]); camera.rotation.set(dbgCam.pitch || 0, dbgCam.yaw || 0, 0); return true;
+}
 const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3();
 function smoked(a, b) { for (const s of smokes) if (s.t < s.last && segHitsSphere(a, b, [s.x, s.y, s.z], s.r)) return true; return false; }
 function aimedEnemy(maxT) {
@@ -2032,11 +2041,11 @@ function updateOthers(dt, now) {
     if (!o.alive) { // 쓰러지는 동작
       if (o.wasAlive) { o.wasAlive = false; o.deadT = 0; }
       o.deadT += dt;
-      o.g.visible = o.deadT < 4;
-      if (o.g.visible) { const f = Math.min(1, o.deadT / 0.45); o.body.rotation.x = f * f * 1.5; o.body.position.y = f * 0.16; o.tag.visible = false; }
+      o.g.visible = o.deadT < 4.2;
+      if (o.g.visible) { animRig(o, dt, { dead: true, fall: o.fallDir }); o.tag.visible = false; o.shadow.visible = false; }
       continue;
     }
-    if (!o.wasAlive) { o.wasAlive = true; o.body.rotation.x = 0; o.body.position.y = 0; o.tag.visible = true; }
+    if (!o.wasAlive) { o.wasAlive = true; o.tag.visible = true; o.shadow.visible = true; o.vx = o.vy = o.vz = 0; }
     o.g.visible = true;
     if (mode === 'br') { // 낙하산과 이름표 (멀면 이름을 숨김)
       const air = o.y - groundAt(o.x, o.z) > 3.5 && o.y < py - 0.02;
@@ -2045,17 +2054,16 @@ function updateOthers(dt, now) {
       o.tag.visible = Math.hypot(o.x - camera.position.x, o.z - camera.position.z) < 28;
     } else if (o.chute) o.chute.visible = false;
     o.g.position.set(o.x, o.y, o.z); o.g.rotation.y = o.yaw;
-    o.head.rotation.x = o.pitch * 0.8; o.arms.rotation.x = o.pitch;
-    const sp = Math.hypot(o.x - px, o.z - pz) / (dt || 0.016);
-    if (sp > 0.5) o.walk += dt * (6 + sp * 0.9); else o.walk *= 0.8;
-    const sw = Math.sin(o.walk) * Math.min(0.75, sp * 0.13);
-    o.legs[0].rotation.x = sw; o.legs[1].rotation.x = -sw;
-    o.body.position.y = Math.abs(Math.sin(o.walk)) * Math.min(0.05, sp * 0.008);
+    // 움직이는 빠르기 (앞뒤·좌우·위아래) → 걷기·기울임·점프 자세
+    const idt = 1 / (dt || 0.016), kv = Math.min(1, dt * 10);
+    o.vx += ((o.x - px) * idt - o.vx) * kv; o.vy += ((o.y - py) * idt - o.vy) * kv; o.vz += ((o.z - pz) * idt - o.vz) * kv;
+    const sp = Math.hypot(o.vx, o.vz), sy = Math.sin(o.yaw), cy = Math.cos(o.yaw);
     let seated = false;
-    if (vehs.size) for (const v of vehs.values()) if (v.driver === o.id) { seated = true; o.g.position.y = o.y + 0.25; o.g.rotation.y = v.yaw; o.legs[0].rotation.x = o.legs[1].rotation.x = -1.3; break; }
-    o.cs += ((o.c || seated ? 0.7 : 1) - o.cs) * Math.min(1, dt * 12);
+    if (vehs.size) for (const v of vehs.values()) if (v.driver === o.id) { seated = true; o.g.position.y = o.y + 0.25; o.g.rotation.y = v.yaw; break; }
+    const far = Math.hypot(o.x - camera.position.x, o.z - camera.position.z) > 120; // 멀리 있는 캐릭터는 자세 계산을 건너뜀
+    if (!far || !o.posed) { o.posed = true; animRig(o, dt, { speed: seated ? 0 : sp, vf: -sy * o.vx - cy * o.vz, vs: cy * o.vx - sy * o.vz, pitch: o.pitch, crouch: o.c && !seated, air: Math.abs(o.vy) > 2.4 && !(o.chute && o.chute.visible), sprint: sp > 6.3 && now - o.shotAt > 600, seated }); }
     const sc0 = o.prot ? 1.04 : 1;
-    o.g.scale.set(sc0, sc0 * o.cs, sc0);
+    o.g.scale.set(sc0, sc0, sc0);
     if (sp > 4.5 && !o.c) { // 발소리
       o.stepT += dt * sp;
       if (o.stepT > 2.7) { o.stepT = 0; const [v, pan] = heard(o.x, o.z, 22); sfxStep(v * 0.3, pan); }
@@ -2105,6 +2113,7 @@ function frame(now) {
     if (!paintUI.drag) paintUI.yaw = now / 1400;
     pvGroup.position.set((((r.left + r.right) / 2 / VW) * 2 - 1) * 0.554 * d * asp, -((((r.top + r.bottom) / 2 - VT) / VH) * 2 - 1) * 0.554 * d - 0.95, -d);
     pvGroup.rotation.y = paintUI.yaw;
+    if (pvAv) animRig(pvAv, dt, { speed: 0, pitch: 0 });
     pvGroup.visible = true; vm.visible = false; lkGroup.visible = false;
     uiLight(); present(drawVm, now, GRADE_UI);
     return;

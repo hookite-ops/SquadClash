@@ -79,23 +79,6 @@ function dollMap(g, ox, oy, hw = 9) { // hw = 덩어리 반 너비 (옆면이 �
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   return g;
 }
-function armPiece(g, len, armX, y0, y1, a, b) { // 팔: 그림에서는 옆으로 내린 팔 자리, 몸에서는 총을 든 자세
-  g = g.index ? g.toNonIndexed() : g;
-  const p = g.attributes.position, nr = g.attributes.normal, uv = new Float32Array(p.count * 2);
-  for (let i = 0; i < p.count; i += 3) {
-    const front = nr.getZ(i) + nr.getZ(i + 1) + nr.getZ(i + 2) > -0.03; // 앞으로 뻗은 팔은 윗면·옆면이 앞 그림, 아랫면이 뒤 그림
-    for (let k = 0; k < 3; k++) { const t = Math.min(1, Math.max(0, p.getY(i + k) / len + 0.5)), q = uvOf(armX + Math.max(-0.1035, Math.min(0.1035, p.getX(i + k))), y0 + (y1 - y0) * t, front); uv[(i + k) * 2] = q[0]; uv[(i + k) * 2 + 1] = q[1]; }
-  }
-  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), dir = B.clone().sub(A).normalize();
-  g.applyMatrix4(new THREE.Matrix4().compose(A.clone().add(B).multiplyScalar(0.5), new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir), new THREE.Vector3(1, 1, 1)));
-  return g;
-}
-function merge(list) {
-  const out = new THREE.BufferGeometry();
-  for (const k of ['position', 'normal', 'uv']) { const n = k === 'uv' ? 2 : 3, arr = new Float32Array(list.reduce((s, g) => s + g.attributes[k].array.length, 0)); let o = 0; for (const g of list) { arr.set(g.attributes[k].array, o); o += g.attributes[k].array.length; } out.setAttribute(k, new THREE.BufferAttribute(arr, n)); }
-  return out;
-}
 let GEO = null;
 function rbox(w, h, d, r) { // 모서리를 둥글린 상자 (모서리마다 비스듬한 면 하나 + 부드러운 음영)
   const g = new THREE.BoxGeometry(w, h, d, 3, 3, 3), p = g.attributes.position, n = g.attributes.normal, H = [w / 2, h / 2, d / 2], v = [0, 0, 0], q = [0, 0, 0];
@@ -107,28 +90,40 @@ function rbox(w, h, d, r) { // 모서리를 둥글린 상자 (모서리마다 �
   }
   return g;
 }
-function geos() { // 몸통 0.48 × 0.68 × 0.24, 팔·다리 0.235 × (0.68 / 0.76) × 0.24, 머리는 모서리를 둥글린 원통
+function geos() { // 몸통 0.48 × 0.68 × 0.24, 머리는 모서리를 둥글린 원통. 팔·다리는 관절(팔꿈치·무릎)에서 나뉜 두 토막
   if (GEO) return GEO;
   const torso = rbox(0.48, 0.68, 0.24, 0.035);
   const head = new THREE.LatheGeometry([[0, -0.19], [0.14, -0.19], [0.18, -0.178], [0.2, -0.15], [0.205, -0.11], [0.205, 0.11], [0.2, 0.15], [0.18, 0.178], [0.14, 0.19], [0, 0.19]].map(([x, y]) => new THREE.Vector2(x, y)), 24);
   head.rotateY(Math.PI / 24); // 앞·뒤 경계가 꼭짓점 줄에 오도록
-  const leg = (x) => { const a = rbox(0.235, 0.76, 0.24, 0.03); a.translate(0, -0.38, 0); return dollMap(a, x, 0.76, 0.1175); };
-  const arm = (a, b, x) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]); return armPiece(rbox(0.235, L, 0.24, 0.03), L, x, 1.44, 0.76, a, b); };
+  // 토막 하나: 관절에서 아래로 뻗음 (top = 관절보다 얼마나 위에서 시작하는지). 그림에서는 서 있는 자세의 자리(x, oy)를 그대로 입힘
+  const seg = (w, len, d, top, x, oy, hw) => { const a = rbox(w, len, d, 0.03); a.translate(0, top - len / 2, 0); return dollMap(a, x, oy, hw); };
   const band = rbox(0.5, 0.06, 0.26, 0.02);
-  GEO = { torso: dollMap(torso, 0, 1.1, 0.24), head: dollMap(head, 0, 1.63, 0.205), legL: leg(-0.12), legR: leg(0.12), arms: merge([arm([0.3575, 0.05, 0.02], [0.33, -0.05, -0.64], 0.3575), arm([-0.3575, 0.05, 0.02], [-0.02, -0.07, -0.58], -0.3575)]), band };
+  GEO = { torso: dollMap(torso, 0, 1.1, 0.24), head: dollMap(head, 0, 1.63, 0.205), band,
+    thigh: [-0.12, 0.12].map((x) => seg(0.235, 0.44, 0.24, 0.02, x, 0.76, 0.1175)),
+    shin: [-0.12, 0.12].map((x) => seg(0.228, 0.44, 0.234, 0.06, x, 0.38, 0.1175)),
+    armU: [0.3575, -0.3575].map((x) => seg(0.215, 0.42, 0.225, 0.03, x, 1.41, 0.1035)),
+    armF: [0.3575, -0.3575].map((x) => seg(0.2, 0.43, 0.21, 0.04, x, 1.165, 0.1035)) };
   return GEO;
 }
 // 그림 질감 tex 를 입힌 몸. bandMat = 목에 두르는 팀 색 띠
+// 뼈대: body(발밑) → hips(엉덩이) → 다리(thigh → knee), spine(허리) → 몸통·머리·arms(조준 방향 묶음: 팔 토막과 총)
 export function buildBody(tex, bandMat) {
   const G = geos(), mat = new THREE.MeshLambertMaterial({ map: tex }), body = new THREE.Group();
-  const t = new THREE.Mesh(G.torso, mat); t.position.y = 1.1;
-  const bd = new THREE.Mesh(G.band, bandMat); bd.position.y = 1.425;
-  body.add(t, bd);
-  const head = new THREE.Group(); head.position.y = 1.44;
-  const h = new THREE.Mesh(G.head, mat); h.position.y = 0.19; head.add(h); body.add(head);
-  const legs = [-0.12, 0.12].map((x, i) => { const l = new THREE.Group(); l.position.set(x, 0.76, 0); l.add(new THREE.Mesh(i ? G.legR : G.legL, mat)); body.add(l); return l; });
-  const arms = new THREE.Group(); arms.position.y = 1.32; arms.add(new THREE.Mesh(G.arms, mat)); body.add(arms);
-  return { body, head, legs, arms, mat };
+  const hips = new THREE.Group(); hips.position.y = 0.76; body.add(hips);
+  const spine = new THREE.Group(); hips.add(spine);
+  const t = new THREE.Mesh(G.torso, mat); t.position.y = 0.34;
+  const bd = new THREE.Mesh(G.band, bandMat); bd.position.y = 0.665;
+  const head = new THREE.Group(); head.position.y = 0.68; head.rotation.order = 'YXZ';
+  const h = new THREE.Mesh(G.head, mat); h.position.y = 0.19; head.add(h);
+  const arms = new THREE.Group(); arms.position.y = 0.56; arms.rotation.order = 'YXZ';
+  spine.add(t, bd, head, arms);
+  const legs = [-0.12, 0.12].map((x, i) => { // 0 왼쪽, 1 오른쪽
+    const thigh = new THREE.Group(), knee = new THREE.Group(); thigh.position.x = x; knee.position.y = -0.38;
+    thigh.add(new THREE.Mesh(G.thigh[i], mat), knee); knee.add(new THREE.Mesh(G.shin[i], mat)); hips.add(thigh);
+    return { thigh, knee };
+  });
+  const arm = (i) => { const up = new THREE.Group(), fore = new THREE.Group(); up.add(new THREE.Mesh(G.armU[i], mat)); fore.add(new THREE.Mesh(G.armF[i], mat)); arms.add(up, fore); return { up, fore }; };
+  return { body, hips, spine, head, legs, arms, armR: arm(0), armL: arm(1), mat };
 }
 
 // ── 그리기 화면 ──
