@@ -589,7 +589,7 @@ function softNormals(pos, nor, n) {
 class Builder {
   constructor() { this.parts = []; this.cur = ''; this.shift = 0; this.pivots = {}; }
   // 이후에 넣는 부품은 이 이름의 움직이는 묶음에 들어감. pivot 을 주면 그 점을 중심으로 도는 묶음(spin…)이 됨
-  part(name = '', pivot, speed) { this.cur = name; if (pivot) this.pivots[name] = { p: pivot, speed: speed || 1 }; return this; }
+  part(name = '', pivot, speed, axis) { this.cur = name; if (pivot) this.pivots[name] = { p: pivot, speed: speed || 1, axis: axis || 'z' }; return this; } // axis: 'z' 총열 둘레로 돎, 'x' 옆면에서 바퀴처럼 돎
   add(geo, mat, m, keepUV) {
     const g = geo.index ? geo.toNonIndexed() : geo;
     if (m) g.applyMatrix4(m);
@@ -691,7 +691,7 @@ class Builder {
       let grp = groups.get(name);
       if (!grp) { grp = new THREE.Group(); grp.name = name; root.add(grp); groups.set(name, grp); }
       const pv = this.pivots[name];
-      if (pv) { grp.position.set(pv.p[2] || 0, pv.p[1], -pv.p[0]); grp.userData.spin = pv.speed; }
+      if (pv) { grp.position.set(pv.p[2] || 0, pv.p[1], -pv.p[0]); grp.userData.spin = pv.speed; grp.userData.axis = pv.axis; }
       for (const [mat, list] of mm) {
         let n = 0;
         for (const p of list) n += p.g.attributes.position.count;
@@ -1744,7 +1744,7 @@ const KPLUS_MATS = {
   aurora: { glint: { color: 0xc8fff0, emissive: 0x6affc8, emissiveIntensity: 2, roughness: 0.2 } },
 };
 for (const [id, mats] of Object.entries(KPLUS_MATS)) { const f0 = KMATS[id]; KMATS[id] = (M) => ({ ...(f0 ? f0(M) : {}), ...mats }); }
-const spinAt = (b, f, u, sp, fn) => { const prev = b.cur; if (prev === '') b.part('spin' + ++spinN, [f, u, b.shift], sp); fn(); b.cur = prev; };
+const spinAt = (b, f, u, sp, fn, axis) => { const prev = b.cur; if (prev === '') b.part('spin' + ++spinN, [f, u, b.shift], sp, axis); fn(); b.cur = prev; };
 const KPLUS = {
   carbon: {
     hg(b, M, R) { const { f0, f1, u0, w } = R, L = f1 - f0; for (const s of [-1, 1]) { b.box(0.0014, 0.0026, L * 0.7, f0 + L * 0.45, u0 + 0.008, M.led, s * (w / 2 + 0.0035)); for (let i = 0; i < 3; i++) b.box(0.0014, 0.004, 0.004, f1 - 0.012 - i * 0.008, u0 + 0.016, M.led, s * (w / 2 + 0.0035)); } },
@@ -1780,6 +1780,45 @@ const KPLUS = {
     muzzle(b, M, f, u, r, len, tip) { const fm = f + len * 0.5, RR = r * 2.6; spinAt(b, fm, u, 2.2, () => { for (let i = 0; i < 3; i++) { const a = (i / 3) * 6.2832, y = u + Math.cos(a) * RR, x = Math.sin(a) * RR, k = r * 0.08; b.prof([[fm - 9 * k, y + 2 * k], [fm - 4 * k, y - 1 * k], [fm, y + 1.5 * k], [fm + 4 * k, y - 1 * k], [fm + 9 * k, y + 2 * k], [fm + 5 * k, y - 3 * k], [fm, y - 1.5 * k], [fm - 5 * k, y - 3 * k]], 0.002, M.wing, 0, x); b.ball(k * 0.8, [fm, y, x + 0.0012], M.eye, [1, 1, 0.6], 6); } }); },
   },
 };
+// 레전드: 가운데 에너지 코어, 들여다보이는 빛나는 배관, 번개 고리
+Object.assign(KPLUS_MATS, {
+  crimson: { core: { color: 0xfff0d0, emissive: 0xff7a20, emissiveIntensity: 3.2, roughness: 0.3 }, pipe: { color: 0xffa060, emissive: 0xff4a00, emissiveIntensity: 2.2, roughness: 0.4 } },
+  aqua: { core: { color: 0xe8fcff, emissive: 0x30d0ff, emissiveIntensity: 3.2, roughness: 0.2 } },
+  dragon: { thunder: { color: 0xe0b0ff, emissive: 0xa040ff, emissiveIntensity: 3, roughness: 0.3 } },
+  phoenix: { core: { color: 0xfff4d0, emissive: 0xff8a10, emissiveIntensity: 3.2, roughness: 0.3 } },
+});
+for (const id of ['crimson', 'aqua', 'dragon', 'phoenix']) { const f0 = KMATS[id], mats = KPLUS_MATS[id]; KMATS[id] = (M) => ({ ...(f0 ? f0(M) : {}), ...mats }); }
+Object.assign(KPLUS, {
+  crimson: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, Rc = Math.min(hh * 0.95, 0.03);
+      for (const [du, dz] of [[0.45, 0.55], [0, 0.75], [-0.4, 0.5]]) both((s) => b.rod([f0 + 0.008, um + du * hh, s * hw * dz], [f1 - 0.008, um + du * hh * 0.6, s * hw * dz], 0.0022, 0.0022, M.pipe, 6));
+      energyCore(b, M, f0 + L * 0.34, um, Rc, hw, M.core, M.glow, M.frame); },
+  },
+  aqua: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, Rc = Math.min(hh * 0.95, 0.03), fc = f0 + L * 0.42;
+      energyCore(b, M, fc, um, Rc, hw, M.core, M.glow, M.frame, 16);
+      both((s) => { for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.2832; b.crys([fc + Math.cos(a) * Rc * 1.2, um + Math.sin(a) * Rc * 1.2, s * (hw + 0.004)], [fc + Math.cos(a) * Rc * 2.4, um + Math.sin(a) * Rc * 2.4, s * (hw + 0.012)], 0.0025, M.glow, 4); } }); },
+  },
+  dragon: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, fc = f0 + L * 0.45, RR = hh * 2.3;
+      spinAt(b, fc, um, 0.9, () => { b.tor(RR, 0.0035, [fc, um, 0], M.thunder, 0, Math.PI / 2, 6.2832, 40); for (let i = 0; i < 5; i++) { const a = (i / 5) * 6.2832; b.spike([fc + Math.cos(a) * RR, um + Math.sin(a) * RR, 0], [fc + Math.cos(a + 0.35) * RR * 1.25, um + Math.sin(a + 0.35) * RR * 1.25, 0], 0.004, M.horn, 4); } }, 'x');
+      spinAt(b, fc, um, -1.5, () => b.tor(RR * 0.82, 0.0018, [fc, um, 0], M.glow, 0, Math.PI / 2, 6.2832 * 0.75, 30), 'x'); },
+  },
+  phoenix: {
+    hg(b, M, R) { const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2; energyCore(b, M, f0 + L * 0.62, um, Math.min(hh * 0.9, 0.028), hw, M.core, M.glow, M.trim, 10); },
+  },
+});
+// 모든 유료 스킨: 총 둘레에 늘 움직이는 입자
+const AURA = {
+  carbon: { kind: 'spark', c0: 0xff4030 }, tiger: { kind: 'ember', c0: 0xffb040, c1: 0xff5a10 }, sakura: { kind: 'fall', c0: 0xffc0dc, c1: 0xff80b0 }, ice: { kind: 'fall', c0: 0xe8f8ff, c1: 0x8fd8ff },
+  neon: { kind: 'spark', c0: 0x19e3ff, c1: 0xff3df0, bolt: 0x19e3ff }, lava: { kind: 'ember', c0: 0xffd080, c1: 0xff3000, n: 60 }, gold: { kind: 'spark', c0: 0xffe9a0, c1: 0xffc040 },
+  galaxy: { kind: 'spark', c0: 0xffffff, c1: 0xc08cff, n: 60 }, aurora: { kind: 'orbit', c0: 0x7dffc8, c1: 0x7ab8ff }, halloween: { kind: 'ember', c0: 0xa64dff, c1: 0x9dff3a },
+  platinum: { kind: 'spark', c0: 0xbfeaff }, damascus: { kind: 'ember', c0: 0xffe0a0, c1: 0xffa040 }, obsidian: { kind: 'orbit', c0: 0xd8b8ff, c1: 0x8040ff }, diamond: { kind: 'spark', c0: 0xffffff, c1: 0xbfe8ff, n: 60 },
+  atomic: { kind: 'ember', c0: 0xffd070, c1: 0xff3000, bolt: 0xff8a30 }, orion: { kind: 'orbit', c0: 0xffffff, c1: 0xff8ad8, n: 56 }, darkmatter: { kind: 'orbit', c0: 0xd08aff, c1: 0xff40b0, bolt: 0xb05cff },
+  crimson: { kind: 'ember', c0: 0xffd080, c1: 0xff2a00, n: 64, bolt: 0xff7a20 }, dragon: { kind: 'ember', c0: 0xff6040, c1: 0xa040ff, n: 60, bolt: 0xc060ff },
+  phoenix: { kind: 'ember', c0: 0xfff0b0, c1: 0xff4000, n: 72 }, aqua: { kind: 'orbit', c0: 0xc8f8ff, c1: 0x2a80ff, n: 60, bolt: 0x6ae8ff },
+};
+for (const [id, a] of Object.entries(AURA)) if (KITS[id]) KITS[id].aura = a;
 for (const [id, P] of Object.entries(KPLUS)) {
   const K = KITS[id];
   for (const part of ['hg', 'stock', 'orn']) if (P[part] && K[part]) { const o = K[part]; K[part] = (b, M, R) => { o(b, M, R); P[part](b, M, R); }; }
@@ -2151,17 +2190,69 @@ function knife(M, o = {}) {
   return { group: b.build(), muzzle: [0, 0, -0.25], grip: [0, -0.02, 0.045], fore: [0, 0, 0], sight: 0, oneHand: true, travel: 0 };
 }
 
+// ───────────── 오라: 총 둘레에 늘 살아 움직이는 입자 (불티·반짝임·꽃잎·번개) ─────────────
+// cfg = { kind: 'ember' 위로 피어오름 | 'spark' 제자리 반짝임 | 'fall' 떨어짐 | 'orbit' 총을 감고 돎, c0, c1 색, n 개수, bolt 번개 색(있으면 번개도 침) }
+const auraTex = (() => { const c = canvas(64, (g) => { const rg = g.createRadialGradient(32, 32, 0, 32, 32, 32); rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(0.25, 'rgba(255,255,255,.75)'); rg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = rg; g.fillRect(0, 0, 64, 64); }); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+function makeAura(cfg, box) {
+  const g = new THREE.Group(), n = cfg.n || 46, min = box.min.clone(), size = box.getSize(new THREE.Vector3()), pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: cfg.size || Math.max(0.008, size.z * 0.022), map: auraTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  pts.frustumCulled = false; g.add(pts);
+  const P = [], c0 = new THREE.Color(cfg.c0), c1 = new THREE.Color(cfg.c1 ?? cfg.c0), tc = new THREE.Color();
+  for (let i = 0; i < n; i++) P.push({ x: Math.random(), y: Math.random(), z: Math.random(), ph: Math.random(), sp: 0.6 + Math.random() * 0.8 });
+  const step = (t) => {
+    for (let i = 0; i < n; i++) {
+      const q = P[i], life = (t * q.sp * 0.6 + q.ph) % 1, o = i * 3; let x, y, z, k;
+      if (cfg.kind === 'ember') { x = q.x; y = q.y * 0.6 + life * 0.9; z = q.z + Math.sin(t * 2 + i) * 0.02; k = Math.sin(life * Math.PI); }
+      else if (cfg.kind === 'fall') { x = q.x + Math.sin(t + i) * 0.08; y = 1.1 - life * 1.3; z = q.z; k = Math.sin(life * Math.PI); }
+      else if (cfg.kind === 'orbit') { const a = t * 2.2 * q.sp + q.ph * 6.283; x = 0.5 + Math.cos(a) * 0.62; y = 0.5 + Math.sin(a) * 0.62; z = (q.z + t * 0.05 * q.sp) % 1; k = 0.5 + 0.5 * Math.sin(t * 5 + i); }
+      else { x = q.x; y = q.y; z = q.z; k = Math.max(0, Math.sin(life * Math.PI * 2)) ** 3; if (life < 0.02) { q.x = Math.random(); q.y = Math.random(); q.z = Math.random(); } }
+      pos[o] = min.x + x * size.x; pos[o + 1] = min.y + y * size.y; pos[o + 2] = min.z + z * size.z;
+      tc.copy(c0).lerp(c1, life).multiplyScalar(k * 1.6); col[o] = tc.r; col[o + 1] = tc.g; col[o + 2] = tc.b;
+    }
+    geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
+  };
+  pts.onBeforeRender = () => step(performance.now() / 1000);
+  if (cfg.bolt) { // 번개: 짧게 꺾이는 빛줄기를 자주 새로 그림
+    const m = 4, seg = 7, lp = new Float32Array(m * seg * 6), lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
+    const ln = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: new THREE.Color(cfg.bolt).multiplyScalar(2.2), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    ln.frustumCulled = false; g.add(ln); let last = 0;
+    ln.onBeforeRender = () => {
+      const now = performance.now(); if (now - last < 70) return; last = now;
+      for (let b = 0; b < m; b++) {
+        const on = Math.random() < 0.55; let x = 0.2 + Math.random() * 0.6, y = 0.35 + Math.random() * 0.4, z = Math.random() * 0.7 + 0.15; const ex = 0.2 + Math.random() * 0.6, ey = 0.35 + Math.random() * 0.4, ez = z + (Math.random() - 0.5) * 0.25;
+        for (let s2 = 0; s2 < seg; s2++) { const o = (b * seg + s2) * 6, f = (s2 + 1) / seg, nx = x + (ex - x) / (seg - s2) + (Math.random() - 0.5) * 0.12, ny = y + (ey - y) / (seg - s2) + (Math.random() - 0.5) * 0.12, nz = z + (ez - z) / (seg - s2) + (Math.random() - 0.5) * 0.06;
+          const A = on ? [min.x + x * size.x, min.y + y * size.y, min.z + z * size.z] : [0, -99, 0], B = on ? [min.x + nx * size.x, min.y + ny * size.y, min.z + nz * size.z] : [0, -99, 0];
+          lp.set(A, o); lp.set(B, o + 3); x = nx; y = ny; z = nz; void f; }
+      }
+      lg.attributes.position.needsUpdate = true;
+    };
+  }
+  return g;
+}
+// 에너지 코어: 옆으로 불룩 튀어나온 빛나는 구슬과, 양옆에서 바퀴처럼 도는 눈금 고리 (fc, uc = 자리, R = 구슬 반지름, hw = 몸 반폭)
+function energyCore(b, M, fc, uc, R, hw, mc, mr, md, ticks = 12) {
+  b.ball(R, [fc, uc, 0], mc, [1, 1, Math.max(1, (hw + 0.004) / R)], 18);
+  for (const s of [-1, 1]) { const x = s * (hw + 0.004);
+    b.tor(R * 1.12, R * 0.16, [fc, uc, x], md, 0, Math.PI / 2, 6.2832, 28);
+    spinAt(b, fc, uc, s * 1.6, () => { b.tor(R * 1.42, R * 0.05, [fc, uc, x + s * 0.001], mr, 0, Math.PI / 2, 6.2832, 32); for (let i = 0; i < ticks; i++) { const a = (i / ticks) * 6.2832; b.box(0.0014, R * 0.22, R * 0.08, fc + Math.cos(a) * R * 1.62, uc + Math.sin(a) * R * 1.62, mr, x + s * 0.001, a); } }, 'x');
+    spinAt(b, fc, uc, -s * 0.7, () => { b.tor(R * 1.85, R * 0.035, [fc, uc, x + s * 0.002], mr, 0, Math.PI / 2, 6.2832 * 0.7, 28); b.tor(R * 1.85, R * 0.035, [fc, uc, x + s * 0.002], md, 0, Math.PI / 2, 6.2832 * 0.25, 10); }, 'x');
+    for (let i = 0; i < 3; i++) { const a = i * 2.094 + 0.5; b.prof([[fc + Math.cos(a) * R * 1.0, uc + Math.sin(a) * R * 1.0], [fc + Math.cos(a - 0.25) * R * 2.1, uc + Math.sin(a - 0.25) * R * 2.1], [fc + Math.cos(a + 0.25) * R * 2.1, uc + Math.sin(a + 0.25) * R * 2.1]], 0.003, md, 0.0006, x); }
+  }
+}
 const builders = { rifle, shotgun, sniper, pistol, revolver, sawed, smg, knife };
 const LABELS = ['', 'P-12', 'DB-2', 'AP-15', 'SP-13', 'RV-6', 'VX-22', 'SD-30', 'M-6', 'AS-7', 'BR-24', 'DM-12', 'SR-30', 'AR-25', 'LS-5', 'HS-5', 'LM-50', 'HM-100'];
 const cache = new Map();
 // 같은 모양·같은 스킨을 여러 번 써도 형태 데이터는 한 번만 만든다
 // parts = 파츠 번호 목록, lv = 스킨 레벨 (5 = 각성)
-export function makeGun(wi, skin = 0, parts, lv = 1) {
+export function makeGun(wi, skin = 0, parts, lv = 1, opt = {}) {
   if (!SKINS[skin]) skin = 0;
   const pl = cleanParts(wi, parts), aw = lv >= 5 && skin > 0, key = wi + ':' + skin + ':' + pl.join('.') + (aw ? 'a' : '');
   if (!cache.has(key)) { const [fn, opt] = WEAPONS[wi].model, att = {}; for (const pi of pl) att[PARTS[pi].slot] = PARTS[pi].id; cache.set(key, builders[fn](matsFor(skin, aw), { ...(opt || {}), label: LABELS[wi] ? 'SC ' + LABELS[wi] : '', kit: KITS[SKINS[skin].id], att })); }
   const src = cache.get(key), group = src.group.clone();
-  for (const c of group.children) if (c.userData.spin) { const sp = c.userData.spin; for (const m of c.children) m.onBeforeRender = () => { c.rotation.z = performance.now() * 0.001 * sp; }; } // 도는 장식
+  for (const c of group.children) if (c.userData.spin) { const sp = c.userData.spin, ax = c.userData.axis || 'z'; for (const m of c.children) m.onBeforeRender = () => { c.rotation[ax] = performance.now() * 0.001 * sp; }; } // 도는 장식
+  const kit = KITS[SKINS[skin].id];
+  if (kit && kit.aura && !opt.noAura) { if (!src.box) src.box = gunBox(src.group); group.add(makeAura(kit.aura, src.box)); } // 총 둘레에 늘 피어오르는 불티·번개·반짝이
   return { group, muzzle: src.muzzle, grip: src.grip, fore: src.fore, sight: src.sight, adsZ: src.adsZ, oneHand: src.oneHand, travel: src.travel || 0, rack: !!src.rack, pump: !!src.pump, slide: group.getObjectByName('slide') || null, mag: group.getObjectByName('mag') || null };
 }
 
