@@ -115,6 +115,15 @@ export function effWeapon(wi, parts) {
 // ───────────── 스킨 업그레이드 ─────────────
 // 스킨을 낀 무기로 처치할수록 스킨 레벨이 오른다. 2 궤적 색 · 3 총구 불꽃과 탄착 색 · 4 처치 효과 · 5 각성(빛나는 겉면)
 export const SKIN_LV = [0, 5, 15, 35, 70];
+// 요원 스킨 (캐릭터 겉모습) — 0 은 내가 그린 그림. 코드로 해금하며 소유 번호는 OP_BASE + 번호. 순서는 뒤에만 추가
+export const OP_BASE = 100;
+export const OPS = [
+  { id: 'none', name: '기본 (내 그림)', desc: '그리기 화면에서 그린 그림을 입어요.' },
+  { id: 'vanguard', name: '네온 뱅가드', tier: '레전드', col: '#19e0ff', desc: '전술 바이저와 네온 회로가 빛나는 미래 강습 요원.' },
+  { id: 'samurai', name: '크림슨 사무라이', tier: '레전드', col: '#ff3048', desc: '황금 초승달 투구와 붉은 갑옷, 등에 찬 카타나.' },
+  { id: 'reactor', name: '인페르노 리액터', tier: '레전드', col: '#ff7a1a', desc: '가슴과 등의 원자로가 불타오르는 중장갑 요원.' },
+  { id: 'reaper', name: '보이드 리퍼', tier: '레전드', col: '#b07aff', desc: '두건 속 빛나는 눈, 펄럭이는 망토와 등의 낫.' },
+];
 export const SKIN_LV_NAME = ['', '기본', '궤적 색', '파츠 스킨 (단 파츠에 스킨 장식)', '처치 효과', '각성 · 파츠 각성 (도는 고리·보석)'];
 export function skinLevel(xp) { let l = 1; for (let i = 1; i < SKIN_LV.length; i++) if (xp >= SKIN_LV[i]) l = i + 1; return l; }
 export const CATS = [['side', '보조무기'], ['smg', '기관단총'], ['sg', '샷건'], ['ar', '소총'], ['sr', '저격총'], ['mg', '기관총']];

@@ -1,10 +1,11 @@
 // SQUAD CLASH — 클라이언트
 import * as THREE from './vendor/three.module.js';
-import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, MAPS, setMap, BOXES, SITES, siteAt, dirFrom, rayWorld, rayPlayer, hitNormal, HIT_M, segHitsSphere, groundAt, waterAt, boxesNear, PARTS, PART_SLOTS, PART_MAX, partSlots, partOk, cleanParts, effWeapon, SKIN_LV, SKIN_LV_NAME, skinLevel } from './shared.js';
+import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, MAPS, setMap, BOXES, SITES, siteAt, dirFrom, rayWorld, rayPlayer, hitNormal, HIT_M, segHitsSphere, groundAt, waterAt, boxesNear, PARTS, PART_SLOTS, PART_MAX, partSlots, partOk, cleanParts, effWeapon, SKIN_LV, SKIN_LV_NAME, skinLevel, OPS, OP_BASE } from './shared.js';
+import { dressOp, tickOps, opDraw } from './operators.js';
 import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox, pulseSkin, skinFire } from './guns.js';
 import { paintTex, isPaint, initPaintEditor, paintUI } from './paint.js';
 import { makeRig, rigHold, rigShot, rigFlinch, rigMuzzle, animate as animRig, setAvatarFlash } from './avatar.js';
-import { initAudio, audioOn, setVolume, sfxShot, sfxBoom, sfxStep, sfxSplash, sfxTone, sfxImpact as playImpact, sfxWhiz, sfxReload, sfxUI, setAmbient, engineSound, sfxSkin } from './audio.js';
+import { initAudio, audioOn, setVolume, sfxShot, sfxBoom, sfxStep, sfxSplash, sfxTone, sfxImpact as playImpact, sfxWhiz, sfxReload, sfxUI, setAmbient, engineSound, sfxSkin, sfxSample } from './audio.js';
 import { initFx, flashTex, addTracer, hole, clearHoles, spark, emitSpark, emitChip, puff, lightFlash, explode, addSmoke, clearSmokes, smokes, glow, shock, updateFx as tickFx } from './fx.js';
 import { buildWorld, blobShadow, MOODS, setWorldQuality } from './world.js';
 import { makePost, TONE } from './post.js';
@@ -55,6 +56,8 @@ const skXp = (() => { const o = jget('skx', {}); return o && typeof o === 'objec
 const myLv = (skin) => (skin > 0 && SKINS[skin] ? skinLevel(skXp[SKINS[skin].id] | 0) : 1);
 let myCodes = jget('codes', []).filter((c) => typeof c === 'string').slice(0, 24);
 const unlocked = new Set(SKINS.map((k, i) => (k.free ? i : -1)).filter((i) => i >= 0));
+let myOp = (() => { const v = +store.get('op', 0) | 0; return OPS[v] ? v : 0; })(); // 요원 스킨 (0 = 내 그림)
+let opShotAt = 0;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 500);
 camera.rotation.order = 'YXZ';
@@ -144,6 +147,7 @@ function nameSprite(text, team) {
 // 캐릭터: 하얀 인형 몸에 저마다 그린 그림을 입힌다 (목의 띠가 팀 색). 봇은 무작위 위장 무늬
 const paints = new Map(); // 사람 id → 그림 자료(문자열)
 function paintTexOf(info) {
+  if (info.op && OPS[info.op]) return paintTex('op' + info.op, 'op', 0, (g) => opDraw(g, OPS[info.op].id)); // 요원 스킨이 그림보다 먼저
   const d = paints.get(info.id);
   if (isPaint(d)) return paintTex('p' + info.id + ':' + d.length + ':' + d.slice(-40), 'url', d);
   if (info.bot) return paintTex('b' + info.id, 'bot', info.id * 7 + 3);
@@ -154,12 +158,13 @@ function makeAvatar(info) {
   g.rotation.order = 'YXZ';
   const br = info.ci !== undefined;
   const rig = makeRig(paintTexOf(info), br ? brMat[info.ci] : teamMat[info.team]); // 뼈대와 동작은 avatar.js
+  if (info.op) dressOp(rig, info.op); // 요원 스킨: 투구·갑옷·망토 등이 뼈대를 따라 움직임
   g.add(rig.body);
   const tag = nameSprite(info.name, br ? 0 : info.team), shadow = blobShadow();
   g.add(tag, shadow);
   g.visible = false;
   scene.add(g);
-  const av = Object.assign(rig, { g, tag, shadow, bot: !!info.bot, c: false, buf: [], x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 100, alive: false, wasAlive: false, deadT: 9, fallDir: 0, prot: false, stepT: 0, shotAt: 0, team: info.team, name: info.name, chute: null, ci: info.ci, id: info.id, sk: info.sk || null, att: info.att || null, sl: info.sl || null });
+  const av = Object.assign(rig, { g, tag, shadow, bot: !!info.bot, c: false, buf: [], x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 100, alive: false, wasAlive: false, deadT: 9, fallDir: 0, prot: false, stepT: 0, shotAt: 0, team: info.team, name: info.name, chute: null, ci: info.ci, id: info.id, op: info.op || 0, sk: info.sk || null, att: info.att || null, sl: info.sl || null });
   holdGun(av, W_PISTOL);
   return av;
 }
@@ -565,7 +570,7 @@ function canAct() {
 function send(m) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-  ws.onopen = () => { timeOff = null; send({ t: 'join', name: lastJoin.name, room: lastJoin.room, mode: lastJoin.mode, map: lastJoin.map, bot: lastJoin.bot, sk: lastJoin.sk, att: lastJoin.att, sl: lastJoin.sl, codes: lastJoin.codes, paint: lastJoin.paint || undefined }); };
+  ws.onopen = () => { timeOff = null; send({ t: 'join', name: lastJoin.name, room: lastJoin.room, mode: lastJoin.mode, map: lastJoin.map, bot: lastJoin.bot, sk: lastJoin.sk, att: lastJoin.att, sl: lastJoin.sl, op: lastJoin.op, codes: lastJoin.codes, paint: lastJoin.paint || undefined }); };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } onMsg(m); };
   ws.onclose = () => {
     if (!lastJoin) return;
@@ -609,7 +614,7 @@ function onMsg(m) {
           continue;
         }
         const o = others.get(p.id), tm = mode === 'br' ? 1 : p.team; // 생존전에서는 나 말고 모두 적
-        if (!o || o.team !== tm || o.name !== p.name) { if (o) scene.remove(o.g); others.set(p.id, makeAvatar(mode === 'br' ? { id: p.id, name: p.name, team: 1, ci: p.id % BR_COL.length, sk: p.sk, att: p.att, sl: p.sl, bot: p.bot } : p)); }
+        if (!o || o.team !== tm || o.name !== p.name || o.op !== (p.op || 0)) { if (o) scene.remove(o.g); others.set(p.id, makeAvatar(mode === 'br' ? { id: p.id, name: p.name, team: 1, ci: p.id % BR_COL.length, sk: p.sk, att: p.att, sl: p.sl, bot: p.bot, op: p.op } : p)); }
       }
       if (!$('board').classList.contains('hide')) drawBoard();
       break;
@@ -699,6 +704,7 @@ function onMsg(m) {
         h.classList.toggle('head', m.head); h.classList.add('on');
         clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove('on'), 90);
         sfxUI(m.head ? 'head' : 'hit');
+        if (myOp || (SKINS[mySk[me.w]] && SKINS[mySk[me.w]].bundle)) sfxSample('hit', m.head ? 0.55 : 0.4, 0, m.head ? 1.12 : 1); // 스킨 팩 적중음
         const ho = others.get(m.to); if (ho) { hitBurst(ho.x, ho.y + (m.head ? 1.6 : 1.15), ho.z); rigFlinch(ho); }
         const sp = document.createElement('span'); // 준 피해 숫자
         sp.textContent = m.dmg; if (m.head) sp.className = 'h';
@@ -748,6 +754,8 @@ function onMsg(m) {
         const vo = others.get(m.to), kd = vo ? Math.round(Math.hypot(vo.x - me.x, vo.z - me.z)) : 0;
         banner(`${streak}${b.name} 처치${m.head ? ' · 헤드샷!' : ''}${mode === 'bomb' ? ` · +${ECON.kill}` : ''}${mode === 'br' && kd > 3 ? ` · ${kd}m` : ''}`, multiKill > 1 ? 0xff8a3d : 0xffd23f);
         sfxUI(multiKill > 1 ? 'multi' : 'kill');
+        if (myOp) sfxSample('kill', 0.7);
+        if (multiKill >= 3) sfxSample('ultimate', 0.85, 0, 1, 0.15); // 트리플 킬부터 궁극기 소리
       }
       break;
     }
@@ -1547,7 +1555,7 @@ function join(room) {
   const name = $('name').value.trim();
   store.set('name', name);
   closeLocker();
-  lastJoin = { name, room, mode: selMode, map: $('mapSel').value, bot: +$('botLv').value, sk: mySk, att: myParts, sl: SKINS.map((_, i) => myLv(i)), codes: myCodes, paint: isPaint(store.get('paint', '')) ? store.get('paint', '') : '' };
+  lastJoin = { name, room, mode: selMode, map: $('mapSel').value, bot: +$('botLv').value, sk: mySk, att: myParts, sl: SKINS.map((_, i) => myLv(i)), op: myOp, codes: myCodes, paint: isPaint(store.get('paint', '')) ? store.get('paint', '') : '' };
   $('menuMsg').textContent = '접속 중…';
   if (ws) { ws.onclose = null; ws.close(); }
   connect();
@@ -1640,7 +1648,22 @@ const lkBack = (() => { // 무기고 배경: 총 뒤로 은은한 조명과 바�
   const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, fog: false }));
   m.visible = false; vmScene.add(m); return m;
 })();
+let lkOp = 0;
 function lkBuild() { // 가운데에 띄울 모델
+  if (lkTab === 'op') { // 요원 칸: 총 대신 캐릭터
+    const key = 'op:' + lkOp + ':' + mySk[13];
+    if (key === lkKey) return;
+    lkKey = key;
+    if (lkGun) lkGroup.remove(lkGun);
+    const rig = makeRig(paintTexOf({ id: myId || 0, op: lkOp }), teamMat[1]);
+    if (lkOp) dressOp(rig, lkOp);
+    rigHold(rig, 13, mySk[13], myParts[13], myLv(mySk[13]));
+    rig.body.position.y = -0.95;
+    lkGun = new THREE.Group(); lkGun.add(rig.body); lkGun.userData.len = 1.2; lkGun.userData.rig = rig;
+    { const c = OPS[lkOp].col; lkTheme.set(c || '#bfd0e8'); lkTint.setRGB(1, 1, 1).lerp(lkTheme, c ? 0.6 : 0.1); }
+    lkGroup.add(lkGun);
+    return;
+  }
   const key = lkW + ':' + lkSkin + ':' + myParts[lkW].join('.') + ':' + myLv(lkSkin);
   if (key === lkKey) return;
   lkKey = key;
@@ -1658,7 +1681,14 @@ function lkRefresh() {
   $('lkSkin').textContent = `${k.name} · ${k.free ? '무료' : k.tier + (k.bundle ? ' · 형태·이펙트·소리 전부 변경' : ' · 형태 변경')}${unlocked.has(lkSkin) ? '' : ' · 잠김'}`; $('lkSkin').className = 't' + (TIERN[k.tier] || 0);
   for (const b of $('lkSkins').children) { const i = +b.dataset.s; b.classList.toggle('on', i === lkSkin); b.classList.toggle('eq', mySk[lkW] === i); b.classList.toggle('lock', !unlocked.has(i)); }
   for (const b of $('lkTabs').children) b.classList.toggle('on', b.dataset.tab === lkTab);
-  $('lkTabSkin').classList.toggle('hide', lkTab !== 'skin'); $('lkTabPart').classList.toggle('hide', lkTab !== 'part');
+  $('lkTabSkin').classList.toggle('hide', lkTab !== 'skin'); $('lkTabPart').classList.toggle('hide', lkTab !== 'part'); $('lkTabOp').classList.toggle('hide', lkTab !== 'op');
+  if (lkTab === 'op') { // 요원 스킨
+    const o = OPS[lkOp], own = !lkOp || unlocked.has(OP_BASE + lkOp);
+    $('lkName').textContent = '요원'; $('lkSkin').textContent = `${o.name}${o.tier ? ' · ' + o.tier : ''}${own ? '' : ' · 잠김'}`; $('lkSkin').className = 't' + (TIERN[o.tier] || 0);
+    for (const b of $('lkOps').children) { const i = +b.dataset.o; b.classList.toggle('on', i === lkOp); b.classList.toggle('eq', myOp === i); b.classList.toggle('lock', !!i && !unlocked.has(OP_BASE + i)); }
+    $('lkOpDesc').textContent = o.desc; $('lkOpFx').textContent = lkOp ? '효과 미리보기' : '동작 보기';
+    return;
+  }
   // 스킨 레벨
   const lv = myLv(lkSkin), xp = lkSkin ? skXp[k.id] | 0 : 0, L = $('lkLv');
   L.style.display = lkSkin ? '' : 'none';
@@ -1717,7 +1747,7 @@ function lkPartsRefresh() {
   }
 }
 function setParts(wi, list) { myParts[wi] = cleanParts(wi, list); EW[wi] = null; store.set('parts', JSON.stringify(myParts)); lkSpin = true; lkRefresh(); }
-for (const b of $('lkTabs').children) b.onclick = () => { lkTab = b.dataset.tab; if (lkTab === 'part') lkSkin = mySk[lkW]; $('lkMsg').textContent = ''; lkRefresh(); };
+for (const b of $('lkTabs').children) b.onclick = () => { lkTab = b.dataset.tab; lkKey = ''; if (lkTab === 'part') lkSkin = mySk[lkW]; if (lkTab === 'op') lkOp = myOp; $('lkMsg').textContent = ''; lkRefresh(); };
 $('lkPartClear').onclick = () => { $('lkMsg').textContent = ''; setParts(lkW, []); };
 // 스킨 경험치: 스킨을 낀 무기로 처치하면 오름 (헤드샷은 2)
 function gainSkinXp(wi, head) {
@@ -1726,7 +1756,7 @@ function gainSkinXp(wi, head) {
   const id = SKINS[sk].id, before = myLv(sk);
   skXp[id] = (skXp[id] | 0) + (head ? 2 : 1); store.set('skx', JSON.stringify(skXp));
   const lv = myLv(sk);
-  if (lv > before) { setTimeout(() => { banner(`스킨 레벨 업! ${SKINS[sk].name} Lv.${lv} · ${SKIN_LV_NAME[lv]}`, 0x7af4ff); sfxUI('level'); }, 900); if (lv >= 5 && me.alive) vmGun(me.w).visible = true; }
+  if (lv > before) { setTimeout(() => { banner(`스킨 레벨 업! ${SKINS[sk].name} Lv.${lv} · ${SKIN_LV_NAME[lv]}`, 0x7af4ff); sfxUI('level'); if (lv >= 5) sfxSample('ultimate', 0.8); }, 900); if (lv >= 5 && me.alive) vmGun(me.w).visible = true; }
 }
 function saveSkins() { store.set('sk', JSON.stringify(mySk)); }
 function openLocker() {
@@ -1743,11 +1773,26 @@ function openLocker() {
       b.append(sw, nm, tr);
       b.onclick = () => {
         lkSkin = i;
-        if (unlocked.has(i)) { mySk[lkW] = i; saveSkins(); $('lkMsg').textContent = ''; }
+        sfxSample('ui', 0.5);
+        if (unlocked.has(i)) { mySk[lkW] = i; saveSkins(); $('lkMsg').textContent = ''; if (k.bundle) sfxSample('equip', 0.55); }
         else $('lkMsg').textContent = '잠긴 스킨이에요. 코드를 등록하면 쓸 수 있어요.';
         lkRefresh();
       };
       $('lkSkins').append(b);
+    });
+    OPS.forEach((o, i) => { // 요원 스킨 버튼
+      const b = document.createElement('button'); b.className = 'sk' + (i ? ' m' : ''); b.dataset.o = i;
+      const sw = document.createElement('i'); sw.style.background = i ? `linear-gradient(135deg, #0d0f14 0%, ${o.col} 55%, #0d0f14 100%)` : '#f4f4f0';
+      const nm = document.createElement('span'); nm.textContent = o.name;
+      const tr = document.createElement('em'); tr.textContent = o.tier || '무료'; tr.className = 't' + (TIERN[o.tier] || 0);
+      b.append(sw, nm, tr);
+      b.onclick = () => {
+        lkOp = i; lkSpin = true; sfxSample('ui', 0.5);
+        if (!i || unlocked.has(OP_BASE + i)) { myOp = i; store.set('op', String(i)); $('lkMsg').textContent = ''; if (i) { sfxSample('equip', 0.75); lkAnimAt = performance.now(); } }
+        else $('lkMsg').textContent = '잠긴 요원이에요. 코드를 등록하면 쓸 수 있어요.';
+        lkRefresh();
+      };
+      $('lkOps').append(b);
     });
   }
   lkRefresh();
@@ -1757,7 +1802,14 @@ function closeLocker() {
   lockerOpen = false; lkGroup.visible = false; lkBack.visible = false;
   $('locker').classList.add('hide'); if (!joined) $('menu').classList.remove('hide');
 }
-$('openLocker').onclick = openLocker; $('lkClose').onclick = closeLocker; $('lkClose2').onclick = closeLocker; $('lkX').onclick = closeLocker;
+$('openLocker').onclick = openLocker; $('lkClose').onclick = closeLocker; $('lkClose2').onclick = closeLocker; $('lkClose3').onclick = closeLocker;
+$('lkOpFx').onclick = () => { // 요원 미리보기: 등장 → 사격 → 처치 → 궁극기
+  initAudio(); lkSpin = true; lkAnimAt = performance.now();
+  if (!lkOp) { sfxUI('equip'); return; }
+  sfxSample('equip', 0.8);
+  for (let i = 0; i < 3; i++) sfxSample('shot', 0.45, 0, 0.95 + i * 0.04, 0.8 + i * 0.16);
+  sfxSample('hit', 0.5, 0, 1.1, 1.35); sfxSample('kill', 0.8, 0, 1, 1.6); sfxSample('ultimate', 0.85, 0, 1, 2.2);
+}; $('lkX').onclick = closeLocker;
 document.addEventListener('keydown', (e) => { if (e.code === 'Escape' && lockerOpen) closeLocker(); });
 $('menuExit').onclick = () => { // 메뉴에서 나가기: 전체화면을 풀고 창 닫기를 시도 (브라우저가 막으면 안내)
   try { if (document.fullscreenElement) document.exitFullscreen(); } catch {}
@@ -1773,10 +1825,10 @@ async function redeem(codes, quiet) { // 서버에 코드를 확인받아 스킨
     const r = await fetch('/api/redeem?c=' + encodeURIComponent(codes.join(',')), { cache: 'no-store' }), j = await r.json();
     if (j.wait) { if (!quiet) $('lkMsg').textContent = '잠시 뒤에 다시 시도해 주세요.'; return; }
     const before = new Set(unlocked);
-    for (const i of j.skins || []) if (SKINS[i]) unlocked.add(i);
+    for (const i of j.skins || []) if (SKINS[i] || (i > OP_BASE && OPS[i - OP_BASE])) unlocked.add(i);
     if (j.ok) { myCodes = [...new Set([...myCodes, ...j.codes])].slice(0, 24); store.set('codes', JSON.stringify(myCodes)); }
-    if (quiet) { mySk = mySk.map((v) => (unlocked.has(v) ? v : 0)); return; } // 시작할 때: 더는 쓸 수 없는 스킨은 기본으로
-    const got = (j.skins || []).filter((i) => !before.has(i)).map((i) => SKINS[i].name);
+    if (quiet) { mySk = mySk.map((v) => (unlocked.has(v) ? v : 0)); if (myOp && !unlocked.has(OP_BASE + myOp)) myOp = 0; return; } // 시작할 때: 더는 쓸 수 없는 스킨은 기본으로
+    const got = (j.skins || []).filter((i) => !before.has(i)).map((i) => (i >= OP_BASE ? OPS[i - OP_BASE] : SKINS[i])).filter(Boolean).map((k) => k.name);
     $('lkMsg').textContent = !j.ok ? '없는 코드예요. 다시 확인해 주세요.' : got.length ? `해금: ${got.join(', ')}` : '이미 등록한 코드예요.';
     if (j.ok) { $('lkInput').value = ''; sfxUI('level'); }
     lkRefresh();
@@ -1784,7 +1836,7 @@ async function redeem(codes, quiet) { // 서버에 코드를 확인받아 스킨
 }
 $('lkRedeem').onclick = () => { const c = $('lkInput').value.trim(); if (c) { initAudio(); redeem([c], false); } };
 $('lkInput').onkeydown = (e) => { if (e.key === 'Enter') $('lkRedeem').onclick(); };
-if (myCodes.length) redeem(myCodes, true); else mySk = mySk.map((v) => (unlocked.has(v) ? v : 0));
+if (myCodes.length) redeem(myCodes, true); else { mySk = mySk.map((v) => (unlocked.has(v) ? v : 0)); myOp = 0; }
 $('lkMid').addEventListener('pointerdown', (e) => { lkDrag = e.clientX; lkSpin = false; $('lkMid').setPointerCapture(e.pointerId); });
 $('lkMid').addEventListener('pointermove', (e) => { if (lkDrag === null) return; lkYaw += (e.clientX - lkDrag) * 0.012; lkDrag = e.clientX; });
 for (const ev of ['pointerup', 'pointercancel']) $('lkMid').addEventListener(ev, () => { lkDrag = null; });
@@ -1943,6 +1995,7 @@ function tryFire(now) {
     if (c) { const g = vmGun(me.w); c.m.position.set(g.position.x + 0.03, g.position.y + 0.03, g.position.z + 0.02); c.m.rotation.set(0, 0, 0); c.v = [0.9 + Math.random() * 0.6, 1.1 + Math.random() * 0.6, 0.2 + Math.random() * 0.3]; c.life = 0.55; c.m.visible = true; }
   }
   sfxShot(me.w, 0.55, 0, 0, 0, !!W.quiet);
+  if (myOp && !W.melee && performance.now() - opShotAt > 110) { opShotAt = performance.now(); sfxSample('shot', W.quiet ? 0.1 : 0.2, 0, 0.94 + Math.random() * 0.12); } // 요원 스킨: 총소리에 겹치는 소리
   skinFire(myFx.kind ? 0.4 : 0.2);
   if (myFx.kind) { sfxSkin(myFx.kind, 'shot', W.quiet ? 0.25 : 0.55); muzzleFx(myFx.kind, muzzle, [_f.x, _f.y, _f.z], myFx.flash); }
   if (W.scope) { me.snipeQ = 0; setTimeout(() => setScope(false), 60); }
@@ -2040,16 +2093,24 @@ function frame(now) {
   if (!joined && lockerOpen) { // 무기고: 어두운 배경에 총만 크게
     lkBuild();
     const r = $('lkMid').getBoundingClientRect(), asp = vmCam.aspect, wf = Math.max(0.2, r.width / VW);
-    const d = Math.max(0.36, lkGun.userData.len / (0.8 * wf * 1.108 * asp));
+    const opv = lkTab === 'op' && lkGun.userData.rig, d = opv ? Math.min(12, 1.4 * Math.max(2.3 / (1.108 * Math.max(0.2, r.height / VH)), 1.2 / (1.108 * asp * wf))) : Math.max(0.36, lkGun.userData.len / (0.8 * wf * 1.108 * asp));
     lkGroup.position.set((((r.left + r.right) / 2 / VW) * 2 - 1) * 0.554 * d * asp, -0.015 * d, -d);
+    if (opv) { // 요원: 앞모습을 중심으로 흔들고, [미리보기]면 한 바퀴 돌며 뛰어오름
+      if (lkSpin) lkYaw = Math.PI + 0.5 + now / 2600; // 천천히 돌며 앞·옆·뒤(망토·낫·원자로 통)를 다 보여 줌
+      const a = (now - lkAnimAt) / 1800, e = (x) => x * x * (3 - 2 * x);
+      lkGun.rotation.set(0.05, lkYaw + (a >= 0 && a < 1 ? e(a) * Math.PI * 2 : 0), 0);
+      lkGun.position.y = a >= 0 && a < 1 ? Math.sin(a * Math.PI) * 0.25 : 0;
+      animRig(lkGun.userData.rig, dt, { speed: 0, pitch: 0, air: a >= 0 && a < 0.6 });
+    } else {
     if (lkSpin) lkYaw = Math.PI / 2 + Math.sin(now / 1900) * 0.95; // 옆모습을 중심으로 천천히 흔들어 보여 줌
     lkGun.rotation.set(0.1, lkYaw, 0);
     { const a = (now - lkAnimAt) / 2600, inner = lkGun.children[0]; // [효과 미리보기]: 총열 축으로 돌리고 뒤집는 손기술
       if (a >= 0 && a < 1) { const e = (x) => x * x * (3 - 2 * x), s1 = e(clamp(a / 0.45, 0, 1)), s2 = e(clamp((a - 0.5) / 0.4, 0, 1)); inner.rotation.z = s1 * Math.PI * 2; lkGun.rotation.y += Math.sin(s2 * Math.PI) * 1.2; lkGun.position.y = Math.sin(clamp(a / 0.45, 0, 1) * Math.PI) * 0.04 * lkGun.userData.len; skinFire(0.05); }
       else { inner.rotation.z = 0; lkGun.position.y = 0; } }
+    }
     lkGroup.visible = true; vm.visible = false;
     { const D = d + 2.6, k = D / d; lkBack.position.set(lkGroup.position.x * k, lkGroup.position.y * k, -D); lkBack.scale.setScalar(D * 1.9); lkBack.visible = true; }
-    tickSkins(now / 1000);
+    tickSkins(now / 1000); tickOps(now / 1000);
     uiLight();
     vmRim.color.copy(lkTheme); vmRim.intensity = 2.4; lkBack.material.color.copy(lkTint).multiplyScalar(1.25);
     lkGlow.visible = true; lkGlow.color.copy(lkTheme); lkGlow.intensity = 0.8 + Math.sin(now / 600) * 0.15; lkGlow.distance = d * 1.6; lkGlow.position.set(lkGroup.position.x, lkGroup.position.y - d * 0.18, lkGroup.position.z + d * 0.25);
@@ -2223,7 +2284,7 @@ function frame(now) {
   if (dfx >= 0 && dfx < 1) { // 얼티밋 꺼내기: 아래에서 크게 돌며 올라와 제자리에 딱 멈춤
     const e = 1 - (1 - dfx) ** 3; gp.rotation.z += (1 - e) * Math.PI * 2; gp.position.y -= (1 - e) * 0.16; gp.position.x += (1 - e) * 0.06; gp.rotation.x += (1 - e) * 0.5; skinFire(0.04);
   }
-  tickSkins(now / 1000);
+  tickSkins(now / 1000); tickOps(now / 1000);
   if (flash.visible) { const m = gp.userData.muzzle; flash.position.set(gp.position.x + m[0], gp.position.y + m[1], gp.position.z + m[2] - 0.03); vmFlash.position.copy(flash.position); if (now > flash._off) flash.visible = false; }
   if (vmFlash.intensity > 0.01) vmFlash.intensity *= Math.exp(-dt * 38); else vmFlash.intensity = 0;
   vm.visible = me.alive && !scopeOn && !matchEnded && !me.drop && !car.id && !dbgCam;

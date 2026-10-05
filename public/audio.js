@@ -27,7 +27,22 @@ export function initAudio() {
       const rg = AC.createGain(); rg.gain.value = 0.9; rev.connect(rg).connect(master);
     }
     if (AC.state === 'suspended') AC.resume();
+    loadSamples();
   } catch { AC = null; }
+}
+// 녹음된 효과음 (public/sounds/skin_*.wav — 요원 스킨·스킨 팩 효과음). 처음 소리를 켤 때 한 번 불러 둠
+const SAMPLES = {}, SAMPLE_NAMES = ['equip', 'shot', 'kill', 'ultimate', 'hit', 'ui'];
+let samplesAsked = false;
+function loadSamples() {
+  if (samplesAsked || !AC) return;
+  samplesAsked = true;
+  for (const n of SAMPLE_NAMES) fetch(`./sounds/skin_${n}.wav`).then((r) => r.arrayBuffer()).then((b) => AC.decodeAudioData(b)).then((buf) => { SAMPLES[n] = buf; }).catch(() => {});
+}
+export function sfxSample(name, vol = 1, pan = 0, rate = 1, delay = 0) {
+  if (!AC || !SAMPLES[name] || volume <= 0) return;
+  const s = AC.createBufferSource(), g = out(pan, 0.12);
+  s.buffer = SAMPLES[name]; s.playbackRate.value = rate; g.gain.value = vol;
+  s.connect(g); s.start(AC.currentTime + delay);
 }
 // 소리 하나가 나가는 길: 좌우 방향(pan)과 잔향으로 보내는 양(send)
 function out(pan, send = 0) {

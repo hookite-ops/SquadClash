@@ -5,7 +5,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, W_DEFAULT_PRIM, MAPS, ARENA_MAPS, setMap, MAP, floorAt, buildNav, SPAWNS, SPAWNS_TDM, SITES, siteAt, dirFrom, rayWorld, rayPlayer, segHitsSphere, groundAt, boxesNear, cleanParts, effWeapon } from './public/shared.js';
+import { ARENA, PLAYER, WEAPONS, SKINS, OPS, OP_BASE, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, W_DEFAULT_PRIM, MAPS, ARENA_MAPS, setMap, MAP, floorAt, buildNav, SPAWNS, SPAWNS_TDM, SITES, siteAt, dirFrom, rayWorld, rayPlayer, segHitsSphere, groundAt, boxesNear, cleanParts, effWeapon } from './public/shared.js';
 
 const PORT = process.env.PORT || 8080;
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
@@ -70,6 +70,11 @@ const SKIN_CODES = {
   'MASTERY-PACK-3W9H-Z5RT': ['platinum', 'damascus', 'obsidian', 'diamond', 'atomic', 'orion', 'darkmatter'],
   'RARE-PACK-4N7T-B2QK': ['carbon', 'tiger', 'sakura'],
   'HERO-PACK-9M5X-D3VF': ['ice', 'neon', 'lava'],
+  'VANGUARD-5N8K-Q2XT': ['op:vanguard'],
+  'SAMURAI-7R3J-W9PL': ['op:samurai'],
+  'REACTOR-2F6M-H8ZC': ['op:reactor'],
+  'REAPER-9B4V-T3KY': ['op:reaper'],
+  'OPERATOR-PACK-6W2Q-M8RD': ['op:vanguard', 'op:samurai', 'op:reactor', 'op:reaper'],
   'SQUAD-ALL-8Z6R-P4WY': 'all',
 };
 const normCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 40);
@@ -77,7 +82,7 @@ const CODES = new Map();
 {
   const src = process.env.SKIN_CODES ? Object.fromEntries(process.env.SKIN_CODES.split(';').map((e) => e.split(':')).filter((e) => e.length === 2).map(([c, l]) => [c, l.trim() === 'all' ? 'all' : l.split(',').map((x) => x.trim())])) : SKIN_CODES;
   for (const [c, list] of Object.entries(src)) {
-    const ids = list === 'all' ? SKINS.map((_, i) => i).filter((i) => !SKINS[i].free) : list.map((id) => SKINS.findIndex((k) => k.id === id)).filter((i) => i > 0);
+    const ids = list === 'all' ? [...SKINS.map((_, i) => i).filter((i) => !SKINS[i].free), ...OPS.map((_, i) => OP_BASE + i).slice(1)] : list.map((id) => (id.startsWith('op:') ? OP_BASE + OPS.findIndex((o) => o.id === id.slice(3)) : SKINS.findIndex((k) => k.id === id))).filter((i) => i > 0 && i !== OP_BASE - 1); // 'op:이름' = 요원 스킨
     if (normCode(c).length >= 6 && ids.length) CODES.set(normCode(c), ids);
   }
 }
@@ -110,13 +115,14 @@ function botPersona(tier) {
   const r = () => Math.random(), t = (tier ?? 1) / 3;
   return { aggro: clamp(r() * 0.8 + t * 0.3, 0, 1), sneaky: r(), patience: r(), social: r(), jumpy: clamp(r() * 0.7 + t * 0.4, 0, 1), cocky: r() * (0.4 + t * 0.6), chatty: r() };
 }
+const botOp = (tier) => (Math.random() < [0.05, 0.12, 0.3, 0.55][tier ?? 1] ? 1 + Math.floor(Math.random() * (OPS.length - 1)) : 0); // 잘하는 봇일수록 요원 스킨을 산 사람처럼
 function botName(room) { // 아직 이 방에 없는 이름 하나를 무작위로
   const used = new Set([...room.players.values()].map((p) => p.name)), free = BOT_NAMES.filter((n) => !used.has(n));
   return free.length ? free[Math.floor(Math.random() * free.length)] : BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)] + Math.floor(10 + Math.random() * 89);
 }
 
 // ───────────── 정적 파일 ─────────────
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.wav': 'audio/wav' };
 const cache = new Map();
 function loadFile(rel) {
   if (cache.has(rel)) return cache.get(rel);
@@ -281,7 +287,7 @@ class Room {
       let want = Math.max(0, target - this.humans(team));
       while (bots.length > want) this.removePlayer(bots.pop());
       while (bots.length < want) {
-        const b = this.addPlayer(botName(this), null, team, true); b.tier = pickTier();
+        const b = this.addPlayer(botName(this), null, team, true); b.tier = pickTier(); b.op = botOp(b.tier);
         if (this.mode === 'tdm') this.spawn(b, Date.now()); // 폭탄전은 다음 라운드에 합류
         bots.push(b);
       }
@@ -528,7 +534,7 @@ class Room {
     this.broadcast({ t: 'spawn', id: p.id, p: [p.x, p.y, p.z], yaw: p.yaw });
   }
   roster() {
-    return { t: 'roster', code: this.code, pub: this.isPublic, mode: this.mode, players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, k: p.k, d: p.d, sk: p.sk || undefined, att: p.ew ? p.att : undefined, sl: p.sl || undefined })) };
+    return { t: 'roster', code: this.code, pub: this.isPublic, mode: this.mode, players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, k: p.k, d: p.d, sk: p.sk || undefined, att: p.ew ? p.att : undefined, sl: p.sl || undefined, op: p.op || undefined })) };
   }
   rewind(e, rt) {
     const h = e.hist;
@@ -631,7 +637,7 @@ class Room {
     const want = Math.max(0, BR.total - this.humans());
     while (bots.length > want) this.removePlayer(bots.pop());
     while (bots.length < want) {
-      const b = this.addPlayer(botName(this), null, 0, true); b.team = b.id; b.tier = pickTier();
+      const b = this.addPlayer(botName(this), null, 0, true); b.team = b.id; b.tier = pickTier(); b.op = botOp(b.tier);
       bots.push(b);
     }
     // 아이템 뿌리기
@@ -1348,7 +1354,9 @@ wss.on('connection', (ws) => {
       const team = room.humans(0) <= room.humans(1) ? 0 : 1;
       me = room.addPlayer(cleanName(m.name), ws, team, false);
       if (room.mode === 'br') me.team = me.id; // 생존전은 모두가 적
-      me.sk = cleanSkins(m.sk, skinsFor(m.codes)); // 가진 스킨만 인정
+      const owned = skinsFor(m.codes);
+      me.sk = cleanSkins(m.sk, owned); // 가진 스킨만 인정
+      me.op = Number.isInteger(m.op) && m.op > 0 && m.op < OPS.length && owned.has(OP_BASE + m.op) ? m.op : 0; // 요원 스킨
       me.att = WEAPONS.map((_, i) => cleanParts(i, Array.isArray(m.att) ? m.att[i] : null)); // 파츠: 쓸 수 있는 것만 인정
       me.ew = me.att.some((a) => a.length) ? WEAPONS.map((_, i) => effWeapon(i, me.att[i])) : null;
       me.sl = Array.isArray(m.sl) && m.sl.some((v) => v > 1) ? SKINS.map((_, i) => clamp(m.sl[i] | 0, 1, 5)) : null; // 스킨 레벨 (꾸밈 효과에만 쓰임)

@@ -174,7 +174,17 @@ GitHub 자동 배포 (한 번만 설정하면, 저장소 main 에 올라올 때�
     PHOENIX-4N7B-J2VS     황금 불사조 (레전드)
     AQUA-8D5C-W3YP        아쿠아 메카 (레전드)
     LEGEND-PACK-7R4M-K9XT 레전드 4종 묶음
-    SQUAD-ALL-8Z6R-P4WY   전체
+    VANGUARD-5N8K-Q2XT    네온 뱅가드 (요원)
+    SAMURAI-7R3J-W9PL     크림슨 사무라이 (요원)
+    REACTOR-2F6M-H8ZC     인페르노 리액터 (요원)
+    REAPER-9B4V-T3KY      보이드 리퍼 (요원)
+    OPERATOR-PACK-6W2Q-M8RD 요원 4종 묶음
+    SQUAD-ALL-8Z6R-P4WY   전체 (요원 포함)
+- 요원 스킨: 무기고 [요원] 칸에서 고르는 캐릭터 겉모습입니다. 복장 그림 + 몸에 붙는 투구·갑옷·망토·등 장식이 걷기·앉기·점프 동작을 그대로 따라가고,
+  빛나는 부분이 숨 쉬듯 밝아집니다. 고르면 내가 그린 그림 대신 보이며, 다른 사람에게도 보입니다. 봇도 실력이 좋을수록 요원 스킨을 자주 입습니다.
+  (스킨 팩 GLB 모델 4종의 이름·색·모양을 따서 public/operators.js 에서 다시 만들었습니다. 원본 GLB는 관절이 없어 쓰지 않았습니다.)
+- 스킨 팩 효과음: public/sounds/skin_*.wav (음량을 맞추고 끝을 부드럽게 다듬음). 요원 미리보기, 요원 장착, 스킨 고르기(ui),
+  번들 스킨·요원으로 맞혔을 때(hit), 요원으로 처치(kill), 트리플 킬·스킨 각성(ultimate), 요원을 입고 쏠 때 겹치는 소리(shot)에 쓰입니다.
 - 코드를 바꾸려면 server.js 의 SKIN_CODES 표를 고쳐서 다시 배포하면 됩니다. 예전 코드로 풀었던 스킨은 코드를 지우면 다시 잠깁니다.
 - 알아둘 점: 실제 결제 기능은 없습니다. 코드는 여러 번 쓸 수 있어서, 코드를 아는 사람은 누구나 등록할 수 있습니다.
   (한 번만 쓰이는 코드나 결제 연동은 저장소(DB)가 필요해 이 구성에는 들어 있지 않습니다.)
@@ -250,4 +260,5 @@ GitHub 자동 배포 (한 번만 설정하면, 저장소 main 에 올라올 때�
 - server.js 의 BOT_NAMES / BOT_TIERS: 봇 이름 목록, 봇 실력 등급(비율 p, 반응 react, 오차 err, 회전 turn, 피해 dmg 등)
 - public/shared.js: 무기 성능과 가격(WEAPONS), 파츠(PARTS), 스킨 레벨(SKIN_LV), 투척 무기(NADES), 돈(ECON), 스킨 목록(SKINS)
 - server.js 의 SKIN_CODES: 스킨 코드
+- public/shared.js 의 OPS / public/operators.js: 요원 스킨 목록과 생김새(색 PAL, 장식 dressOp)
 - public/maps.js: 맵 구조(B(...) 줄들), 폭탄 지점, 섬의 건물·나무·아이템 자리
