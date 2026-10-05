@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SQUAD CLASH 트레일러</title>
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;color:#fff}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+#ui{position:fixed;inset:0;pointer-events:none}
+.fade{position:absolute;inset:0;background:#000;opacity:0}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;mix-blend-mode:screen}
+.bars::before,.bars::after{content:"";position:absolute;left:0;right:0;height:6.5vh;background:#000}.bars::before{top:0}.bars::after{bottom:0}
+#logo{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);text-align:center;opacity:0;white-space:nowrap}
+#logo b{display:block;font-size:11vh;font-weight:900;letter-spacing:.06em;font-style:italic;background:linear-gradient(180deg,#fff 0%,#ffe08a 45%,#ff7a2a 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 2.2vh rgba(255,140,40,.65)) drop-shadow(0 .6vh 0 rgba(0,0,0,.6))}
+#logo span{display:block;margin-top:1.2vh;font-size:2.6vh;font-weight:800;letter-spacing:.6em;color:#ffd9a0;text-shadow:0 0 1vh rgba(255,150,60,.8)}
+#logo i{display:block;margin-top:2.6vh;font-style:normal;font-size:2.2vh;font-weight:700;letter-spacing:.12em;color:#e8edf5;opacity:.9}
+#cap{position:absolute;left:7vw;bottom:13vh;opacity:0}
+#cap b{display:block;font-size:6vh;font-weight:900;font-style:italic;letter-spacing:.03em;text-shadow:0 .4vh 1.6vh rgba(0,0,0,.8)}
+#cap span{display:inline-block;margin-top:1vh;padding:.5vh 1.4vh;font-size:2.2vh;font-weight:800;letter-spacing:.14em;background:linear-gradient(90deg,#ff3a2a,#ff8a2a);border-radius:.4vh;box-shadow:0 0 2vh rgba(255,90,40,.5)}
+#cap.right{left:auto;right:7vw;text-align:right}
+#mid{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;opacity:0;white-space:nowrap}
+#mid b{display:block;font-size:7vh;font-weight:900;font-style:italic;letter-spacing:.04em;text-shadow:0 0 3vh rgba(0,0,0,.9),0 .4vh 0 rgba(0,0,0,.6)}
+#mid span{display:block;margin-top:1vh;font-size:2.6vh;font-weight:800;letter-spacing:.3em;color:#ffd9a0}
+#skin{position:absolute;right:7vw;top:50%;transform:translateY(-50%);text-align:right;opacity:0}
+#skin em{display:inline-block;font-style:normal;font-size:2.1vh;font-weight:900;letter-spacing:.3em;padding:.4vh 1.2vh;border-radius:.4vh;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35)}
+#skin b{display:block;margin-top:1.4vh;font-size:6.2vh;font-weight:900;font-style:italic;text-shadow:0 0 2.4vh currentColor}
+#skin span{display:block;margin-top:.8vh;font-size:2vh;font-weight:700;color:#cfd8e6;letter-spacing:.08em}
+#end{position:absolute;left:50%;bottom:16vh;transform:translateX(-50%);text-align:center;opacity:0;white-space:nowrap}
+#end b{display:inline-block;font-size:3vh;font-weight:900;letter-spacing:.12em;padding:1.2vh 3vh;border-radius:1vh;background:linear-gradient(90deg,#ffd23f,#ff8a2a);color:#14161a;box-shadow:0 0 3vh rgba(255,170,60,.55)}
+#end span{display:block;margin-top:1.6vh;font-size:2vh;font-weight:700;color:#dfe6ef;letter-spacing:.06em}
+#start{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2vh;background:#000;cursor:pointer;font-size:3vh;font-weight:900;letter-spacing:.1em;pointer-events:auto}
+#start small{font-size:1.8vh;font-weight:600;color:#9aa4b2;letter-spacing:.04em}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui" class="bars">
+  <div id="logo"><b>SQUAD CLASH</b><span>스쿼드 클래시</span><i></i></div>
+  <div id="cap"><b></b><span></span></div>
+  <div id="mid"><b></b><span></span></div>
+  <div id="skin"><em></em><b></b><span></span></div>
+  <div id="end"><b>지금 바로 플레이</b><span></span></div>
+  <div class="flash" id="flash"></div>
+  <div class="fade" id="fade"></div>
+</div>
+<div id="start">▶ 트레일러 재생<small>소리와 함께 재생됩니다 · 46초</small></div>
+<script>
+// 영상으로 뽑을 때(?render)는 시간을 바깥에서 한 칸씩 넘긴다
+window.__vt = 0;
+if (/[?&]render/.test(location.search)) { performance.now = () => window.__vt; document.getElementById('start').remove(); }
+</script>
+<script type="module" src="./trailer.js"></script>
+</body>
+</html>
