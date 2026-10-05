@@ -137,19 +137,19 @@ function baseMats() {
   const ma = () => T('metalAlb', () => texOf(H.metalAlb(), true, 2)), pa = () => T('polyAlb', () => texOf(H.polyAlb(), true, 5));
   const ns = new THREE.Vector2(0.35, 0.35);
   return {
-    recv: std({ color: over(0x5a626d), map: ma(), metalness: 0.86, roughness: 0.42, roughnessMap: smudge(), normalMap: br(), normalScale: ns }),
-    steel: std({ color: over(0x24272c), map: ma(), metalness: 0.96, roughness: 0.3, roughnessMap: smudge(), normalMap: br(), normalScale: ns, wear: 0.7 }),
-    bolt: std({ color: 0xc8cdd4, metalness: 1, roughness: 0.2, roughnessMap: smudge(), wear: 0 }),
-    slide: std({ color: over(0x7d848c), map: ma(), metalness: 0.92, roughness: 0.36, roughnessMap: smudge(), normalMap: br(), normalScale: ns, wearCol: 0xd0d5dc }),
+    recv: std({ color: over(0x3c424b), map: ma(), metalness: 0.9, roughness: 0.34, roughnessMap: smudge(), normalMap: br(), normalScale: ns, clearcoat: 0.55, clearcoatRoughness: 0.22 }), // 그래파이트 금속 + 얇은 겉칠
+    steel: std({ color: over(0x1c1f24), map: ma(), metalness: 0.97, roughness: 0.24, roughnessMap: smudge(), normalMap: br(), normalScale: ns, wear: 0.7 }),
+    bolt: std({ color: 0xdfe4ea, metalness: 1, roughness: 0.1, roughnessMap: smudge(), wear: 0 }), // 크롬
+    slide: std({ color: over(0x535a64), map: ma(), metalness: 0.94, roughness: 0.28, roughnessMap: smudge(), normalMap: br(), normalScale: ns, wearCol: 0xd0d5dc, clearcoat: 0.6, clearcoatRoughness: 0.18 }),
     poly: std({ wear: 0.3, wearCol: 0x62676e, color: over(0x1a1c20), map: pa(), metalness: 0, roughness: 0.8, normalMap: sp(), normalScale: new THREE.Vector2(0.5, 0.5) }),
-    furn: std({ wear: 0.3, wearCol: 0x6a6f76, color: over(0x212429), map: pa(), metalness: 0.04, roughness: 0.68, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
-    mag: std({ color: over(0x30353c), map: ma(), metalness: 0.7, roughness: 0.46, roughnessMap: smudge() }),
+    furn: std({ wear: 0.35, wearCol: 0xd8c8a8, color: over(0x4f402e), map: pa(), metalness: 0.06, roughness: 0.6, normalMap: sp(), normalScale: new THREE.Vector2(0.35, 0.35), clearcoat: 0.25, clearcoatRoughness: 0.5 }), // 탄색 손잡이·총열덮개
+    mag: std({ color: over(0x45382a), map: pa(), metalness: 0.08, roughness: 0.58, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
     wood: std({ wear: 0.35, wearCol: 0xc99a62, color: 0xffffff, map: wood(), metalness: 0, roughness: 0.4, normalMap: woodN(), normalScale: new THREE.Vector2(0.4, 0.4), clearcoat: 0.5, clearcoatRoughness: 0.3 }),
     woodDark: std({ wear: 0.35, wearCol: 0xa8845a, color: 0x9a8a80, map: wood(), metalness: 0, roughness: 0.48, normalMap: woodN(), normalScale: new THREE.Vector2(0.4, 0.4), clearcoat: 0.4, clearcoatRoughness: 0.35 }),
     olive: std({ wear: 0.4, wearCol: 0x8f9878, color: over(0x586244), map: pa(), metalness: 0.04, roughness: 0.78, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
     tan: std({ wear: 0.4, wearCol: 0xd9c7a0, color: over(0xa88f62), map: pa(), metalness: 0.04, roughness: 0.76, normalMap: sp(), normalScale: new THREE.Vector2(0.3, 0.3) }),
     gray: std({ color: over(0x747c85), map: ma(), metalness: 0.3, roughness: 0.58, roughnessMap: smudge(), normalMap: br(), normalScale: ns }),
-    accent: std({ wear: 0.4, color: 0xc8372d, metalness: 0.2, roughness: 0.5 }),
+    accent: std({ wear: 0.4, color: 0xff4a30, metalness: 0.3, roughness: 0.35, emissive: 0xff2a10, emissiveIntensity: 0.5 }),
   };
 }
 
@@ -490,7 +490,10 @@ const KMATS = {
 };
 const SETS = new Map(), animated = [], bundleSets = [];
 const RIMK = { crimson: 0.12, aqua: 0.12, phoenix: 0.35, sakura: 0.3, ice: 0.45, aurora: 0.6, halloween: 0.5, tiger: 0.55, diamond: 0.4, platinum: 0.5, orion: 0.45, gold: 0.8 };
-let pulseAt = -9;
+let pulseAt = -9, pulseK = 1, spinAcc = 0, spinLast = 0, spinBoost = 0;
+// 도는 장식의 각도: 보통은 시간만큼, 쏘거나 살펴볼 때는 몇 배 빠르게 감음
+function spinPhase() { const t = performance.now() / 1000, dt = Math.min(0.1, Math.max(0, t - spinLast)); spinLast = t; spinBoost = Math.max(0, spinBoost - dt * 1.6); spinAcc += dt * (1 + spinBoost * 7); return spinAcc; }
+export function skinFire(k = 0.35) { spinBoost = Math.min(1.5, spinBoost + k); }
 // aw = 각성(스킨 5레벨): 총열과 몸통에 빛줄기가 흐르고 빛이 더 세게 맥박침
 function matsFor(skin, aw) {
   const key = skin + (aw ? 'a' : '');
@@ -516,13 +519,18 @@ function matsFor(skin, aw) {
       animated.push({ M, f: (m, t) => { const k = 0.5 + 0.5 * Math.sin(t * 2.6); v.offset.x = t * 0.22; v.offset.y = Math.sin(t * 0.7) * 0.05; metal.emissiveIntensity = 0.9 + k * 1.3; if (own) body.emissiveIntensity *= 1.25 + k * 0.35; else body.emissiveIntensity = 0.3 + k * 0.6; } });
     }
   }
+  else { // 기본 스킨: 금속 위로 은은한 광택이 지나가고, 가장자리가 차갑게 빛남
+    const sw = sweepTex(0.04);
+    for (const m of [M.recv, M.slide, M.steel]) { m.emissive = new THREE.Color(0xd8e6ff); m.emissiveMap = sw; m.emissiveIntensity = 0; m.userData.rim.value.setRGB(0.07, 0.09, 0.12); }
+    M.body = M.recv; animated.push({ M, f: (m, t) => { sw.offset.x = t * 0.22; const k = 0.08 + 0.14 * Math.max(0, Math.sin(t * 0.9)) ** 3; m.recv.emissiveIntensity = m.slide.emissiveIntensity = k; m.steel.emissiveIntensity = k * 0.6; } });
+  }
   SETS.set(key, M);
   return M;
 }
 // 움직이는 스킨(빛나는 맥박, 흐르는 무늬)
 export function tickSkins(t) {
   for (const a of animated) a.f(a.M, t);
-  const k = Math.max(0, 1 - (performance.now() / 1000 - pulseAt) / 0.8) ** 2; // 꺼낼 때 한 번 확 밝아짐
+  const k = pulseK * Math.max(0, 1 - (performance.now() / 1000 - pulseAt) / 0.8) ** 2; // 꺼낼 때 한 번 확 밝아짐
   for (const M of bundleSets) { // 얼티밋 스킨: 빛나는 부품이 숨 쉬듯 일렁임
     M._glow.forEach(([m, b], i) => { m.emissiveIntensity = b * (0.82 + 0.22 * Math.sin(t * 3.1 + i * 1.7) + k * 2.6); });
     if (k && M.body.emissiveMap) M.body.emissiveIntensity *= 1 + k * 2;
@@ -530,7 +538,7 @@ export function tickSkins(t) {
   }
 }
 // 얼티밋 스킨을 꺼낼 때 빛이 번쩍이게
-export function pulseSkin() { pulseAt = performance.now() / 1000; }
+export function pulseSkin(k = 1) { pulseAt = performance.now() / 1000; pulseK = k; spinBoost = Math.min(1.5, spinBoost + k * 0.8); }
 
 // ───────────── 형태 도구 ─────────────
 const labelMats = new Map();
@@ -2247,10 +2255,10 @@ const cache = new Map();
 // parts = 파츠 번호 목록, lv = 스킨 레벨 (5 = 각성)
 export function makeGun(wi, skin = 0, parts, lv = 1, opt = {}) {
   if (!SKINS[skin]) skin = 0;
-  const pl = cleanParts(wi, parts), aw = lv >= 5 && skin > 0, key = wi + ':' + skin + ':' + pl.join('.') + (aw ? 'a' : '');
+  const pl = cleanParts(wi, parts), aw = skin > 0 && (lv >= 5 || !!(KITS[SKINS[skin].id] && KITS[SKINS[skin].id].fx.bundle)), key = wi + ':' + skin + ':' + pl.join('.') + (aw ? 'a' : '');
   if (!cache.has(key)) { const [fn, opt] = WEAPONS[wi].model, att = {}; for (const pi of pl) att[PARTS[pi].slot] = PARTS[pi].id; cache.set(key, builders[fn](matsFor(skin, aw), { ...(opt || {}), label: LABELS[wi] ? 'SC ' + LABELS[wi] : '', kit: KITS[SKINS[skin].id], att })); }
   const src = cache.get(key), group = src.group.clone();
-  for (const c of group.children) if (c.userData.spin) { const sp = c.userData.spin, ax = c.userData.axis || 'z'; for (const m of c.children) m.onBeforeRender = () => { c.rotation[ax] = performance.now() * 0.001 * sp; }; } // 도는 장식
+  for (const c of group.children) if (c.userData.spin) { const sp = c.userData.spin, ax = c.userData.axis || 'z'; for (const m of c.children) m.onBeforeRender = () => { c.rotation[ax] = spinPhase() * sp; }; } // 도는 장식 (쏘거나 살펴볼 때 빨라짐)
   const kit = KITS[SKINS[skin].id];
   if (kit && kit.aura && !opt.noAura) { if (!src.box) src.box = gunBox(src.group); group.add(makeAura(kit.aura, src.box)); } // 총 둘레에 늘 피어오르는 불티·번개·반짝이
   return { group, muzzle: src.muzzle, grip: src.grip, fore: src.fore, sight: src.sight, adsZ: src.adsZ, oneHand: src.oneHand, travel: src.travel || 0, rack: !!src.rack, pump: !!src.pump, slide: group.getObjectByName('slide') || null, mag: group.getObjectByName('mag') || null };
