@@ -801,8 +801,8 @@ function scope3(b, f, u0, M) { // 3배율 조준경: 앞이 넓은 짧은 통. �
   return cy;
 }
 // 조준경 파츠 (holoL = 큰 테두리 조준기). 가운데 높이를 돌려줌
-function optic(b, kind, f, u0, M) { return kind === 'dot' ? reddot(b, f, u0, M) : kind === 'x3' ? scope3(b, f, u0, M) : holo(b, f, u0, M, kind === 'holoL' ? 1.25 : 1); }
-function muzzleAtt(b, kind, f, u, r, M) { // 총구 파츠. f = 총열 끝, 돌려주는 값 = 새 총구 끝
+function optic0(b, kind, f, u0, M) { return kind === 'dot' ? reddot(b, f, u0, M) : kind === 'x3' ? scope3(b, f, u0, M) : holo(b, f, u0, M, kind === 'holoL' ? 1.25 : 1); }
+function muzzleAtt0(b, kind, f, u, r, M) { // 총구 파츠. f = 총열 끝, 돌려주는 값 = 새 총구 끝
   if (kind === 'sup') return suppressor(b, f - 0.012, Math.max(0.1, r * 9.5), r * 1.4, u, M);
   if (kind === 'comp') { // 보정기: 위로 구멍이 난 각진 통
     const len = r * 3.6, w = r * 1.75, f0 = f + 0.004;
@@ -819,26 +819,26 @@ function muzzleAtt(b, kind, f, u, r, M) { // 총구 파츠. f = 총열 끝, 돌�
   b.disc(r * 0.5, f0 + len + 0.0005, u, M.dark);
   return f0 + len;
 }
-function underGrip(b, kind, f, u, M) { // 총열덮개 아래 손잡이. 왼손 자리를 돌려줌
+function underGrip0(b, kind, f, u, M) { // 총열덮개 아래 손잡이. 왼손 자리를 돌려줌
   b.box(0.024, 0.008, 0.05, f, u - 0.004, M.recv);
   if (kind === 'vgrip') { b.prof([[f - 0.016, u - 0.008], [f + 0.016, u - 0.008], [f + 0.013, u - 0.085], [f - 0.013, u - 0.085]], 0.028, M.poly, 0.007, 0, { r: 0.006 }); for (let i = 0; i < 4; i++) b.box(0.0285, 0.003, 0.026, f, u - 0.028 - i * 0.013, M.dark); b.box(0.03, 0.006, 0.03, f, u - 0.086, M.rubber); return [0, u - 0.05, -f]; }
   b.prof([[f - 0.05, u - 0.008], [f + 0.05, u - 0.008], [f + 0.02, u - 0.04], [f - 0.035, u - 0.046]], 0.028, M.poly, 0.007, 0, { r: 0.006 }); for (let i = 0; i < 3; i++) b.box(0.0285, 0.003, 0.02, f - 0.02 + i * 0.016, u - 0.03, M.dark, 0, 0.35);
   return [0, u - 0.035, -(f - 0.005)];
 }
-function laserAtt(b, f, u, x, M) { // 레이저: 작은 상자와 앞으로 뻗는 빛줄기
+function laserAtt0(b, f, u, x, M) { // 레이저: 작은 상자와 앞으로 뻗는 빛줄기
   b.box(0.014, 0.016, 0.046, f, u, M.recv, x); b.box(0.015, 0.004, 0.02, f - 0.006, u + 0.009, M.dark, x);
   b.cyl(0.0042, 0.0042, f + 0.023, 0.004, u, M.steel, x, 10); b.disc(0.0034, f + 0.0275, u, M.ldot, false, x);
   const L = 1.5; // 빛줄기: 십자로 겹친 얇은 판 두 장, 멀어질수록 흐려짐
   for (const rz of [0, Math.PI / 2]) b.add(new THREE.PlaneGeometry(0.0024, L).rotateX(-Math.PI / 2).rotateZ(rz).translate(x, u, -(f + 0.028 + L / 2)), M.beam, null, true);
 }
-function magAtt(b, kind, f0, f1, u, w, M, sl = 0.008) { // 탄창 파츠: 밑으로 늘이거나(대용량) 당김 고리를 닮(빠른 탄창). 탄창과 함께 움직임
+function magAtt0(b, kind, f0, f1, u, w, M, sl = 0.008) { // 탄창 파츠: 밑으로 늘이거나(대용량) 당김 고리를 닮(빠른 탄창). 탄창과 함께 움직임
   b.part('mag');
   if (kind === 'ext') { const h = 0.05; b.prof([[f0, u + 0.004], [f1, u + 0.004], [f1 + sl, u - h], [f0 + sl, u - h]], w, M.mag, 0.003); b.box(w + 0.004, 0.007, f1 - f0 + 0.008, (f0 + f1) / 2 + sl, u - h - 0.002, M.rubber); b.box(w + 0.0015, 0.003, f1 - f0 + 0.002, (f0 + f1) / 2, u, M.steel); }
   else { b.box(w + 0.003, 0.014, f1 - f0 + 0.006, (f0 + f1) / 2, u + 0.014, M.accent); b.tor(0.011, 0.003, [(f0 + f1) / 2, u - 0.012, 0], M.accent, 0, Math.PI / 2); }
   b.part();
 }
 // 개머리판 파츠: 원래 개머리판 대신 들어감. 구역 r = {f 총몸 뒤, end 맨 뒤, top, bot, j0 아래쪽 이음, w 두께}, F = 몸통 재질
-function stockPart(b, kind, M, r, F) {
+function stockPart0(b, kind, M, r, F) {
   const { f, end, top, bot, j0, w } = r, mid = (top + bot) / 2;
   if (kind === 'hstk') { // 안정: 가운데를 판 굵은 몸통, 높이 조절 뺨받침, 막대로 밀어내는 어깨받침
     const e = end + 0.03;
@@ -857,6 +857,50 @@ function stockPart(b, kind, M, r, F) {
   b.prof([[end + 0.016, top], [end + 0.016, bot], [end + 0.002, bot + 0.006], [end, mid], [end + 0.002, top - 0.006]], w * 0.8, M.rubber, 0.004);
   b.cyl(0.0095, 0.0095, f - 0.05, 0.02, top - 0.011, M.accent, 0, 12);
   b.box(w * 0.5, 0.004, 0.03, (f + end) / 2, top - 0.003, M.poly);
+}
+// ───────────── 파츠 스킨 (스킨 업그레이드): Lv.3 부터 단 파츠에도 스킨 색의 빛 고리·빛줄·장갑판이 붙고, Lv.5 는 도는 고리와 보석까지 ─────────────
+let PS = null; // 지금 만드는 총의 파츠 스킨 단계 { lv: 1 파츠 스킨 | 2 파츠 각성 } (makeGun 이 정함)
+function optic(b, kind, f, u0, M) {
+  const cy = optic0(b, kind, f, u0, M); if (!PS) return cy;
+  const G = gmat(M), P = pmat(M), B = bmat(M);
+  if (kind === 'x3') { for (const d of [-0.072, 0, 0.072]) b.tor(d > 0 ? 0.034 : d < 0 ? 0.024 : 0.03, 0.0032, [f + d, cy, 0], G, 0, 0, 6.2832, 24); both((s) => { b.box(0.0024, 0.006, 0.11, f, cy, G, s * 0.028); b.box(0.005, 0.016, 0.06, f, u0 + 0.012, P, s * 0.015); }); b.prof([[f - 0.05, cy + 0.024], [f + 0.03, cy + 0.03], [f + 0.05, cy + 0.042], [f - 0.03, cy + 0.036]], 0.004, P, 0.001); b.box(0.0045, 0.002, 0.07, f, cy + 0.033, G); }
+  else { const hw = kind === 'dot' ? 0.0125 : kind === 'holoL' ? 0.024 : 0.019; both((s) => { b.box(0.0022, 0.003, 0.04, f + 0.004, u0 + 0.008, G, s * (hw + 0.004)); b.prof([[f - 0.02, u0 + 0.002], [f + 0.02, u0 + 0.002], [f + 0.012, cy + 0.006], [f - 0.006, cy - 0.004]], 0.0022, P, 0.0005, s * (hw + 0.005)); b.ball(0.0018, [f + 0.012, u0 + 0.012, s * (hw + 0.006)], B, [1, 1, 0.6], 6); }); b.tor(hw + 0.006, 0.0016, [f + 0.02, cy, 0], G, 0, 0, 6.2832, 24); }
+  if (PS.lv > 1) spinAt(b, f, cy, 1.4, () => { b.tor(0.038, 0.0014, [f, cy, 0], G, 0.35, 0, 6.2832, 32); for (let i = 0; i < 3; i++) { const a = i * 2.094; b.gem(0.0034, [f, cy + Math.cos(a) * 0.038 * 0.94, Math.sin(a) * 0.038], B); } });
+  return cy;
+}
+function muzzleAtt(b, kind, f, u, r, M) {
+  const tip = muzzleAtt0(b, kind, f, u, r, M); if (!PS) return tip;
+  const G = gmat(M), B = bmat(M), L = tip - f, rr = kind === 'sup' ? r * 1.4 : r * 1.3;
+  for (const t of [0.22, 0.5, 0.78]) b.tor(rr * 1.14, rr * 0.16, [f + L * t, u, 0], G, 0, 0, 6.2832, 20);
+  b.tor(rr * 1.16, rr * 0.09, [f + L * 0.04, u, 0], B, 0, 0, 6.2832, 20); b.tor(rr * 1.1, rr * 0.08, [tip - L * 0.04, u, 0], B, 0, 0, 6.2832, 20);
+  b.radial(6, () => new THREE.ConeGeometry(rr * 0.24, rr * 2.2, 4).rotateX(-Math.PI / 2 + 0.25).translate(0, rr * 1.35, -rr * 0.6), f + L * 0.36, u, B, 0.52);
+  if (PS.lv > 1) spinAt(b, f + L * 0.42, u, 2.6, () => { b.tor(rr * 1.9, rr * 0.07, [f + L * 0.42, u, 0], G, 0, 0, 6.2832, 24); for (let i = 0; i < 3; i++) { const a = i * 2.094; b.gem(rr * 0.22, [f + L * 0.42, u + Math.cos(a) * rr * 1.9, Math.sin(a) * rr * 1.9], B); } });
+  return tip;
+}
+function underGrip(b, kind, f, u, M) {
+  const fore = underGrip0(b, kind, f, u, M); if (!PS) return fore;
+  const G = gmat(M), B = bmat(M), P = pmat(M);
+  if (kind === 'vgrip') { b.box(0.03, 0.06, 0.003, f + 0.0155, u - 0.046, G); both((s) => { for (let i = 0; i < 3; i++) b.ball(0.0018, [f - 0.006, u - 0.025 - i * 0.02, s * 0.0148], B, [1, 1, 0.6], 6); }); b.cyl(0.017, 0.017, f - 0.017, 0.034, u - 0.09, P, 0, 14); b.tor(0.017, 0.002, [f, u - 0.09, 0], G, 0, 0, 6.2832, 18); if (PS.lv > 1) b.ball(0.006, [f, u - 0.097, 0], G, [1, 1, 1], 10); }
+  else { b.box(0.0302, 0.003, 0.07, f - 0.008, u - 0.024, G, 0, 0.35); both((s) => b.ball(0.0018, [f - 0.03, u - 0.03, s * 0.0148], B, [1, 1, 0.6], 6)); if (PS.lv > 1) b.ball(0.005, [f + 0.04, u - 0.012, 0], G, [1, 1, 1], 10); }
+  return fore;
+}
+function laserAtt(b, f, u, x, M) {
+  laserAtt0(b, f, u, x, M); if (!PS) return;
+  const G = gmat(M), P = pmat(M), B = bmat(M);
+  b.box(0.016, 0.004, 0.05, f, u + 0.01, P, x); b.tor(0.0065, 0.0014, [f + 0.024, u, x], G, 0, 0, 6.2832, 16); b.box(0.0162, 0.0016, 0.03, f - 0.004, u - 0.0085, G, x);
+  if (PS.lv > 1) b.gem(0.004, [f - 0.016, u + 0.014, x], B);
+}
+function magAtt(b, kind, f0, f1, u, w, M, sl = 0.008) {
+  magAtt0(b, kind, f0, f1, u, w, M, sl); if (!PS) return;
+  const G = gmat(M), P = pmat(M), B = bmat(M), uu = kind === 'ext' ? u - 0.03 : u + 0.004;
+  b.part('mag'); b.box(w + 0.0045, 0.004, f1 - f0 + 0.004, (f0 + f1) / 2 + (kind === 'ext' ? sl * 0.6 : 0), uu, G); both((s) => b.box(0.0015, 0.012, (f1 - f0) * 0.6, (f0 + f1) / 2, uu + 0.01, P, s * (w / 2 + 0.002))); if (PS.lv > 1) both((s) => b.gem(0.0035, [(f0 + f1) / 2, uu + 0.016, s * (w / 2 + 0.003)], B, [1, 1, 0.6])); b.part();
+}
+function stockPart(b, kind, M, r, F) {
+  stockPart0(b, kind, M, r, F); if (!PS) return;
+  const { f, end, top, bot, w } = r, G = gmat(M), P = pmat(M), B = bmat(M);
+  both((s) => { b.box(0.002, 0.003, (f - end) * 0.7, (f + end) / 2, top - 0.006, G, s * (w / 2 + 0.0025)); for (let i = 0; i < 4; i++) b.ball(0.0018, [end + 0.03 + i * 0.024, (top + bot) / 2, s * (w / 2 + 0.0015)], B, [1, 1, 0.6], 6); });
+  for (let i = 0; i < 3; i++) b.prof([[end + 0.016 + i * 0.012, bot + 0.004], [end + 0.004 + i * 0.012, bot - 0.016 - i * 0.003], [end + 0.012 + i * 0.012, bot + 0.004]], 0.0034, i % 2 ? G : P, 0.0006);
+  if (PS.lv > 1) spinAt(b, end + 0.05, (top + bot) / 2, 2, () => { b.tor(0.02, 0.0016, [end + 0.05, (top + bot) / 2, w / 2 + 0.006], G, 0, Math.PI / 2, 6.2832, 24); b.tor(0.02, 0.0016, [end + 0.05, (top + bot) / 2, -(w / 2 + 0.006)], G, 0, Math.PI / 2, 6.2832, 24); }, 'x');
 }
 const barDl = (A) => (A.bar === 'long' ? 0.07 : A.bar === 'light' ? -0.035 : 0);
 
@@ -2325,8 +2369,8 @@ const cache = new Map();
 // parts = 파츠 번호 목록, lv = 스킨 레벨 (5 = 각성)
 export function makeGun(wi, skin = 0, parts, lv = 1, opt = {}) {
   if (!SKINS[skin]) skin = 0;
-  const pl = cleanParts(wi, parts), aw = skin > 0 && (lv >= 5 || !!(KITS[SKINS[skin].id] && KITS[SKINS[skin].id].fx.bundle)), key = wi + ':' + skin + ':' + pl.join('.') + (aw ? 'a' : '');
-  if (!cache.has(key)) { const [fn, opt] = WEAPONS[wi].model, att = {}; for (const pi of pl) att[PARTS[pi].slot] = PARTS[pi].id; cache.set(key, builders[fn](matsFor(skin, aw), { ...(opt || {}), label: LABELS[wi] ? 'SC ' + LABELS[wi] : '', kit: KITS[SKINS[skin].id], att })); }
+  const pl = cleanParts(wi, parts), bun = !!(KITS[SKINS[skin].id] && KITS[SKINS[skin].id].fx.bundle), aw = skin > 0 && (lv >= 5 || bun), pt = bun && pl.length ? (lv >= 5 ? 2 : lv >= 3 ? 1 : 0) : 0, key = wi + ':' + skin + ':' + pl.join('.') + (aw ? 'a' : '') + ':p' + pt;
+  if (!cache.has(key)) { const [fn, opt] = WEAPONS[wi].model, att = {}; for (const pi of pl) att[PARTS[pi].slot] = PARTS[pi].id; PS = pt ? { lv: pt } : null; try { cache.set(key, builders[fn](matsFor(skin, aw), { ...(opt || {}), label: LABELS[wi] ? 'SC ' + LABELS[wi] : '', kit: KITS[SKINS[skin].id], att })); } finally { PS = null; } } // 파츠 스킨: 파츠를 단 유료 스킨, Lv.3·5
   const src = cache.get(key), group = src.group.clone();
   for (const c of group.children) if (c.userData.spin) { const sp = c.userData.spin, ax = c.userData.axis || 'z'; for (const m of c.children) m.onBeforeRender = () => { c.rotation[ax] = spinPhase() * sp; }; } // 도는 장식 (쏘거나 살펴볼 때 빨라짐)
   const kit = KITS[SKINS[skin].id];

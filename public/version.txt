@@ -1,1 +1,1 @@
-build 2026-10-05 detail-pass
+build 2026-10-05 part-skins
