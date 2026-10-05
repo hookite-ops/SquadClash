@@ -127,6 +127,7 @@ const FIX = {
   ldot: new THREE.MeshBasicMaterial({ color: 0xff3a2a }),
   tubeIn: new THREE.MeshBasicMaterial({ color: 0x040506, side: THREE.BackSide }),
   mask: new THREE.MeshBasicMaterial({ colorWrite: false }), // 1인칭 전용: 조준경 안쪽으로 총의 앞부분이 비쳐 보이지 않게 가림
+  lamp: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff6e0).multiplyScalar(2.2) }), // 전술 라이트 렌즈
 };
 allMats.delete(FIX.lens);
 
@@ -1832,6 +1833,73 @@ for (const [id, P] of Object.entries(KPLUS)) {
   for (const part of ['hg', 'stock', 'orn']) if (P[part] && K[part]) { const o = K[part]; K[part] = (b, M, R) => { o(b, M, R); P[part](b, M, R); }; }
   if (P.muzzle && K.muzzle) { const o = K.muzzle; K.muzzle = (b, M, f, u, r, len) => { const tip = o(b, M, f, u, r, len); P.muzzle(b, M, f, u, r, len, tip); return tip; }; }
 }
+// ───────────── 장식 부품 잔뜩: 리벳·배관·빛나는 홈·에너지 셀·방열핀·지느러미 (모든 유료 스킨, 테마 재질로) ─────────────
+const GLOWK = ['glow', 'holo', 'core', 'rim', 'rift', 'star', 'line', 'eye', 'frost', 'led', 'lantern', 'halo', 'thunder', 'pipe', 'glow2', 'glint', 'disk'];
+const gmat = (M) => { for (const k of GLOWK) if (M[k]) return M[k]; return M.accent; };
+const pmat = (M) => M.armor || M.trim || M.gilt || M.recv, dmat = (M) => M.frame || M.steel, bmat = (M) => M.gilt || M.trim || M.bolt;
+const GREEB = {
+  hg(b, M, R) {
+    const { f0, f1, u0, u1, w } = R, hw = w / 2, L = f1 - f0, um = (u0 + u1) / 2, hh = (u1 - u0) / 2, G = gmat(M), P = pmat(M), D = dmat(M), B = bmat(M), k = Math.min(1, L / 0.2);
+    for (let i = 0, n = Math.max(3, Math.round(L / 0.03)); i < n; i++) both((s) => b.box(0.008, 0.009 * k + 0.003, 0.014, f0 + 0.012 + (i * (L - 0.024)) / (n - 1), u1 + 0.004, i % 3 ? D : P, s * (hw - 0.001))); // 위 모서리 블록
+    for (let i = 0, n = Math.max(3, Math.round(L * 0.45 / 0.012)); i < n; i++) b.box(w * 0.35, (0.014 + (i % 2) * 0.006) * k + 0.003, 0.0026, f0 + L * 0.52 + (i * L * 0.4) / (n - 1), u1 + 0.01 * k, i % 2 ? G : P); // 위 빛나는 방열핀
+    both((s) => {
+      const x = s * (hw + 0.006), fa = f0 + L * 0.04, fb = f0 + L * 0.44;
+      b.prof([[fa, um - hh * 0.75], [fa + 0.01, um + hh * 0.85], [fb, um + hh * 0.85], [fb + 0.014, um], [fb, um - hh * 0.75]], 0.006, P, 0.0014, x); // 장갑판
+      for (let i = 0; i < 3; i++) b.box(0.0014, 0.0042, (fb - fa) * 0.66, (fa + fb) / 2 + 0.002, um + hh * (0.5 - i * 0.45), G, x + s * 0.0032); // 빛나는 홈
+      for (const [ff, uu] of [[fa + 0.008, um + hh * 0.65], [fa + 0.008, um - hh * 0.6], [fb - 0.004, um + hh * 0.65], [fb - 0.004, um - hh * 0.6]]) b.ball(0.0026, [ff, uu, x + s * 0.0032], B, [1, 1, 0.6], 8); // 리벳
+      const xp = s * (hw + 0.009), uc = um + hh * 0.05, rc0 = Math.min(0.009, hh * 0.5); // 옆면 에너지 캐니스터
+      b.cyl(rc0, rc0, f0 + L * 0.5, L * 0.44, uc, D, xp, 14); b.cyl(rc0 * 1.04, rc0 * 1.04, f0 + L * 0.58, L * 0.26, uc, G, xp, 14);
+      for (let i = 0; i < 4; i++) { const ff = f0 + L * (0.52 + i * 0.13); b.cyl(rc0 * 1.25, rc0 * 1.25, ff, 0.004, uc, B, xp, 14); b.box(0.008, rc0 * 0.8, 0.004, ff + 0.002, uc, D, s * (hw + 0.003)); }
+      b.cyl(rc0 * 0.7, rc0 * 0.4, f1 - L * 0.06 - 0.01, 0.012, uc, B, xp, 12);
+      const fc = f0 + L * 0.24, rc = Math.min(hh * 0.62, 0.018), ug = um - hh * 0.05;
+      b.sdisc(rc, fc, ug, x + s * 0.0036, D); b.tor(rc * 1.05, rc * 0.12, [fc, ug, x + s * 0.0036], B, 0, Math.PI / 2, 6.2832, 20);
+      spinAt(b, fc, ug, s * 3, () => { b.tor(rc * 0.78, rc * 0.1, [fc, ug, x + s * 0.0044], G, 0, Math.PI / 2, 6.2832, 18); for (let i = 0; i < 6; i++) { const a = i * 1.0472; b.box(0.0016, rc * 0.5, rc * 0.16, fc + Math.cos(a) * rc * 0.42, ug + Math.sin(a) * rc * 0.42, B, x + s * 0.0046, a); } }, 'x'); // 도는 장치
+    });
+    for (let i = 0, n = Math.max(3, Math.round(L / 0.016)); i < n; i++) b.box(w * 0.6, 0.012 * k + 0.004, 0.0026, f0 + L * 0.18 + (i * L * 0.64) / (n - 1), u0 - 0.006 * k - 0.002, i % 2 ? D : P); // 아래 방열핀
+    b.box(w * 0.62, 0.0024, L * 0.64, f0 + L * 0.5, u0 - 0.012 * k - 0.004, G);
+  },
+  orn(b, M, R) {
+    const { f0, f1, u, top, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1, G = gmat(M), P = pmat(M), D = dmat(M), B = bmat(M);
+    both((s) => {
+      const x = s * (hw + 0.008 * k), fc = f0 + L * 0.66, rr = 0.008 * k;
+      b.cyl(rr, rr, fc - L * 0.14, L * 0.28, u - 0.012 * k, P, x, 14); b.cyl(rr * 1.06, rr * 1.06, fc - L * 0.05, L * 0.1, u - 0.012 * k, G, x, 14); // 에너지 셀
+      for (const ff of [fc - L * 0.14, fc + L * 0.14]) b.cyl(rr * 1.25, rr * 1.25, ff - 0.003, 0.006, u - 0.012 * k, B, x, 14);
+      b.box(0.008 * k, rr * 2.2, 0.008 * k, fc, u - 0.012 * k, D, s * (hw + 0.003));
+      b.sdisc(0.008 * k, f0 + L * 0.3, u + 0.008 * k, s * (hw + 0.0022), G); b.tor(0.0092 * k, 0.0016, [f0 + L * 0.3, u + 0.008 * k, s * (hw + 0.0024)], B, 0, Math.PI / 2, 6.2832, 6); // 빛나는 육각 표식
+      for (let i = 0; i < 5; i++) b.ball(0.0022 * k + 0.0004, [f0 + L * (0.1 + i * 0.045), u - 0.02 * k, s * (hw + 0.0014)], B, [1, 1, 0.6], 6);
+      b.prof([[f0 + L * 0.03, top - 0.004], [f0 + L * 0.14, top - 0.004], [f0 + L * 0.0, top + 0.026 * k], [f0 - L * 0.02, top + 0.022 * k]], 0.0028, i2(P, G, s), 0.0006, s * 0.008); // 뒤쪽 큰 지느러미
+    });
+    b.box(0.018 * k, 0.008 * k, 0.016 * k, f0 + L * 0.42, u + 0.004 * k, B, (hw + 0.01 * k)); b.box(0.004 * k, 0.004 * k, 0.016 * k, f0 + L * 0.42, u + 0.004 * k, G, (hw + 0.0195 * k)); // 큰 장전손잡이
+  },
+  stock(b, M, R) {
+    const { f, end, top, bot, w } = R, um = (top + bot) / 2, G = gmat(M), B = bmat(M), P = pmat(M);
+    both((s) => { const x = s * (w / 2 + 0.005); b.cyl(0.0034, 0.0034, end + 0.03, f - end - 0.04, top - 0.009, G, x, 10); for (let i = 0; i < 3; i++) { const ff = end + 0.04 + i * (f - end - 0.06) / 2; b.cyl(0.005, 0.005, ff, 0.004, top - 0.009, B, x, 10); }
+      for (let i = 0; i < 5; i++) b.ball(0.0022, [end + 0.03 + i * 0.022, um - 0.006, s * (w / 2 + 0.0014)], B, [1, 1, 0.6], 6); });
+    for (let i = 0; i < 4; i++) b.prof([[end + 0.016 + i * 0.013, bot + 0.004], [end + 0.002 + i * 0.013, bot - 0.022 - i * 0.004], [end + 0.012 + i * 0.013, bot + 0.004]], 0.0034, i % 2 ? G : P, 0.0006);
+    for (let i = 0; i < 3; i++) b.prof([[end + 0.03 + i * 0.016, top + 0.002], [end + 0.016 + i * 0.016, top + 0.02 + i * 0.004], [end + 0.026 + i * 0.016, top + 0.002]], 0.003, i % 2 ? P : G, 0.0006);
+  },
+  muzzle(b, M, f, u, r, len, tip) {
+    const G = gmat(M), B = bmat(M);
+    b.tor(r * 1.4, r * 0.14, [f + len * 0.18, u, 0], G, 0, 0, 6.2832, 18); b.tor(r * 1.45, r * 0.1, [f + len * 0.04, u, 0], B, 0, 0, 6.2832, 18);
+    b.radial(6, () => new THREE.ConeGeometry(r * 0.2, r * 1.6, 4).rotateX(-Math.PI / 2).translate(0, r * 1.5, -r * 0.5), f + len * 0.18, u, B, 0.52);
+  },
+};
+const i2 = (a, c, s) => (s > 0 ? a : c);
+for (const [id, K] of Object.entries(KITS)) {
+  if (!K.fx || !K.fx.bundle) continue;
+  for (const part of ['hg', 'stock', 'orn']) if (K[part]) { const o = K[part]; K[part] = (b, M, R) => { o(b, M, R); GREEB[part](b, M, R); }; }
+  if (K.muzzle) { const o = K.muzzle; K.muzzle = (b, M, f, u, r, len) => { const tip = o(b, M, f, u, r, len); GREEB.muzzle(b, M, f, u, r, len, tip); return tip; }; }
+}
+// 기본·무료 위장 스킨: 몸통 옆면에 전술 장비 (배터리 셀, 리벳, 빨간 표시등)
+const tactOrn = (b, M, R) => { const { f0, f1, u, top, hw } = R, L = f1 - f0, k = R.small ? 0.55 : 1;
+  both((s) => { const x = s * (hw + 0.008 * k), fc = f0 + L * 0.66, rr = 0.0075 * k;
+    b.cyl(rr, rr, fc - L * 0.13, L * 0.26, u - 0.012 * k, M.bolt, x, 14); b.cyl(rr * 1.08, rr * 1.08, fc + L * 0.03, L * 0.03, u - 0.012 * k, M.accent, x, 14); for (const ff of [fc - L * 0.13, fc + L * 0.13]) b.cyl(rr * 1.2, rr * 1.2, ff - 0.003, 0.006, u - 0.012 * k, M.steel, x, 14); b.box(0.008 * k, rr * 2.2, 0.008 * k, fc, u - 0.012 * k, M.steel, s * (hw + 0.003)); // 배터리 셀
+    for (let i = 0; i < 5; i++) b.ball(0.002 * k + 0.0004, [f0 + L * (0.1 + i * 0.045), u - 0.02 * k, s * (hw + 0.0014)], M.bolt, [1, 1, 0.6], 6);
+    b.sdisc(0.0042 * k, f0 + L * 0.3, u + 0.008 * k, s * (hw + 0.002), M.accent); b.tor(0.0055 * k, 0.0012, [f0 + L * 0.3, u + 0.008 * k, s * (hw + 0.0022)], M.bolt, 0, Math.PI / 2, 6.2832, 12); });
+  const fl = f1 - L * 0.04, ul = u - 0.026 * k; // 양옆 전술 라이트 (빛나는 렌즈)
+  both((s) => { const xl = s * (hw + 0.012 * k); b.box(0.016 * k, 0.016 * k, 0.05 * k, fl - 0.025 * k, ul, M.steel, xl); b.cyl(0.0085 * k, 0.0095 * k, fl, 0.012 * k, ul, M.bolt, xl, 14); b.disc(0.0075 * k, fl + 0.0122 * k, ul, M.lamp, false, xl); b.box(0.004 * k, 0.006 * k, 0.012 * k, fl - 0.04 * k, ul + 0.01 * k, M.accent, xl); });
+  b.prof([[f0 + L * 0.03, top - 0.004], [f0 + L * 0.12, top - 0.004], [f0 + L * 0.02, top + 0.014 * k]], 0.003, M.steel, 0.0006); };
+for (const id of ['std', 'desert', 'forest', 'urban']) KITS[id] = { fx: FX_FREE[id] || { tracer: 0xfff1b0, flash: 0xffd27a }, orn: tactOrn };
 export function skinFx(skin) { const id = SKINS[skin] && SKINS[skin].id, k = KITS[id]; return k ? k.fx : FX_FREE[id] || null; }
 
 // ───────────── 소총 계열: 돌격소총 / 소음소총(supp) / 점사소총(burst) / 지정사수소총(dmr) / 경기관총(lmg) / 중기관총(hmg) ─────────────
