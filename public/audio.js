@@ -113,6 +113,10 @@ export function sfxSkin(kind, what, vol = 1, pan = 0, far = 0, delay = 0) {
     else if (kind === 'cosmic') { T(0, 0.16, 'sine', 600, 2400, 0.07); T(0, 0.2, 'sine', 300, 120, 0.12); }
     else if (kind === 'prism') { T(0, 0.18, 'sine', 2093, 2637, 0.05); T(0.02, 0.18, 'sine', 3136, 3520, 0.04); }
     else if (kind === 'spooky') { T(0, 0.22, 'sine', 520, 380, 0.06); T(0, 0.18, 'triangle', 260, 180, 0.08); N(0, 0.1, 'bandpass', 700, 300, 4, 0.06, 0.03); }
+    else if (kind === 'mecha') { T(0, 0.1, 'square', 1200, 300, 0.05); T(0, 0.14, 'sine', 140, 55, 0.18); N(0, 0.06, 'bandpass', 3500, 1500, 2, 0.08); }
+    else if (kind === 'dragon') { T(0, 0.18, 'sawtooth', 160, 70, 0.1); N(0, 0.16, 'lowpass', 2200, 300, 0.8, 0.16); T(0, 0.12, 'sine', 80, 40, 0.18); }
+    else if (kind === 'phoenix') { N(0, 0.14, 'bandpass', 3000, 900, 1.5, 0.12); T(0, 0.2, 'triangle', 1568, 1318, 0.05); T(0, 0.16, 'sine', 110, 60, 0.12); }
+    else if (kind === 'aqua') { T(0, 0.12, 'sine', 2200, 800, 0.08); T(0.01, 0.1, 'square', 3300, 1600, 0.025); N(0, 0.08, 'bandpass', 5000, 2500, 3, 0.06); }
     return;
   }
   if (what === 'equip') {
@@ -133,6 +137,10 @@ export function sfxSkin(kind, what, vol = 1, pan = 0, far = 0, delay = 0) {
     else if (kind === 'cosmic') { T(0, 0.6, 'sine', 200, 1600, 0.07, 0.1); T(0.3, 0.5, 'sine', 2400, 2400, 0.04); N(0, 0.6, 'bandpass', 800, 6000, 4, 0.04, 0.3); }
     else if (kind === 'prism') { [1568, 1976, 2349, 2794, 3136].forEach((f, i) => T(i * 0.05, 0.4, 'sine', f, f, 0.045)); }
     else if (kind === 'spooky') { T(0, 0.8, 'sine', 400, 260, 0.07, 0.2); T(0.05, 0.8, 'sine', 410, 250, 0.05, 0.2); N(0.3, 0.3, 'bandpass', 900, 400, 6, 0.05, 0.05); }
+    else if (kind === 'mecha') { T(0, 0.5, 'sawtooth', 80, 320, 0.07, 0.05); [0.15, 0.3, 0.45].forEach((d) => N(d, 0.03, 'bandpass', 2400, 1800, 3, 0.1)); T(0.5, 0.3, 'sine', 880, 1320, 0.06); }
+    else if (kind === 'dragon') { T(0, 0.9, 'sawtooth', 90, 160, 0.14, 0.15); N(0, 0.9, 'lowpass', 500, 1500, 0.8, 0.14, 0.3); T(0.4, 0.5, 'sawtooth', 200, 90, 0.08); }
+    else if (kind === 'phoenix') { N(0, 0.7, 'bandpass', 600, 4000, 1.5, 0.1, 0.3); [1319, 1760, 2349].forEach((f, i) => T(0.3 + i * 0.08, 0.5, 'triangle', f, f, 0.05)); }
+    else if (kind === 'aqua') { T(0, 0.5, 'sine', 300, 1800, 0.07, 0.05); N(0.1, 0.4, 'bandpass', 1500, 6000, 3, 0.06, 0.1); T(0.45, 0.25, 'sine', 2400, 2400, 0.05); }
     return;
   }
   // 처치
@@ -153,6 +161,10 @@ export function sfxSkin(kind, what, vol = 1, pan = 0, far = 0, delay = 0) {
   else if (kind === 'cosmic') { T(0, 0.8, 'sine', 2400, 120, 0.1); T(0.1, 0.9, 'sine', 600, 600, 0.04); N(0, 0.8, 'bandpass', 6000, 400, 3, 0.06); }
   else if (kind === 'prism') { [2093, 2637, 3136, 3951, 4699, 5274].forEach((f, i) => T(i * 0.05, 0.6, 'sine', f, f, 0.04)); }
   else if (kind === 'spooky') { T(0, 1.0, 'sine', 600, 300, 0.08, 0.1); T(0, 1.0, 'sine', 612, 290, 0.06, 0.1); for (let i = 0; i < 4; i++) N(0.1 + i * 0.08, 0.06, 'bandpass', 3000, 2000, 6, 0.05); }
+  else if (kind === 'mecha') { T(0, 0.6, 'sine', 140, 40, 0.3); N(0, 0.5, 'lowpass', 3000, 200, 0.8, 0.22, 0.003); [1320, 1760, 2640].forEach((f, i) => T(0.15 + i * 0.06, 0.25, 'square', f, f, 0.03)); }
+  else if (kind === 'dragon') { T(0, 1.2, 'sawtooth', 180, 60, 0.18, 0.06); N(0, 1.2, 'lowpass', 2500, 200, 0.8, 0.2, 0.06); N(0.1, 0.7, 'bandpass', 800, 300, 1, 0.12, 0.1); }
+  else if (kind === 'phoenix') { N(0, 1.0, 'bandpass', 300, 5000, 1, 0.16, 0.2); [1568, 2093, 2637, 3136].forEach((f, i) => T(0.25 + i * 0.07, 0.7, 'triangle', f, f, 0.05)); }
+  else if (kind === 'aqua') { T(0, 0.7, 'sine', 1800, 200, 0.1); N(0, 0.8, 'bandpass', 6000, 500, 3, 0.1); [2093, 2637].forEach((f, i) => T(0.2 + i * 0.1, 0.4, 'sine', f, f, 0.05)); }
 }
 export function sfxBoom(vol = 0.9, dur = 1.8, pan = 0) {
   if (!AC || vol < 0.02) return;

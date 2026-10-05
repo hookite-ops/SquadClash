@@ -317,6 +317,10 @@ function impactFx(kind, p, n, col) {
   else if (kind === 'cosmic') { glow(x, y, z, 0xc08cff, 0.4, 0.04, 0.24); for (let i = 0; i < 2; i++) emitSpark(p, n, 3, 2.5, [0x7a3cff, 0xff46be][i], 0.45, 1); }
   else if (kind === 'prism') { for (let i = 0; i < 3; i++) emitSpark(p, n, 3, 3.5, STARC[(Math.random() * 5) | 0], 0.4, 4); glow(x, y, z, 0xffffff, 0.05, 0.35, 0.14); }
   else if (kind === 'spooky') { emitSpark(p, n, 5, 3, 0xa64dff, 0.4, 3); emitSpark(p, n, 4, 3, 0xff8a1a, 0.4, 3); glow(x, y, z, 0x9dff3a, 0.05, 0.3, 0.16); }
+  else if (kind === 'mecha') { glow(x, y, z, 0xffa050, 0.1, 0.55, 0.2); emitSpark(p, n, 8, 5, 0xff6a1a, 0.35, 9); emitChip(p, n, 2, 2, 0xf4f3ef, 0.5, 9); }
+  else if (kind === 'dragon') { glow(x, y, z, 0xff4020, 0.15, 0.7, 0.28, { c1: 0x600000 }); emitSpark(p, n, 9, 4, 0xff2a10, 0.5, 6); puff([x, y, z], [n[0] * 0.4, 0.5, n[2] * 0.4], 0x1a0c0a, 0.5, 0.6, 0.5); }
+  else if (kind === 'phoenix') { glow(x, y, z, 0xffd080, 0.12, 0.6, 0.26, { c1: 0xff3000 }); emitSpark(p, n, 9, 4, 0xffb040, 0.55, -1); }
+  else if (kind === 'aqua') { glow(x, y, z, 0x4ae8ff, 0.08, 0.5, 0.2); emitSpark(p, n, 7, 4, 0x4ae8ff, 0.35, 6); emitChip(p, n, 3, 2, 0xe0f8ff, 0.6, 6); }
 }
 function muzzleFx(kind, a, d, col) { // 총구에서 스킨 색 불티가 튐 (3인칭·1인칭 공통, 세계 좌표)
   if (!kind) return;
@@ -345,6 +349,10 @@ function bundleKill(kind, x, y, z, col) {
   else if (kind === 'royal') { emitSpark([x, y + 0.3, z], up, 50, 6, 0xffd84a, 1.3, 9, 1); glow(x, y + 0.6, z, 0xfff0a0, 0.3, 1.6, 0.6, { v: [0, 1.2, 0] }); shock(x, gy, z, 0xffd84a, 4, 0.5); for (let i = 0; i < 5; i++) setTimeout(() => spark(x + (Math.random() - 0.5), y + 0.6 + Math.random() * 0.6, z + (Math.random() - 0.5), 0.6, 0xff2040, 0.15), i * 70); }
   else if (kind === 'cosmic') { glow(x, y, z, 0xc08cff, 2.4, 0.05, 0.35); setTimeout(() => { glow(x, y, z, 0xff46be, 0.1, 2.2, 0.35, { c1: 0x4020ff }); emitSpark([x, y, z], up, 30, 6, 0xffffff, 1, 2, 1); emitSpark([x, y, z], up, 20, 5, 0x7a3cff, 1, 2, 1); shock(x, gy, z, 0xc08cff, 4.5, 0.5); }, 300); }
   else if (kind === 'prism') { for (let i = 0; i < 5; i++) { emitSpark([x, y, z], up, 10, 6, STARC[i], 0.9, 4, 1); glow(x, y + 0.2 * i - 0.4, z, STARC[i], 0.7, 0.05, 0.35, { wait: i * 0.05 }); } shock(x, gy, z, 0xffffff, 4, 0.5); }
+  else if (kind === 'mecha') { glow(x, y, z, 0xfff0d0, 0.3, 2.6, 0.32, { c1: 0xff5a00 }); shock(x, gy, z, 0xff6a1a, 5, 0.45); shock(x, gy + 0.02, z, 0xffffff, 3, 0.35); emitSpark([x, y, z], up, 40, 8, 0xff6a1a, 0.8, 8, 1); emitChip([x, y, z], up, 14, 5, 0xf4f3ef, 1, 9, 1); for (let i = 0; i < 4; i++) glow(x, y - 0.6 + i * 0.4, z, 0xd0141e, 0.7, 0.1, 0.3, { wait: 0.05 + i * 0.04 }); }
+  else if (kind === 'dragon') { glow(x, y, z, 0xff6040, 0.4, 3.2, 0.5, { c1: 0x600000 }); for (let i = 0; i < 5; i++) { const a = (i / 5) * 6.283; glow(x, y, z, 0xff3010, 0.8, 0.2, 0.6, { v: [Math.cos(a) * 4, 1.5, Math.sin(a) * 4], drag: 2, c1: 0x400000 }); } shock(x, gy, z, 0xff2010, 6, 0.55); emitSpark([x, y, z], up, 44, 7, 0xff2a10, 1, 6, 1); puff([x, y + 0.5, z], [0, 1.2, 0], 0x140808, 2.4, 1.6, 0.7); }
+  else if (kind === 'phoenix') { glow(x, y, z, 0xffe0a0, 0.4, 3, 0.5, { c1: 0xff4000 }); for (const s2 of [-1, 1]) emitSpark([x, y + 0.2, z], [s2, 0.8, 0], 30, 6, 0xffb040, 1.2, 1, 0.4); glow(x, y + 0.6, z, 0xffa040, 0.6, 1.8, 1, { v: [0, 2, 0], drag: 0.8, c1: 0xff2000 }); shock(x, gy, z, 0xffb040, 5, 0.6); }
+  else if (kind === 'aqua') { glow(x, y, z, 0xe0faff, 0.3, 2.4, 0.3, { c1: 0x2a80ff }); shock(x, gy, z, 0x4ae8ff, 5, 0.45); shock(x, gy + 0.02, z, 0x1f5fe0, 3, 0.55); emitSpark([x, y, z], up, 36, 6, 0x4ae8ff, 0.8, 6, 1); puff([x, gy + 0.2, z], [0, 0.5, 0], 0xd8f4ff, 2, 1, 0.45); }
   else if (kind === 'spooky') { glow(x, y, z, 0x9dff3a, 0.3, 2.2, 0.4, { c1: 0x4a1080 }); emitChip([x, y + 0.3, z], up, 24, 4, 0x07050a, 1.4, 2, 1); emitSpark([x, y, z], up, 24, 4, 0xff8a1a, 0.9, 2, 1); glow(x, y + 0.3, z, 0xa64dff, 0.6, 1.4, 1.2, { v: [0, 1.4, 0], drag: 0.6 }); shock(x, gy, z, 0xa64dff, 3.5, 0.6); }
 }
 function skinEmblem(sk) { // 내가 얼티밋 스킨으로 처치하면 조준점 아래에 스킨 엠블럼이 튀어나옴
@@ -1614,8 +1622,9 @@ const SWATCH = { std: 'linear-gradient(90deg,#4a505a,#22252a)', carbon: 'repeati
   desert: 'conic-gradient(from 90deg at 30% 40%,#cdb98f 25%,#806b4c 0 50%,#a8916a 0 75%,#584834 0) 0 0/10px 10px', forest: 'radial-gradient(circle at 20% 30%,#4e5a33 30%,transparent 32%),radial-gradient(circle at 70% 70%,#5f4630 25%,transparent 27%),radial-gradient(circle at 60% 20%,#1d1d19 14%,transparent 16%),#9c9465',
   urban: 'conic-gradient(from 90deg at 30% 40%,#a9aeb3 25%,#4a4f56 0 50%,#787e85 0 75%,#24272c 0) 0 0/10px 10px', platinum: 'linear-gradient(110deg,#8d939e,#f4f7fb 40%,#b9c0cb 60%,#eef1f6)', damascus: 'repeating-linear-gradient(160deg,#3a2414 0 3px,#a8723a 3px 6px,#f0d79a 6px 8px,#5c3a1e 8px 11px)',
   obsidian: 'linear-gradient(120deg,#08070c 40%,#d8d8e8 45%,#08070c 48%,#1a1428)', diamond: 'linear-gradient(120deg,#cfe9ff,#ffffff 30%,#a8d8ff 50%,#f0e6ff 70%,#ffffff)', atomic: 'linear-gradient(120deg,#5a0008,#d81e1a 35%,#ff6a1a 55%,#ffd45a 70%,#8e0a10)',
-  orion: 'linear-gradient(110deg,#ff8ad8,#8ad8ff 30%,#b9ffd8 50%,#ffe28a 70%,#c08bff)', darkmatter: 'linear-gradient(120deg,#05040c,#3a1a7a 40%,#b05cff 50%,#ff3da8 55%,#05040c)' };
-const TIERN = { 희귀: 1, 영웅: 2, 전설: 3, 한정: 4, 얼티밋: 5 };
+  orion: 'linear-gradient(110deg,#ff8ad8,#8ad8ff 30%,#b9ffd8 50%,#ffe28a 70%,#c08bff)', darkmatter: 'linear-gradient(120deg,#05040c,#3a1a7a 40%,#b05cff 50%,#ff3da8 55%,#05040c)',
+  crimson: 'linear-gradient(115deg,#f4f3ef 40%,#d0141e 41% 58%,#ff8a20 60%,#1a1b1f 62%)', dragon: 'radial-gradient(circle at 30% 50%,#ff3010 6%,transparent 8%),linear-gradient(120deg,#050405,#2a1418 45%,#ff2a10 50%,#050405 56%)', phoenix: 'linear-gradient(110deg,#7a4a08,#ffd98a 35%,#ff7a1a 52%,#ffe9a0 70%,#a86a10)', aqua: 'linear-gradient(115deg,#eef2f6 38%,#1f5fe0 39% 60%,#4ae8ff 62%,#141c2c 64%)' };
+const TIERN = { 희귀: 1, 영웅: 2, 전설: 3, 한정: 4, 얼티밋: 5, 레전드: 6 };
 const CATN = { melee: '근접', side: '보조', smg: '기관단총', sg: '샷건', ar: '소총', sr: '저격총', mg: '기관총' };
 let lockerOpen = false, lkW = 13, lkSkin = 0, lkYaw = 0.7, lkDrag = null, lkGun = null, lkKey = '', lkSpin = true, lkTab = 'skin';
 const lkGroup = new THREE.Group();
@@ -2038,8 +2047,8 @@ function frame(now) {
     { const D = d + 2.6, k = D / d; lkBack.position.set(lkGroup.position.x * k, lkGroup.position.y * k, -D); lkBack.scale.setScalar(D * 1.9); lkBack.visible = true; }
     tickSkins(now / 1000);
     uiLight();
-    vmRim.color.copy(lkTheme); vmRim.intensity = 3.2; lkBack.material.color.copy(lkTint).multiplyScalar(1.25);
-    lkGlow.visible = true; lkGlow.color.copy(lkTheme); lkGlow.intensity = 1.6 + Math.sin(now / 600) * 0.3; lkGlow.distance = d * 1.6; lkGlow.position.set(lkGroup.position.x, lkGroup.position.y - d * 0.18, lkGroup.position.z + d * 0.25);
+    vmRim.color.copy(lkTheme); vmRim.intensity = 2.4; lkBack.material.color.copy(lkTint).multiplyScalar(1.25);
+    lkGlow.visible = true; lkGlow.color.copy(lkTheme); lkGlow.intensity = 0.8 + Math.sin(now / 600) * 0.15; lkGlow.distance = d * 1.6; lkGlow.position.set(lkGroup.position.x, lkGroup.position.y - d * 0.18, lkGroup.position.z + d * 0.25);
     present(drawVm, now, GRADE_UI);
     return;
   }

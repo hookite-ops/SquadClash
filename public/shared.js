@@ -51,6 +51,11 @@ export const SKINS = [
   { id: 'atomic', name: '아토믹 리액터', tier: '얼티밋', bundle: true },
   { id: 'orion', name: '오리온 성좌', tier: '얼티밋', bundle: true },
   { id: 'darkmatter', name: '다크 매터 보이드', tier: '얼티밋', bundle: true },
+  // 레전드: 장갑판·날개·가시로 총의 윤곽부터 바뀌는 최상위 스킨
+  { id: 'crimson', name: '크림슨 메카', tier: '레전드', bundle: true },
+  { id: 'dragon', name: '흑룡', tier: '레전드', bundle: true },
+  { id: 'phoenix', name: '황금 불사조', tier: '레전드', bundle: true },
+  { id: 'aqua', name: '아쿠아 메카', tier: '레전드', bundle: true },
 ];
 // ───────────── 파츠(부착물) ─────────────
 // 무기마다 자리(slot)별로 하나씩, 모두 합쳐 PART_MAX 개까지 단다. 수치는 곱하는 값 (1 = 그대로):
