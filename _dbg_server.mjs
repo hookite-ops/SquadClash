@@ -1,4 +1,4 @@
-globalThis.ST={peekTry:0,peek:0,swap:0,wait:0,glance:0};setInterval(()=>console.log(JSON.stringify(globalThis.ST)),15000);
+globalThis.ST={jump:0,brag:0};setInterval(()=>console.log(JSON.stringify(globalThis.ST)),30000);process.on('uncaughtException',e=>{console.log('ERR',e.stack);});
 // SQUAD CLASH — 멀티플레이 FPS 서버: 폭탄전·팀 데스매치·생존전 (정적 파일 + WebSocket 한 프로세스)
 import http from 'node:http';
 import fs from 'node:fs';
@@ -106,6 +106,11 @@ const BOT_TIERS = [
   { name: '에이스', p: 0.1, react: 0.62, err: 0.55, turn: 1.4, dmg: 1.12, nade: 1.5, head: 0.45, spray: -1, push: 0.9 },
 ];
 function pickTier() { let r = Math.random(); for (let i = 0; i < BOT_TIERS.length; i++) { if ((r -= BOT_TIERS[i].p) < 0) return i; } return 1; }
+// 봇 성격: 등급과 따로, 봇마다 하고 싶은 게 다름 (공격성·은밀함·참을성·어울림·점프·까불기·무전)
+function botPersona(tier) {
+  const r = () => Math.random(), t = (tier ?? 1) / 3;
+  return { aggro: clamp(r() * 0.8 + t * 0.3, 0, 1), sneaky: r(), patience: r(), social: r(), jumpy: clamp(r() * 0.7 + t * 0.4, 0, 1), cocky: r() * (0.4 + t * 0.6), chatty: r() };
+}
 function botName(room) { // 아직 이 방에 없는 이름 하나를 무작위로
   const used = new Set([...room.players.values()].map((p) => p.name)), free = BOT_NAMES.filter((n) => !used.has(n));
   return free.length ? free[Math.floor(Math.random() * free.length)] : BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)] + Math.floor(10 + Math.random() * 89);
@@ -439,6 +444,8 @@ class Room {
     this.bomb = { state: c ? 'carried' : 'none', carrier: c ? c.id : 0, x: 0, z: 0, explodeAt: 0 };
     this.botSite = Math.random() < 0.5 ? 0 : 1;
     this.broadcast({ t: 'round', ev: 'start', n: this.roundNo, attack: this.attack, carrier: this.bomb.carrier, swap: this.roundNo === SWAP_AFTER + 1 });
+    const caller = attackers.find((p) => p.bot && p.P && p.P.chatty > 0.45); // 공격팀 봇 하나가 갈 지점을 외침
+    if (caller) { caller.radioAt = 0; this.botRadio(caller, this.botSite, now); }
     for (const p of this.players.values()) { this.spawn(p, now); this.sendInv(p); }
   }
   endRound(win, why, now) {
@@ -560,6 +567,12 @@ class Room {
     if (!W.melee) this.noise(p, W.quiet ? 16 : 62, now);
     for (const [e, v] of dmg) this.damage(p, e, Math.round(v.dmg), v.head, wi, now);
   }
+  botRadio(b, k, now) { // 봇도 팀원에게 무전을 침 (사람만 봄)
+    if (this.mode === 'br' || now - (b.radioAt || 0) < 9000) return;
+    b.radioAt = now; globalThis.ST['radio' + k] = (globalThis.ST['radio' + k] || 0) + 1;
+    const msg = JSON.stringify({ t: 'radio', id: b.id, k });
+    for (const p of this.players.values()) if (p.ws && p.team === b.team && p.ws.readyState === 1) p.ws.send(msg);
+  }
   damage(by, to, amount, head, wi, now) {
     if (!to.alive || !this.canFight()) return;
     if (to.armor > 0 && !head && !(WEAPONS[wi] && WEAPONS[wi].ap)) { // 방탄복이 몸통 피해 일부를 대신 받음
@@ -575,6 +588,12 @@ class Room {
     to.alive = false; to.d++;
     if (!self) by.k++;
     this.broadcast({ t: 'kill', by: by.id, to: to.id, w: wi, head });
+    if (!self && by.bot && by.P) { // 잡으면 기세가 오르고, 가끔 점프·앉았다 일어나기로 자랑
+      by.conf = Math.min(1, (by.conf || 0) + 0.28);
+      if (Math.random() < by.P.cocky) by.brag = now + 900 + Math.random() * 900;
+      if (Math.random() < by.P.chatty * 0.3) this.botRadio(by, 4, now);
+    }
+    if (!self && to.bot) { to.conf = Math.max(-1, (to.conf || 0) - 0.22); to.nemesis = { id: by.id, until: now + 45000 }; to.will = null; } // 죽인 상대를 기억해 두었다가 복수하러 감
     this.rosterDirty = true;
     if (this.mode === 'br') { this.brDeath(to, now); return; }
     if (this.mode === 'bomb') {
@@ -904,7 +923,12 @@ const LV = [
 const PREF = { melee: 2, side: 12, smg: 12, sg: 6, ar: 24, sr: 46, mg: 26 }; // 무기 종류별로 유지하려는 거리
 function botInit(room, b) { // 난이도에 봇마다 조금씩 차이를 둠
   const L = LV[room.botLv], k = 0.9 + Math.random() * 0.2, T = BOT_TIERS[b.tier ?? 1];
-  Object.assign(b, { react: L.react * T.react * k, err: L.err * T.err * k, turn: (L.turn * T.turn) / k, dmgK: T.dmg, T, magW: -1, mag: 0, reloadUntil: 0, aimT: 0, tgtId: 0, lastSeen: null, alert: null, cover: null, crouchAt: 0, hitBy: null, shareAt: 0, peek: null, peekTry: 0, lookUntil: 0, spdCur: 0, mvx: undefined, mvz: undefined });
+  Object.assign(b, { react: L.react * T.react * k, err: L.err * T.err * k, turn: (L.turn * T.turn) / k, dmgK: T.dmg, T, magW: -1, mag: 0, reloadUntil: 0, aimT: 0, tgtId: 0, lastSeen: null, alert: null, cover: null, crouchAt: 0, hitBy: null, shareAt: 0, vy: 0, brag: 0, will: null, peek: null, peekTry: 0, lookUntil: 0, spdCur: 0, mvx: undefined, mvz: undefined });
+}
+function botJump(b, now) { // 땅에 있을 때만
+  if (b.vy || b.y > floorAt(b.x, b.z) + 0.05 || now < (b.jumpAt || 0)) return false;
+  globalThis.ST.jump++; b.vy = PLAYER.jump * (0.92 + Math.random() * 0.08); b.c = false; b.jumpAt = now + 650;
+  return true;
 }
 function lineFree(x0, z0, x1, z1) { // 격자에서 두 점 사이가 뚫려 있는지
   const d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / 0.4);
@@ -915,7 +939,7 @@ function lineFree(x0, z0, x1, z1) { // 격자에서 두 점 사이가 뚫려 있
 function botFollow(b, tx, tz, dt, now, speed) {
   if (now < b.dodgeUntil) { botMove(b, b.dodgeX, b.dodgeZ, speed, dt, true); return [b.dodgeX, b.dodgeZ]; } // 끼었을 때 잠깐 다른 쪽으로
   if (now >= b.stkAt) { // 가려는데 1.3초 동안 거의 못 움직였으면 방향을 틀고 길을 다시 찾음
-    if (now - b.stkAt < 1500 && Math.hypot(b.x - b.sx, b.z - b.sz) < 0.45 && Math.hypot(tx - b.x, tz - b.z) > 1.5) { const a = Math.random() * 6.283; b.dodgeX = Math.cos(a); b.dodgeZ = Math.sin(a); b.dodgeUntil = now + 450; b.pathAt = 0; }
+    if (now - b.stkAt < 1500 && Math.hypot(b.x - b.sx, b.z - b.sz) < 0.45 && Math.hypot(tx - b.x, tz - b.z) > 1.5) { const a = Math.random() * 6.283; b.dodgeX = Math.cos(a); b.dodgeZ = Math.sin(a); b.dodgeUntil = now + 450; b.pathAt = 0; botJump(b, now); }
     b.sx = b.x; b.sz = b.z; b.stkAt = now + 1300;
   }
   if (now >= b.pathAt) {
@@ -978,11 +1002,57 @@ function botRoam(b, near, now) {
   }
   return (b.roam = { x, z, until: now + 8000 + Math.random() * 8000 });
 }
+// 봇의 의지: 성격과 기세(conf)에 따라 지금 하고 싶은 일을 스스로 고름 (데스매치)
+//  hunt 적 찾아 나서기 · flank 옆으로 돌아가기 · camp 좋은 자리에서 버티기 · follow 팀원 따라다니기 · revenge 나 죽인 놈 찾기 · wander 산책
+function botWill(room, b, near, now) {
+  let w = b.will;
+  const P = b.P, conf = b.conf || 0;
+  const nem = b.nemesis && now < b.nemesis.until ? room.players.get(b.nemesis.id) : null;
+  if (w && w.kind === 'follow') { const t = room.players.get(w.id); if (!t || !t.alive) w = null; }
+  if (!w || now >= w.until) {
+    const mates = [];
+    for (const t of room.players.values()) if (t !== b && t.alive && t.team === b.team && room.mode !== 'br') mates.push(t);
+    const hum = mates.filter((t) => !t.bot);
+    const opts = [
+      ['hunt', 0.8 + P.aggro * 2 + conf],
+      ['flank', near ? P.sneaky * 2 : 0],
+      ['camp', P.patience * 1.8 - conf * 0.8 - P.aggro * 0.5],
+      ['follow', mates.length ? P.social * 1.4 + (hum.length ? 0.9 : 0) - conf * 0.3 : 0],
+      ['revenge', nem && nem.alive ? 1 + P.aggro * 2.2 : 0],
+      ['wander', 0.45],
+    ];
+    let sum = 0;
+    for (const o of opts) sum += (o[1] = Math.max(0, o[1]));
+    let r = Math.random() * sum, kind = 'wander';
+    for (const [k, v] of opts) if ((r -= v) < 0) { kind = k; break; }
+    w = { kind, until: now + 9000 + Math.random() * 12000, r: 1.6 };
+    if (kind === 'follow') { const pool = hum.length && Math.random() < 0.7 ? hum : mates, t = pool[Math.floor(Math.random() * pool.length)]; w.id = t.id; w.side = Math.random() < 0.5 ? 1 : -1; w.until = now + 15000 + Math.random() * 15000; }
+    else if (kind === 'flank') { // 적이 있는 쪽 옆구리로 크게 돌아감
+      const dx = near.x - b.x, dz = near.z - b.z, l = Math.hypot(dx, dz) || 1, sd = Math.random() < 0.5 ? 1 : -1;
+      let x = near.x + (-dz / l) * sd * 16 - (dx / l) * 4, z = near.z + (dx / l) * sd * 16 - (dz / l) * 4;
+      for (let k = 0; k < 6 && isBlockedAt(x, z); k++) { x += (Math.random() - 0.5) * 6; z += (Math.random() - 0.5) * 6; }
+      Object.assign(w, { x, z, r: 3, until: now + 16000 });
+    } else if (kind === 'camp') { // 엄폐가 되는 자리를 골라 적이 올 쪽을 지켜봄
+      const ax = near ? (near.x + b.x) / 2 : b.x, az = near ? (near.z + b.z) / 2 : b.z, h = holdSpot(room, b, ax, az, 'camp' + now);
+      Object.assign(w, { x: h.x, z: h.z, r: 0.9, look: near ? [near.x, near.z] : null, until: now + 7000 + P.patience * 16000 });
+    } else if (kind === 'wander') { const rm = botRoam(b, null, now); Object.assign(w, { x: rm.x, z: rm.z }); }
+    b.will = w; globalThis.ST[kind] = (globalThis.ST[kind] || 0) + 1;
+  }
+  if (w.kind === 'hunt') { const rm = botRoam(b, near, now); w.x = rm.x; w.z = rm.z; }
+  else if (w.kind === 'revenge') { // 대충 어디 있는지 짐작해서 감
+    if (!nem || !nem.alive) { b.will = null; b.nemesis = null; const rm = botRoam(b, near, now); return { kind: 'hunt', x: rm.x, z: rm.z }; }
+    if (!w.x || now >= (w.guessAt || 0)) { w.guessAt = now + 3500; w.x = nem.x + (Math.random() - 0.5) * 12; w.z = nem.z + (Math.random() - 0.5) * 12; }
+  } else if (w.kind === 'follow') { // 팀원 조금 뒤 옆에서 같은 쪽을 봄
+    const t = room.players.get(w.id), fx = -Math.sin(t.yaw), fz = -Math.cos(t.yaw);
+    w.x = t.x - fx * 3 + -fz * w.side * 1.6; w.z = t.z - fz * 3 + fx * w.side * 1.6; w.yaw = t.yaw + w.side * 0.5; w.r = 2.2;
+  }
+  return w;
+}
 // 엄폐물 끼고 싸우기: 엄폐 뒤(cx,cz)에 숨었다가 쏘던 자리(px,pz)로 빼꼼 나와 쏘기를 번갈아 함
 function botPeek(b, W, dt, now, ex, ez) {
   const pk = b.peek;
   if (now >= pk.until) {
-    pk.out = !pk.out; globalThis.ST.swap++;
+    pk.out = !pk.out;
     pk.until = now + (pk.out ? 1300 + Math.random() * 1900 : 550 + Math.random() * 900);
     if (!pk.out && !W.melee && !b.reloadUntil && b.mag < W.mag * 0.6) b.reloadUntil = now + W.reload; // 숨은 김에 장전
     if (pk.out) pk.side = Math.random() < 0.5 ? 1 : -1;
@@ -1029,7 +1099,12 @@ function botTick(room, b, dt, now) {
     if (b.y <= g) { b.y = g; b.air = false; b.stuckAt = now + 3000; }
     return;
   }
-  b.y = floorAt(b.x, b.z);
+  if (!b.P) { b.P = botPersona(b.tier); b.conf = 0; }
+  const fl = floorAt(b.x, b.z);
+  if (b.vy || b.y > fl + 0.02) { b.vy -= PLAYER.gravity * dt; b.y += b.vy * dt; if (b.y <= fl) { b.y = fl; b.vy = 0; } } // 점프 중
+  else b.y = fl;
+  const air = b.y > fl + 0.05;
+  b.conf = (b.conf || 0) * Math.exp(-dt / 70); // 기세는 천천히 가라앉음
   if (!b.mvF) b.spdCur = 0; // 지난 틱에 서 있었으면 다시 천천히 출발
   b.mvF = false;
   if (!br) for (const t of room.players.values()) { if (t === b || !t.alive || !t.bot || t.team !== b.team) continue; const sx = b.x - t.x, sz = b.z - t.z, sd = Math.hypot(sx, sz); if (sd < 0.9 && sd > 0.01) botMove(b, sx, sz, 1.8, dt, true); } // 같은 팀 봇끼리 겹쳐 서지 않음
@@ -1053,10 +1128,11 @@ function botTick(room, b, dt, now) {
     const score = d * (known ? 0.6 : 1);
     if (score < vs && canSee(room, b, e)) { vs = score; vis = e; vd = d; }
   }
+  if (b.hitBy && b.hitBy.t !== b.hitSeen) { b.hitSeen = b.hitBy.t; if (Math.random() < b.P.jumpy * 0.3) botJump(b, now); if (b.hp < 45 && Math.random() < b.P.chatty * 0.5) room.botRadio(b, 3, now); } // 맞으면 깜짝 점프, 위험하면 도와달라고 함
   if (vis) {
     // ── 교전 ──
     const dx = vis.x - b.x, dz = vis.z - b.z;
-    if (b.tgtId !== vis.id) { b.tgtId = vis.id; b.seen = now; b.aimT = 0; }
+    if (b.tgtId !== vis.id) { b.tgtId = vis.id; b.seen = now; b.aimT = 0; if (vd > 18 && Math.random() < b.P.chatty * 0.4) room.botRadio(b, 2, now); }
     b.aimT += dt; b.lastSeen = { x: vis.x, z: vis.z, t: now }; b.alert = null; b.acting = false;
     if (!br && now >= b.shareAt) { // 본 것을 가까운 팀원에게 알림
       b.shareAt = now + 900;
@@ -1073,7 +1149,7 @@ function botTick(room, b, dt, now) {
     if (canPeek && !hurt && (!b.peek || now > b.peek.exp) && now >= (b.peekTry || 0)) { // 바로 옆에 숨을 데가 있으면 끼고 싸움
       b.peekTry = now + 2200 + Math.random() * 1500;
       const c = Math.random() < 0.35 + b.tier * 0.18 ? findCover(room, b, vis, now, 4) : { ok: false };
-      globalThis.ST.peekTry++; if (c.ok) globalThis.ST.peek++; b.peek = c.ok ? { cx: c.x, cz: c.z, px: b.x, pz: b.z, out: true, side: 1, until: now + 900 + Math.random() * 1600, exp: now + 14000 } : null;
+      b.peek = c.ok ? { cx: c.x, cz: c.z, px: b.x, pz: b.z, out: true, side: 1, until: now + 900 + Math.random() * 1600, exp: now + 14000 } : null;
     }
     if (b.peek && (!canPeek || Math.hypot(b.peek.px - b.x, b.peek.pz - b.z) > 7)) b.peek = null;
     if (b.peek && !hurt) { botPeek(b, W, dt, now, vis.x, vis.z); moved = true; }
@@ -1088,13 +1164,15 @@ function botTick(room, b, dt, now) {
           const r = Math.random();
           b.strafe = r < 0.1 + b.tier * 0.06 ? 0 : r < 0.68 ? -(b.strafe || 1) : b.strafe || 1;
           b.strafeSpd = 0.45 + Math.random() * 0.4; b.strafeAt = now + 350 + Math.random() * 1300;
+          if (b.strafe && vd < 30 && Math.random() < b.P.jumpy * (0.12 + b.tier * 0.06)) botJump(b, now); // 점프하며 피하기
         }
         const back = vd < pref * 0.45 && W.cat !== 'sg' && !W.melee ? -0.7 : W.cat === 'sg' && vd > 5 ? 0.7 : 0; // 너무 가까우면 물러나고, 샷건은 붙음
         const hold = W.cat === 'sr' && b.aimT < 1.4; // 저격총은 멈춰서 조준
         if (!hold && (b.strafe || back) && !botMove(b, -dz * b.strafe + dx * back, dx * b.strafe + dz * back, PLAYER.speed * (b.strafeSpd || 0.7), dt)) b.strafe = -b.strafe;
       }
     }
-    if (!b.peek && now >= b.crouchAt) { b.crouchAt = now + 1500 + Math.random() * 2500; b.c = L.smart && vd > 14 && Math.random() < 0.3; }
+    if (air) b.c = false;
+    else if (!b.peek && now >= b.crouchAt) { b.crouchAt = now + 1500 + Math.random() * 2500; b.c = L.smart && vd > 14 && Math.random() < 0.3; }
     if (now >= b.nadeAt && now - b.seen > b.react && vd > 9 && vd < 24) { // 가끔 수류탄·섬광탄을 던짐
       b.nadeAt = now + 2500;
       const k = b.nades[0] ? 0 : b.nades[2] ? 2 : -1;
@@ -1107,7 +1185,7 @@ function botTick(room, b, dt, now) {
     if (now - b.seen > b.react + (br ? 250 : 0) && Math.abs(diff) < 0.22 && now >= b.pauseUntil && now - b.lastShot >= gap && vd < (W.melee ? 2.2 : W.range)) {
       b.lastShot = now;
       const h = vis.hist, tv = h.length > 3 ? Math.hypot(h[h.length - 1].x - h[h.length - 4].x, h[h.length - 1].z - h[h.length - 4].z) / 0.15 : 0; // 상대가 움직이는 속도
-      const e = b.err * Math.max(0.45, 1 - b.aimT / 1.6) * (1 + Math.min(1, tv / 7) * 0.7) * (W.slot === 'side' ? 1.15 : 1) * (W.cat === 'sr' ? 0.45 : 1) * (b.c ? 0.8 : 1) * (br ? 1.2 : 1);
+      const e = b.err * Math.max(0.45, 1 - b.aimT / 1.6) * (1 + Math.min(1, tv / 7) * 0.7) * (W.slot === 'side' ? 1.15 : 1) * (W.cat === 'sr' ? 0.45 : 1) * (b.c ? 0.8 : 1) * (br ? 1.2 : 1) * (air ? 2 : 1);
       const dirs = [];
       const ay = wantYaw + (Math.random() + Math.random() - 1) * e * 1.6, ap = b.pitch + (Math.random() + Math.random() - 1) * e * 1.6;
       for (let i = 0; i < W.pellets; i++) dirs.push(W.pellets > 1 ? dirFrom(ay + (Math.random() - 0.5) * W.spread * 1.6, ap + (Math.random() - 0.5) * W.spread * 1.6) : dirFrom(ay, ap));
@@ -1124,7 +1202,7 @@ function botTick(room, b, dt, now) {
   if (!b.reloadUntil && !W.melee && b.mag < W.mag * 0.5) b.reloadUntil = now + W.reload; // 여유 있을 때 장전
   const face = (mv) => { if (mv[0] || mv[1]) b.yaw += clamp(angDiff(b.yaw, Math.atan2(-mv[0], -mv[1]) + Math.sin(now / 1500 + b.id * 1.7) * 0.4), -5 * dt, 5 * dt); }; // 걸으면서 고개를 좌우로 돌려 둘러봄
   const glance = () => { // 이동 중 가끔 멈춰 서서 한쪽을 살핌
-    if (now >= (b.lookAt || 0)) { globalThis.ST.glance++; b.lookAt = now + 6000 + Math.random() * 9000; b.lookUntil = now + 500 + Math.random() * 1100; b.lookYaw = b.yaw + (Math.random() - 0.5) * 2.6; }
+    if (now >= (b.lookAt || 0)) { b.lookAt = now + 6000 + Math.random() * 9000; b.lookUntil = now + 500 + Math.random() * 1100; b.lookYaw = b.yaw + (Math.random() - 0.5) * 2.6; }
     if (now >= (b.lookUntil || 0)) return false;
     b.yaw += clamp(angDiff(b.yaw, b.lookYaw), -4 * dt, 4 * dt);
     return true;
@@ -1135,12 +1213,16 @@ function botTick(room, b, dt, now) {
   const al = b.alert && now - b.alert.t < 7000 && !(g && b.team !== room.attack && Math.hypot(b.alert.x - b.x, b.alert.z - b.z) > 30) ? b.alert : null; // 수비 봇은 먼 총소리에 자리를 비우지 않음
   const poi = ls || al;
   const aimAt = (q, r) => { b.yaw += clamp(angDiff(b.yaw, Math.atan2(-(q.x - b.x), -(q.z - b.z))), -r * dt, r * dt); };
+  if (now < (b.brag || 0) && !(g && g.must)) { // 잡은 뒤 자랑: 앉았다 일어났다 하거나 점프
+    globalThis.ST.brag++; if (b.P.jumpy > 0.5) botJump(b, now); else b.c = Math.floor(now / 170) % 2 === 0;
+    return;
+  }
   if (b.peek && (!ls || (g && g.must))) b.peek = null;
   if (b.peek) { // 엄폐 뒤에 숨어 있다가 다시 빼꼼 나감 — 나왔는데도 안 보이면 찾으러 감
     const d = botPeek(b, W, dt, now, ls.x, ls.z);
     if (b.peek.out && d < 0.5) b.peek = null; else { aimAt(ls, 6); return; }
   }
-  if (ls && b.hp < 38 && L.smart && b.tier !== 0 && now - ls.t < 3200 && !(g && g.must)) { globalThis.ST.wait++; aimAt(ls, 5); b.c = true; return; } // 많이 다쳤으면 쫓지 않고 숨어서 노림
+  if (ls && b.hp < 38 && L.smart && b.tier !== 0 && now - ls.t < 3200 && !(g && g.must)) { aimAt(ls, 5); b.c = true; return; } // 많이 다쳤으면 쫓지 않고 숨어서 노림
   if (poi && !(g && g.must) && !(br && Math.hypot(b.x - room.zone.cx, b.z - room.zone.cz) > room.zone.r - 4)) {
     const d = Math.hypot(poi.x - b.x, poi.z - b.z);
     if (b.reloadUntil && ls && L.smart) { b.yaw += clamp(angDiff(b.yaw, Math.atan2(-(poi.x - b.x), -(poi.z - b.z))), -5 * dt, 5 * dt); return; } // 장전이 끝날 때까지 숨어서 기다림
@@ -1167,9 +1249,18 @@ function botTick(room, b, dt, now) {
     }
     return;
   }
-  if (glance()) return;
-  const rm = botRoam(b, near, now), mv = botFollow(b, rm.x, rm.z, dt, now, PLAYER.speed * (nd > 28 ? 1.2 : 1));
-  if (mv[0] || mv[1]) face(mv); else b.roam = null; // 갈 수 없는 곳이면 다른 곳을 고름
+  const w = botWill(room, b, near, now);
+  const dw = Math.hypot(w.x - b.x, w.z - b.z);
+  if (dw > (w.r || 1.5)) {
+    if (w.kind !== 'follow' && glance()) return;
+    const run = nd > 28 && w.kind !== 'flank', mv = botFollow(b, w.x, w.z, dt, now, PLAYER.speed * (run ? 1.2 : w.kind === 'flank' ? 0.85 : 1));
+    if (mv[0] || mv[1]) { face(mv); if (run && Math.random() < b.P.jumpy * 0.25 * dt) botJump(b, now); } // 신나면 뛰다가 점프
+    else { b.will = null; b.roam = null; } // 갈 수 없는 곳이면 다른 생각
+  } else if (w.kind === 'camp' || w.kind === 'follow') { // 자리 잡고 지켜봄
+    b.c = w.kind === 'camp' && L.smart;
+    const lk = w.look ? Math.atan2(-(w.look[0] - b.x), -(w.look[1] - b.z)) : w.yaw ?? b.yaw;
+    b.yaw += clamp(angDiff(b.yaw, lk + Math.sin(now / 1300 + b.id) * 0.6), -3 * dt, 3 * dt);
+  } else b.will = null; // 도착 → 다음에 뭘 할지 다시 생각
 }
 
 // 생존전 봇: 구역 안으로 이동 → 쓸 만한 아이템 줍기 → 돌아다니기
