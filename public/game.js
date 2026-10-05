@@ -1689,7 +1689,7 @@ const STATS = [
 function lkPartsRefresh() {
   const slots = partSlots(lkW), cur = myParts[lkW], box = $('lkParts');
   box.textContent = '';
-  $('lkPartN').textContent = slots.length ? `파츠 ${cur.length} / ${PART_MAX}` : '이 무기에는 파츠를 달 수 없어요';
+  { const sk = mySk[lkW], lv = myLv(sk), bun = SKINS[sk] && SKINS[sk].bundle; $('lkPartN').textContent = slots.length ? `파츠 ${cur.length} / ${PART_MAX}` + (bun ? ` · 파츠 스킨 ${lv >= 5 ? '각성 (도는 고리·보석)' : lv >= 3 ? '켜짐' : `Lv.3에 열림 (지금 Lv.${lv})`}` : '') : '이 무기에는 파츠를 달 수 없어요'; } // 스킨 업그레이드로 파츠도 스킨 장식
   for (const [sid, sname] of PART_SLOTS) {
     const builtIn = sid === 'muz' && WEAPONS[lkW].quiet && WEAPONS[lkW].model[0] !== 'knife';
     if (!slots.includes(sid) && !builtIn) continue;

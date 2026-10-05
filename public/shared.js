@@ -115,7 +115,7 @@ export function effWeapon(wi, parts) {
 // ───────────── 스킨 업그레이드 ─────────────
 // 스킨을 낀 무기로 처치할수록 스킨 레벨이 오른다. 2 궤적 색 · 3 총구 불꽃과 탄착 색 · 4 처치 효과 · 5 각성(빛나는 겉면)
 export const SKIN_LV = [0, 5, 15, 35, 70];
-export const SKIN_LV_NAME = ['', '기본', '궤적 색', '불꽃·탄착 색', '처치 효과', '각성'];
+export const SKIN_LV_NAME = ['', '기본', '궤적 색', '파츠 스킨 (단 파츠에 스킨 장식)', '처치 효과', '각성 · 파츠 각성 (도는 고리·보석)'];
 export function skinLevel(xp) { let l = 1; for (let i = 1; i < SKIN_LV.length; i++) if (xp >= SKIN_LV[i]) l = i + 1; return l; }
 export const CATS = [['side', '보조무기'], ['smg', '기관단총'], ['sg', '샷건'], ['ar', '소총'], ['sr', '저격총'], ['mg', '기관총']];
 export const NADE_WEAPON = 99; // 킬 로그에서 수류탄을 뜻하는 번호
