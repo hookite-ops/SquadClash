@@ -1,1 +1,1 @@
-build 2026-10-05 bot-persona
+build 2026-10-05 bot-tactics

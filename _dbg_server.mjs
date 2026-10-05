@@ -1,3 +1,4 @@
+globalThis.ST={peekTry:0,peek:0,swap:0,wait:0,glance:0};setInterval(()=>console.log(JSON.stringify(globalThis.ST)),15000);
 // SQUAD CLASH — 멀티플레이 FPS 서버: 폭탄전·팀 데스매치·생존전 (정적 파일 + WebSocket 한 프로세스)
 import http from 'node:http';
 import fs from 'node:fs';
@@ -981,7 +982,7 @@ function botRoam(b, near, now) {
 function botPeek(b, W, dt, now, ex, ez) {
   const pk = b.peek;
   if (now >= pk.until) {
-    pk.out = !pk.out;
+    pk.out = !pk.out; globalThis.ST.swap++;
     pk.until = now + (pk.out ? 1300 + Math.random() * 1900 : 550 + Math.random() * 900);
     if (!pk.out && !W.melee && !b.reloadUntil && b.mag < W.mag * 0.6) b.reloadUntil = now + W.reload; // 숨은 김에 장전
     if (pk.out) pk.side = Math.random() < 0.5 ? 1 : -1;
@@ -1072,7 +1073,7 @@ function botTick(room, b, dt, now) {
     if (canPeek && !hurt && (!b.peek || now > b.peek.exp) && now >= (b.peekTry || 0)) { // 바로 옆에 숨을 데가 있으면 끼고 싸움
       b.peekTry = now + 2200 + Math.random() * 1500;
       const c = Math.random() < 0.35 + b.tier * 0.18 ? findCover(room, b, vis, now, 4) : { ok: false };
-      b.peek = c.ok ? { cx: c.x, cz: c.z, px: b.x, pz: b.z, out: true, side: 1, until: now + 900 + Math.random() * 1600, exp: now + 14000 } : null;
+      globalThis.ST.peekTry++; if (c.ok) globalThis.ST.peek++; b.peek = c.ok ? { cx: c.x, cz: c.z, px: b.x, pz: b.z, out: true, side: 1, until: now + 900 + Math.random() * 1600, exp: now + 14000 } : null;
     }
     if (b.peek && (!canPeek || Math.hypot(b.peek.px - b.x, b.peek.pz - b.z) > 7)) b.peek = null;
     if (b.peek && !hurt) { botPeek(b, W, dt, now, vis.x, vis.z); moved = true; }
@@ -1123,7 +1124,7 @@ function botTick(room, b, dt, now) {
   if (!b.reloadUntil && !W.melee && b.mag < W.mag * 0.5) b.reloadUntil = now + W.reload; // 여유 있을 때 장전
   const face = (mv) => { if (mv[0] || mv[1]) b.yaw += clamp(angDiff(b.yaw, Math.atan2(-mv[0], -mv[1]) + Math.sin(now / 1500 + b.id * 1.7) * 0.4), -5 * dt, 5 * dt); }; // 걸으면서 고개를 좌우로 돌려 둘러봄
   const glance = () => { // 이동 중 가끔 멈춰 서서 한쪽을 살핌
-    if (now >= (b.lookAt || 0)) { b.lookAt = now + 6000 + Math.random() * 9000; b.lookUntil = now + 500 + Math.random() * 1100; b.lookYaw = b.yaw + (Math.random() - 0.5) * 2.6; }
+    if (now >= (b.lookAt || 0)) { globalThis.ST.glance++; b.lookAt = now + 6000 + Math.random() * 9000; b.lookUntil = now + 500 + Math.random() * 1100; b.lookYaw = b.yaw + (Math.random() - 0.5) * 2.6; }
     if (now >= (b.lookUntil || 0)) return false;
     b.yaw += clamp(angDiff(b.yaw, b.lookYaw), -4 * dt, 4 * dt);
     return true;
@@ -1139,7 +1140,7 @@ function botTick(room, b, dt, now) {
     const d = botPeek(b, W, dt, now, ls.x, ls.z);
     if (b.peek.out && d < 0.5) b.peek = null; else { aimAt(ls, 6); return; }
   }
-  if (ls && b.hp < 38 && L.smart && b.tier !== 0 && now - ls.t < 3200 && !(g && g.must)) { aimAt(ls, 5); b.c = true; return; } // 많이 다쳤으면 쫓지 않고 숨어서 노림
+  if (ls && b.hp < 38 && L.smart && b.tier !== 0 && now - ls.t < 3200 && !(g && g.must)) { globalThis.ST.wait++; aimAt(ls, 5); b.c = true; return; } // 많이 다쳤으면 쫓지 않고 숨어서 노림
   if (poi && !(g && g.must) && !(br && Math.hypot(b.x - room.zone.cx, b.z - room.zone.cz) > room.zone.r - 4)) {
     const d = Math.hypot(poi.x - b.x, poi.z - b.z);
     if (b.reloadUntil && ls && L.smart) { b.yaw += clamp(angDiff(b.yaw, Math.atan2(-(poi.x - b.x), -(poi.z - b.z))), -5 * dt, 5 * dt); return; } // 장전이 끝날 때까지 숨어서 기다림
