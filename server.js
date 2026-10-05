@@ -90,7 +90,25 @@ function skinsFor(codes) { // 코드들로 쓸 수 있는 스킨 번호 모음
 function cleanSkins(sk, owned) { return WEAPONS.map((_, i) => (Array.isArray(sk) && owned.has(sk[i]) ? sk[i] : 0)); }
 const redeemLog = new Map(); // 주소별 시도 횟수 (마구 찍어 맞히기 방지)
 
-const BOT_NAMES = ['알파', '브라보', '찰리', '델타', '에코', '폭스', '골프', '호텔', '주노', '킬로'];
+// 봇 이름: 실제 사람이 쓸 법한 이름·별명 (방마다 섞어서 겹치지 않게 고름)
+const BOT_NAMES = ['김민준', '이서연', '박지호', '최유나', '정우진', '강하늘', '윤도현', '한지민', '조승우', '서지안', '임태윤', '오세린',
+  '민트초코', '치킨러버', '새벽감성', '하늘빛소년', '별헤는밤', '라면한그릇', '퇴근하고싶다', '판교개발자', '전역D100', '수능끝', '고양이집사', '감자튀김',
+  'Shadow_K', 'ZeroOne', 'noobmaster69', 'kimchi99', 'xXRyuXx', 'Blaze', 'Nova', 'ghost_kr', 'Mango', 'Ttaeng', 'jiwoo_02', 'K1ngSlayer',
+  '헤드샷장인', '에임연습중', '초보입니다', '무지성돌격', '캠핑족', '스나장인', '총알배송', '왼손잡이', '야간근무', 'ㅇㅅㅇ', '닉네임뭐하지', '오늘도패배',
+  'Haru', 'Seoul_Wolf', 'MoonWalker', 'pixel', 'Tiger_JH', 'Cobalt', 'yeonu', 'Daebak', 'snowman', 'Rookie01', 'aimbotX', 'LuckyStrike'];
+// 봇 실력 등급: 같은 방 난이도 안에서도 봇마다 실력이 크게 다름
+// react 반응 · err 조준 오차 · turn 몸 돌리기 · dmg 피해 · nade 수류탄 빈도 · head 머리 겨냥 확률 · spray 연사를 길게 끄는 정도 · push 돌격 성향
+const BOT_TIERS = [
+  { name: '뉴비', p: 0.25, react: 1.5, err: 1.7, turn: 0.7, dmg: 0.82, nade: 0.3, head: 0, spray: 3, push: 0.3 },
+  { name: '일반', p: 0.4, react: 1.08, err: 1.1, turn: 0.95, dmg: 0.95, nade: 0.8, head: 0.08, spray: 1, push: 0.5 },
+  { name: '고수', p: 0.25, react: 0.82, err: 0.78, turn: 1.15, dmg: 1.05, nade: 1.2, head: 0.25, spray: 0, push: 0.7 },
+  { name: '에이스', p: 0.1, react: 0.62, err: 0.55, turn: 1.4, dmg: 1.12, nade: 1.5, head: 0.45, spray: -1, push: 0.9 },
+];
+function pickTier() { let r = Math.random(); for (let i = 0; i < BOT_TIERS.length; i++) { if ((r -= BOT_TIERS[i].p) < 0) return i; } return 1; }
+function botName(room) { // 아직 이 방에 없는 이름 하나를 무작위로
+  const used = new Set([...room.players.values()].map((p) => p.name)), free = BOT_NAMES.filter((n) => !used.has(n));
+  return free.length ? free[Math.floor(Math.random() * free.length)] : BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)] + Math.floor(10 + Math.random() * 89);
+}
 
 // ───────────── 정적 파일 ─────────────
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
@@ -258,9 +276,7 @@ class Room {
       let want = Math.max(0, target - this.humans(team));
       while (bots.length > want) this.removePlayer(bots.pop());
       while (bots.length < want) {
-        const used = new Set([...this.players.values()].map((p) => p.name));
-        const nm = BOT_NAMES.map((n) => '봇 ' + n).find((n) => !used.has(n)) || '봇 ' + nextId;
-        const b = this.addPlayer(nm, null, team, true);
+        const b = this.addPlayer(botName(this), null, team, true); b.tier = pickTier();
         if (this.mode === 'tdm') this.spawn(b, Date.now()); // 폭탄전은 다음 라운드에 합류
         bots.push(b);
       }
@@ -499,7 +515,7 @@ class Room {
     p.x = best[0]; p.y = floorAt(best[0], best[1]); p.z = best[1]; p.yaw = best[2]; p.pitch = 0;
     p.hp = 100; p.alive = true; p.protUntil = this.mode === 'tdm' ? now + PROT_MS : 0; p.hist.length = 0;
     p.acting = false; p.actT = 0; p.c = false; p.blindUntil = 0;
-    if (this.mode === 'tdm') { p.nades = [1, 1, 1]; if (p.bot) p.prim = BOT_PRIMS[Math.floor(Math.random() * BOT_PRIMS.length)]; if (!p.prim) p.prim = W_DEFAULT_PRIM; this.sendInv(p); }
+    if (this.mode === 'tdm') { p.nades = [1, 1, 1]; if (p.bot) { const pool = p.tier === 3 && Math.random() < 0.35 ? [15, 11] : p.tier === 0 ? [6, 7, 13] : BOT_PRIMS; p.prim = pool[Math.floor(Math.random() * pool.length)]; } /* 에이스는 가끔 저격총, 뉴비는 기관단총 */ if (!p.prim) p.prim = W_DEFAULT_PRIM; this.sendInv(p); }
     p.w = p.prim || p.side;
     if (p.bot) { p.path = []; p.pathAt = 0; p.seen = 0; p.gx = (Math.random() - 0.5) * 5; p.gz = (Math.random() - 0.5) * 5; botInit(this, p); }
     this.broadcast({ t: 'spawn', id: p.id, p: [p.x, p.y, p.z], yaw: p.yaw });
@@ -532,7 +548,7 @@ class Room {
       }
       ends.push([r2(o[0] + d[0] * tBest), r2(o[1] + d[1] * tBest), r2(o[2] + d[2] * tBest)]);
       if (hit && now >= hit.protUntil) {
-        let dm = W.dmg * (head ? W.head : 1) * (p.bot ? LV[this.botLv].dmg * (this.mode === 'br' ? (hit.bot ? 0.22 : 0.85) : 1) : 1);
+        let dm = W.dmg * (head ? W.head : 1) * (p.bot ? LV[this.botLv].dmg * (p.dmgK || 1) * (this.mode === 'br' ? (hit.bot ? 0.22 : 0.85) : 1) : 1);
         if (W.falloff) dm *= clamp(1 - (tBest - W.falloff[0]) / (W.falloff[1] - W.falloff[0]), 0.2, 1);
         const cur = dmg.get(hit) || { dmg: 0, head: false };
         cur.dmg += dm; cur.head = cur.head || head;
@@ -596,9 +612,7 @@ class Room {
     const want = Math.max(0, BR.total - this.humans());
     while (bots.length > want) this.removePlayer(bots.pop());
     while (bots.length < want) {
-      const used = new Set([...this.players.values()].map((p) => p.name));
-      const nm = BOT_NAMES.map((n) => '봇 ' + n).find((n) => !used.has(n)) || '봇 ' + nextId;
-      const b = this.addPlayer(nm, null, 0, true); b.team = b.id;
+      const b = this.addPlayer(botName(this), null, 0, true); b.team = b.id; b.tier = pickTier();
       bots.push(b);
     }
     // 아이템 뿌리기
@@ -878,8 +892,8 @@ const LV = [
 ];
 const PREF = { melee: 2, side: 12, smg: 12, sg: 6, ar: 24, sr: 46, mg: 26 }; // 무기 종류별로 유지하려는 거리
 function botInit(room, b) { // 난이도에 봇마다 조금씩 차이를 둠
-  const L = LV[room.botLv], k = 0.85 + Math.random() * 0.3;
-  Object.assign(b, { react: L.react * k, err: L.err * k, turn: L.turn / k, magW: -1, mag: 0, reloadUntil: 0, aimT: 0, tgtId: 0, lastSeen: null, alert: null, cover: null, crouchAt: 0, hitBy: null, shareAt: 0 });
+  const L = LV[room.botLv], k = 0.9 + Math.random() * 0.2, T = BOT_TIERS[b.tier ?? 1];
+  Object.assign(b, { react: L.react * T.react * k, err: L.err * T.err * k, turn: (L.turn * T.turn) / k, dmgK: T.dmg, T, magW: -1, mag: 0, reloadUntil: 0, aimT: 0, tgtId: 0, lastSeen: null, alert: null, cover: null, crouchAt: 0, hitBy: null, shareAt: 0 });
 }
 function lineFree(x0, z0, x1, z1) { // 격자에서 두 점 사이가 뚫려 있는지
   const d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / 0.4);
@@ -1012,16 +1026,17 @@ function botTick(room, b, dt, now) {
     }
     const wantYaw = Math.atan2(-dx, -dz), diff = angDiff(b.yaw, wantYaw);
     b.yaw += clamp(diff, -b.turn * dt, b.turn * dt);
-    b.pitch = Math.atan2(vis.y + (vis.c ? 0.7 : 1.1) - (b.y + PLAYER.eye), vd || 1);
+    if (b.tgtId !== b.headFor) { b.headFor = b.tgtId; b.headAim = Math.random() < (b.T ? b.T.head : 0); } // 고수일수록 머리를 노림
+    b.pitch = Math.atan2(vis.y + (vis.c ? 0.7 : b.headAim ? 1.5 : 1.1) - (b.y + PLAYER.eye), vd || 1);
     // 움직임: 체력이 낮거나 장전 중이면 엄폐, 아니면 무기에 맞는 거리를 유지하며 좌우로 움직임
     const pref = PREF[W.cat] || 15, hurt = b.hp < 38 || b.reloadUntil > 0;
     let moved = false;
-    if (hurt && L.smart) {
+    if (hurt && L.smart && b.tier !== 0) {
       if (!b.cover || now >= b.cover.until) b.cover = findCover(room, b, vis, now);
       if (b.cover.ok) { moved = true; if (Math.hypot(b.cover.x - b.x, b.cover.z - b.z) > 0.5) botMove(b, b.cover.x - b.x, b.cover.z - b.z, PLAYER.speed * 1.25, dt); }
     }
     if (!moved) {
-      if (vd > pref * 1.6) botFollow(b, vis.x, vis.z, dt, now, PLAYER.speed);
+      if (vd > pref * (2.2 - (b.T ? b.T.push : 0.5) * 1.2)) botFollow(b, vis.x, vis.z, dt, now, PLAYER.speed); // 돌격형은 더 가까이 붙음
       else {
         if (now >= b.strafeAt) { b.strafe = -b.strafe; b.strafeAt = now + 500 + Math.random() * 1300; }
         const back = vd < pref * 0.45 && W.cat !== 'sg' && !W.melee ? -0.7 : W.cat === 'sg' && vd > 5 ? 0.7 : 0; // 너무 가까우면 물러나고, 샷건은 붙음
@@ -1033,7 +1048,7 @@ function botTick(room, b, dt, now) {
     if (now >= b.nadeAt && now - b.seen > b.react && vd > 9 && vd < 24) { // 가끔 수류탄·섬광탄을 던짐
       b.nadeAt = now + 2500;
       const k = b.nades[0] ? 0 : b.nades[2] ? 2 : -1;
-      if (k >= 0 && Math.random() < 0.35) { room.throwNade(b, k, dirFrom(wantYaw, 0.16 + vd * 0.011), now); b.nadeAt = now + 9000; }
+      if (k >= 0 && Math.random() < 0.35 * (b.T ? b.T.nade : 1)) { room.throwNade(b, k, dirFrom(wantYaw, 0.16 + vd * 0.011), now); b.nadeAt = now + 9000; }
     }
     // 사격: 탄창을 다 쓰면 장전, 멀면 끊어 쏘고, 오래 겨눌수록 정확해짐
     if (b.reloadUntil) return;
@@ -1049,7 +1064,8 @@ function botTick(room, b, dt, now) {
       room.fire(b, dirs, wi, now, now);
       if (!W.melee) b.mag--;
       const far = vd > 30, auto = W.auto || W.burst;
-      if (++b.burst >= (auto ? (far ? 3 : 5) + Math.floor(Math.random() * 3) : 1)) { b.burst = 0; b.pauseUntil = now + (auto ? (far ? 520 : 260) + Math.random() * 450 : 0); }
+      const sp = b.T ? b.T.spray : 0;
+      if (++b.burst >= (auto ? Math.max(2, (far ? 3 : 5) + sp) + Math.floor(Math.random() * 3) : 1)) { b.burst = 0; b.pauseUntil = now + (auto ? ((far ? 520 : 260) + Math.random() * 450) * (sp > 0 ? 0.6 : 1) : 0); }
     }
     return;
   }
