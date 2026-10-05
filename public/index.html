@@ -130,7 +130,10 @@ body.layedit .pad{outline:2px dashed rgba(255,255,255,.55);outline-offset:3px;to
 #lkCode button,#lkBtns button{height:36px;border:0;border-radius:8px;font-size:13px;font-weight:800;padding:0 10px;cursor:pointer;background:var(--acc);color:#12151a}
 #lkBtns{display:flex;gap:5px}#lkBtns button{flex:1}#lkBtns button.alt{background:rgba(255,255,255,.12);color:var(--txt);border:1px solid var(--line)}
 #lkMsg{font-size:12px;color:var(--acc);line-height:1.35}#lkMsg:empty{display:none}
-#lkTabSkin,#lkTabPart{display:flex;flex-direction:column;gap:6px}#lkTabSkin.hide,#lkTabPart.hide{display:none}
+#lkTabSkin,#lkTabPart,#lkTabOp{display:flex;flex-direction:column;gap:6px}#lkTabSkin.hide,#lkTabPart.hide,#lkTabOp.hide{display:none}
+#lkOps{display:grid;grid-template-columns:1fr 1fr;gap:5px}#lkOps .sk i{height:34px}
+#lkOpDesc{font-size:12px;line-height:1.45;background:rgba(255,255,255,.05);border-radius:8px;padding:7px 9px;min-height:2.9em}#lkOpNote{font-size:11px;color:var(--dim);line-height:1.4}
+#lkBtns3{display:flex;gap:5px}#lkBtns3 button{flex:1;height:36px;border:0;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;background:var(--acc);color:#12151a}#lkBtns3 button.alt{background:rgba(255,255,255,.12);color:var(--txt);border:1px solid var(--line)}
 #lkTabs{display:flex;gap:4px}#lkTabs button{height:30px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.06);color:var(--dim);font-size:13px;font-weight:800;padding:0 12px;cursor:pointer}
 #lkTabs button.on{background:var(--acc);color:#12151a;border-color:var(--acc)}
 #lkLv{font-size:11.5px;background:rgba(255,255,255,.05);border-radius:8px;padding:6px 8px;line-height:1.4}#lkLv b{display:block;font-size:12.5px}#lkLv span{color:var(--dim)}
@@ -480,7 +483,7 @@ details.help summary::-webkit-details-marker{display:none}details.help div{margi
   <div id="lkLeft"><h4>무기</h4></div>
   <div id="lkMid"><div id="lkTitle"><b id="lkName"></b><span id="lkSkin"></span></div><div id="lkHint">끌어서 돌려 보기</div></div>
   <div id="lkRight">
-    <div class="lkHead"><div id="lkTabs"><button data-tab="skin" class="on">스킨</button><button data-tab="part">파츠</button></div><button id="lkX">닫기 ✕</button></div>
+    <div class="lkHead"><div id="lkTabs"><button data-tab="skin" class="on">스킨</button><button data-tab="part">파츠</button><button data-tab="op">요원</button></div><button id="lkX">닫기 ✕</button></div>
     <div id="lkMsg"></div>
     <div id="lkTabSkin">
       <div id="lkSkins"></div>
@@ -488,6 +491,12 @@ details.help summary::-webkit-details-marker{display:none}details.help div{margi
       <div id="lkBtns"><button id="lkFx" class="alt">효과 미리보기</button><button id="lkAll" class="alt">전체 적용</button><button id="lkClose">닫기</button></div>
       <h4>스킨 코드</h4>
       <div id="lkCode"><input id="lkInput" type="text" maxlength="40" placeholder="코드 입력" autocomplete="off" autocapitalize="characters"><button id="lkRedeem">등록</button></div>
+    </div>
+    <div id="lkTabOp" class="hide">
+      <div id="lkOps"></div>
+      <div id="lkOpDesc"></div>
+      <div id="lkBtns3"><button id="lkOpFx" class="alt">효과 미리보기</button><button id="lkClose3">닫기</button></div>
+      <div id="lkOpNote">요원 코드는 [스킨] 칸 아래 '스킨 코드'에 등록해요. 다른 사람과 봇에게도 내 요원 모습이 보여요.</div>
     </div>
     <div id="lkTabPart" class="hide">
       <div id="lkPartN"></div>

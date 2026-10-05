@@ -54,13 +54,13 @@ export function outfitDraw(g, seed) { // 봇 복장: 헬멧·조끼·장갑·무
 // ── 질감 ──
 function mkTex(cv) { const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; }
 const texCache = new Map();
-export function paintTex(key, kind, val) { // kind: 'url' 사람이 그린 그림 · 'bot' 봇 복장 · 'camo' 위장 무늬 · 그 외 기본. 같은 그림은 질감 하나를 같이 씀
+export function paintTex(key, kind, val, draw) { // draw: 직접 그리는 함수 (요원 스킨) // kind: 'url' 사람이 그린 그림 · 'bot' 봇 복장 · 'camo' 위장 무늬 · 그 외 기본. 같은 그림은 질감 하나를 같이 씀
   let t = texCache.get(key);
   if (t) return t;
   if (texCache.size > 60) { for (const v of texCache.values()) v.dispose(); texCache.clear(); }
   const cv = document.createElement('canvas'); cv.width = AW; cv.height = SH;
   const g = cv.getContext('2d');
-  if (kind === 'bot') outfitDraw(g, val); else if (kind === 'camo') camoDraw(g, val); else defaultDraw(g);
+  if (draw) draw(g); else if (kind === 'bot') outfitDraw(g, val); else if (kind === 'camo') camoDraw(g, val); else defaultDraw(g);
   t = mkTex(cv);
   if (kind === 'url') { const im = new Image(); im.onload = () => { g.drawImage(im, 0, 0, AW, SH); t.needsUpdate = true; }; im.src = val; }
   texCache.set(key, t);
