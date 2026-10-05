@@ -1,7 +1,7 @@
 // SQUAD CLASH — 클라이언트
 import * as THREE from './vendor/three.module.js';
 import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, MAPS, setMap, BOXES, SITES, siteAt, dirFrom, rayWorld, rayPlayer, hitNormal, HIT_M, segHitsSphere, groundAt, waterAt, boxesNear, PARTS, PART_SLOTS, PART_MAX, partSlots, partOk, cleanParts, effWeapon, SKIN_LV, SKIN_LV_NAME, skinLevel } from './shared.js';
-import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox, pulseSkin } from './guns.js';
+import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox, pulseSkin, skinFire } from './guns.js';
 import { paintTex, isPaint, initPaintEditor, paintUI } from './paint.js';
 import { makeRig, rigHold, rigShot, rigFlinch, rigMuzzle, animate as animRig, setAvatarFlash } from './avatar.js';
 import { initAudio, audioOn, setVolume, sfxShot, sfxBoom, sfxStep, sfxSplash, sfxTone, sfxImpact as playImpact, sfxWhiz, sfxReload, sfxUI, setAmbient, engineSound, sfxSkin } from './audio.js';
@@ -524,7 +524,7 @@ function heard(x, z, range) { // 내 위치 기준 [크기 0~1, 좌우]
 }
 
 // ───────────── 상태 ─────────────
-const me = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 100, alive: false, w: W_PISTOL, lastW: W_KNIFE, burstLeft: 0, burstAt: 0, spin: 0, ammo: WEAPONS.map((w) => w.mag), reloadEnd: 0, lastShot: 0, shotN: 0, onGround: true, prot: false, scoped: false, kickAnim: 0, bob: 0, draw: 0, swx: 0, swy: 0, crouch: false, sprint: false, slideT: 0, slx: 0, slz: 0, drop: false, inspAt: -1e9, rackN: 0, eyeH: PLAYER.eye, adsP: 0, rqP: 0, rqY: 0, rcP: 0, rcY: 0, bloom: 0, snipeQ: 0, snipeHold: false, sprT: 0, stepT: 0, shake: 0, flashUntil: 0, flashDur: 1, land: 0, vmY: 0, vmR: 0 };
+const me = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 100, alive: false, w: W_PISTOL, lastW: W_KNIFE, burstLeft: 0, burstAt: 0, spin: 0, ammo: WEAPONS.map((w) => w.mag), reloadEnd: 0, lastShot: 0, shotN: 0, onGround: true, prot: false, scoped: false, kickAnim: 0, bob: 0, draw: 0, swx: 0, swy: 0, crouch: false, sprint: false, slideT: 0, slx: 0, slz: 0, drop: false, inspAt: -1e9, drawFx: -1e9, rackN: 0, eyeH: PLAYER.eye, adsP: 0, rqP: 0, rqY: 0, rcP: 0, rcY: 0, bloom: 0, snipeQ: 0, snipeHold: false, sprT: 0, stepT: 0, shake: 0, flashUntil: 0, flashDur: 1, land: 0, vmY: 0, vmR: 0 };
 const inv = { money: 0, prim: 0, side: W_PISTOL, armor: 0, n: [0, 0, 0], med: 0 };
 const others = new Map(), _mz = new THREE.Vector3();
 let roster = [];
@@ -1165,10 +1165,10 @@ function setWeapon(wi, force) {
   me.w = wi; me.reloadEnd = 0; me.shotN = 0; me.burstLeft = 0; me.spin = 0; me.inspAt = -1e9; me.snipeQ = 0; me.snipeHold = false; me.bloom = 0; setScope(false);
   vmGun(wi);
   guns.forEach((g, i) => { if (g) g.visible = i === wi; });
-  if (changed) { me.draw = 1; me.lastShot = Math.max(me.lastShot, performance.now() - WEAPONS[wi].interval + 350); sfxUI('equip'); const ef = fxOf(mySk[wi], myLv(mySk[wi])); if (ef.kind) { sfxSkin(ef.kind, 'equip', 0.8); pulseSkin(); } } // 얼티밋: 꺼내는 소리와 번쩍임
+  if (changed) { me.draw = 1; me.lastShot = Math.max(me.lastShot, performance.now() - WEAPONS[wi].interval + 350); sfxUI('equip'); const ef = fxOf(mySk[wi], myLv(mySk[wi])); me.drawFx = ef.kind ? performance.now() : -1e9; if (ef.kind) { sfxSkin(ef.kind, 'equip', 0.8); setTimeout(() => pulseSkin(), 520); } } // 얼티밋: 꺼내는 소리, 한 바퀴 돌며 올라오고 번쩍임
   refreshInv();
 }
-function inspect() { if (me.alive && !me.reloadEnd && !me.scoped && !car.id && performance.now() - me.inspAt > 2600) me.inspAt = performance.now(); }
+function inspect() { if (me.alive && !me.reloadEnd && !me.scoped && !car.id && performance.now() - me.inspAt > 3300) { me.inspAt = performance.now(); const f = fxOf(mySk[me.w], myLv(mySk[me.w])); if (f.kind) setTimeout(() => { if (performance.now() - me.inspAt < 2600) { sfxSkin(f.kind, 'equip', 0.55); pulseSkin(0.8); } }, 1650); } }
 function swapWeapon() { setWeapon(owned(me.lastW) && me.lastW !== me.w ? me.lastW : me.w === inv.side ? (inv.prim || W_KNIFE) : inv.side); }
 function setScope(on) {
   on = on && me.alive && !me.reloadEnd && !matchEnded && !WEAPONS[me.w].melee; // 칼 빼고 모든 무기 정조준
@@ -1194,7 +1194,7 @@ function startReload(now) {
   sfxReload('out'); // 탄창을 빼고 → 끼우고 → 노리쇠를 당기는 소리
   const wAt = me.w, end = me.reloadEnd, still = () => me.reloadEnd === end && me.w === wAt;
   setTimeout(() => { if (still()) sfxReload('in'); }, W.reload * 0.55);
-  setTimeout(() => { if (still()) sfxReload('rack', 0.8); }, W.reload * 0.86);
+  setTimeout(() => { if (still()) { sfxReload('rack', 0.8); if (fxOf(mySk[wAt], 1).kind) pulseSkin(0.7); } }, W.reload * 0.86); // 얼티밋: 장전이 끝나면 번쩍
 }
 function throwNade(k) {
   if (!me.alive || !canFight() || acting || !(inv.n[k] > 0)) return;
@@ -1626,7 +1626,7 @@ const SWATCH = { std: 'linear-gradient(90deg,#4a505a,#22252a)', carbon: 'repeati
   crimson: 'linear-gradient(115deg,#f4f3ef 40%,#d0141e 41% 58%,#ff8a20 60%,#1a1b1f 62%)', dragon: 'radial-gradient(circle at 30% 50%,#ff3010 6%,transparent 8%),linear-gradient(120deg,#050405,#2a1418 45%,#ff2a10 50%,#050405 56%)', phoenix: 'linear-gradient(110deg,#7a4a08,#ffd98a 35%,#ff7a1a 52%,#ffe9a0 70%,#a86a10)', aqua: 'linear-gradient(115deg,#eef2f6 38%,#1f5fe0 39% 60%,#4ae8ff 62%,#141c2c 64%)' };
 const TIERN = { 희귀: 1, 영웅: 2, 전설: 3, 한정: 4, 얼티밋: 5, 레전드: 6 };
 const CATN = { melee: '근접', side: '보조', smg: '기관단총', sg: '샷건', ar: '소총', sr: '저격총', mg: '기관총' };
-let lockerOpen = false, lkW = 13, lkSkin = 0, lkYaw = 0.7, lkDrag = null, lkGun = null, lkKey = '', lkSpin = true, lkTab = 'skin';
+let lkAnimAt = -1e9, lockerOpen = false, lkW = 13, lkSkin = 0, lkYaw = 0.7, lkDrag = null, lkGun = null, lkKey = '', lkSpin = true, lkTab = 'skin';
 const lkGroup = new THREE.Group();
 lkGroup.visible = false; vmScene.add(lkGroup);
 const lkGlow = new THREE.PointLight(0xffffff, 0, 3, 2); lkGlow.visible = false; vmScene.add(lkGlow); // 무기고: 스킨 색으로 총 아래를 물들이는 빛
@@ -1665,15 +1665,15 @@ function lkRefresh() {
   L.children[0].textContent = `${k.name} Lv.${lv}${lv >= 5 ? ' · 각성' : ''}`;
   L.children[1].firstElementChild.style.width = (lv >= 5 ? 100 : Math.round(((xp - SKIN_LV[lv - 1]) / (SKIN_LV[lv] - SKIN_LV[lv - 1])) * 100)) + '%';
   L.children[2].textContent = lv >= 5 ? `처치 ${xp} · 모든 효과가 열렸어요` : `처치 ${xp} / ${SKIN_LV[lv]} · 다음: ${SKIN_LV_NAME[lv + 1]}`;
-  $('lkFx').style.display = k.bundle ? '' : 'none';
+  $('lkFx').textContent = k.bundle ? '효과 미리보기' : '동작 보기';
   if (lkTab === 'part') lkPartsRefresh();
 }
 $('lkFx').onclick = () => { // 얼티밋 번들: 꺼내기 → 사격 세 발 → 처치 소리·엠블럼을 들어 보기
   initAudio(); const f = skinFx(lkSkin);
-  if (!f || !f.bundle) return;
-  pulseSkin(); lkSpin = true; sfxSkin(f.sfx, 'equip', 0.8);
+  if (!f || !f.bundle) { pulseSkin(0.6); lkSpin = true; lkAnimAt = performance.now(); sfxUI('equip'); return; } // 무료 스킨: 손기술 동작만
+  pulseSkin(); lkSpin = true; lkAnimAt = performance.now(); sfxSkin(f.sfx, 'equip', 0.8);
   for (let i = 0; i < 3; i++) setTimeout(() => { sfxShot(lkW, 0.5, 0); if (!WEAPONS[lkW].melee) sfxSkin(f.sfx, 'shot', 0.55); }, 750 + i * (WEAPONS[lkW].melee ? 380 : Math.max(130, WEAPONS[lkW].interval)));
-  setTimeout(() => { sfxSkin(f.sfx, 'kill', 0.8); skinEmblem(lkSkin); pulseSkin(); }, 1700);
+  setTimeout(() => { sfxSkin(f.sfx, 'kill', 0.8); skinEmblem(lkSkin); pulseSkin(); lkAnimAt = performance.now(); }, 1700);
 };
 // 파츠 칸: 자리별로 고르는 단추와 성능 막대
 const STATS = [
@@ -1943,6 +1943,7 @@ function tryFire(now) {
     if (c) { const g = vmGun(me.w); c.m.position.set(g.position.x + 0.03, g.position.y + 0.03, g.position.z + 0.02); c.m.rotation.set(0, 0, 0); c.v = [0.9 + Math.random() * 0.6, 1.1 + Math.random() * 0.6, 0.2 + Math.random() * 0.3]; c.life = 0.55; c.m.visible = true; }
   }
   sfxShot(me.w, 0.55, 0, 0, 0, !!W.quiet);
+  skinFire(myFx.kind ? 0.4 : 0.2);
   if (myFx.kind) { sfxSkin(myFx.kind, 'shot', W.quiet ? 0.25 : 0.55); muzzleFx(myFx.kind, muzzle, [_f.x, _f.y, _f.z], myFx.flash); }
   if (W.scope) { me.snipeQ = 0; setTimeout(() => setScope(false), 60); }
   if (me.ammo[me.w] <= 0) { me.burstLeft = 0; setTimeout(() => startReload(performance.now()), 250); }
@@ -2043,6 +2044,9 @@ function frame(now) {
     lkGroup.position.set((((r.left + r.right) / 2 / VW) * 2 - 1) * 0.554 * d * asp, -0.015 * d, -d);
     if (lkSpin) lkYaw = Math.PI / 2 + Math.sin(now / 1900) * 0.95; // 옆모습을 중심으로 천천히 흔들어 보여 줌
     lkGun.rotation.set(0.1, lkYaw, 0);
+    { const a = (now - lkAnimAt) / 2600, inner = lkGun.children[0]; // [효과 미리보기]: 총열 축으로 돌리고 뒤집는 손기술
+      if (a >= 0 && a < 1) { const e = (x) => x * x * (3 - 2 * x), s1 = e(clamp(a / 0.45, 0, 1)), s2 = e(clamp((a - 0.5) / 0.4, 0, 1)); inner.rotation.z = s1 * Math.PI * 2; lkGun.rotation.y += Math.sin(s2 * Math.PI) * 1.2; lkGun.position.y = Math.sin(clamp(a / 0.45, 0, 1) * Math.PI) * 0.04 * lkGun.userData.len; skinFire(0.05); }
+      else { inner.rotation.z = 0; lkGun.position.y = 0; } }
     lkGroup.visible = true; vm.visible = false;
     { const D = d + 2.6, k = D / d; lkBack.position.set(lkGroup.position.x * k, lkGroup.position.y * k, -D); lkBack.scale.setScalar(D * 1.9); lkBack.visible = true; }
     tickSkins(now / 1000);
@@ -2206,9 +2210,19 @@ function frame(now) {
     if (gi.slide && !gi.rack && me.reloadEnd) { const p = clamp(1 - (me.reloadEnd - now) / W.reload, 0, 1); if (p > 0.84) { gi.slide.position.z = Math.sin(clamp((p - 0.84) / 0.14, 0, 1) * Math.PI) * gi.travel; } }
   }
   // 살펴보기: 총을 돌려 옆면을 보여 줌
-  const it = (now - me.inspAt) / 2400;
-  if (it >= 0 && it < 1) { const k = Math.sin(Math.PI * Math.min(1, it * 1.15)) ** 0.5; gp.rotation.y = k * 1.05; gp.rotation.z = Math.sin(it * Math.PI * 2) * 0.28 * k; gp.position.x -= k * 0.13; gp.position.y += k * 0.06; gp.position.z -= k * 0.05; }
-  else { gp.rotation.y = 0; gp.rotation.z = 0; }
+  gp.rotation.y = 0; gp.rotation.z = 0;
+  const fancy = fxOf(mySk[me.w], 1).kind, it = (now - me.inspAt) / (fancy ? 3200 : 2600);
+  if (it >= 0 && it < 1) { // 살펴보기: 왼쪽 옆면 → 오른쪽 옆면 → (얼티밋) 총열 축으로 한 바퀴 돌리는 손기술
+    const env = Math.sin(Math.PI * Math.min(1, it * 1.08)) ** 0.5, a = ease(clamp(it / 0.32, 0, 1)), b = ease(clamp((it - 0.34) / 0.22, 0, 1)), c = fancy ? ease(clamp((it - 0.5) / 0.28, 0, 1)) : 0;
+    gp.rotation.y = (a * 1.05 - b * 1.6) * env; gp.rotation.z = (Math.sin(it * Math.PI * 2) * 0.22 + c * Math.PI * 2) * env + (c > 0 && c < 1 ? 0 : 0);
+    gp.rotation.x += Math.sin(clamp((it - 0.5) / 0.28, 0, 1) * Math.PI) * (fancy ? 0.35 : 0);
+    gp.position.x -= env * 0.12; gp.position.y += env * 0.06 + Math.sin(clamp((it - 0.5) / 0.28, 0, 1) * Math.PI) * (fancy ? 0.05 : 0); gp.position.z -= env * 0.06;
+    if (fancy && c > 0 && c < 1) skinFire(0.05);
+  }
+  const dfx = (now - me.drawFx) / 750;
+  if (dfx >= 0 && dfx < 1) { // 얼티밋 꺼내기: 아래에서 크게 돌며 올라와 제자리에 딱 멈춤
+    const e = 1 - (1 - dfx) ** 3; gp.rotation.z += (1 - e) * Math.PI * 2; gp.position.y -= (1 - e) * 0.16; gp.position.x += (1 - e) * 0.06; gp.rotation.x += (1 - e) * 0.5; skinFire(0.04);
+  }
   tickSkins(now / 1000);
   if (flash.visible) { const m = gp.userData.muzzle; flash.position.set(gp.position.x + m[0], gp.position.y + m[1], gp.position.z + m[2] - 0.03); vmFlash.position.copy(flash.position); if (now > flash._off) flash.visible = false; }
   if (vmFlash.intensity > 0.01) vmFlash.intensity *= Math.exp(-dt * 38); else vmFlash.intensity = 0;
