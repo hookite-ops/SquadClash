@@ -92,6 +92,7 @@ body.layedit .pad{outline:2px dashed rgba(255,255,255,.55);outline-offset:3px;to
 .room.full{opacity:.5;cursor:default}.room.full em{background:rgba(255,255,255,.14);color:var(--dim)}
 @media (max-height:420px){#roomList{max-height:88px}}
 #menuMsg{min-height:18px;font-size:13px;color:var(--acc);margin-top:4px}
+#credit{font-size:10.5px;color:var(--dim);margin-top:6px;line-height:1.4}#credit a{color:inherit}
 /* 무기고 */
 #locker{position:fixed;inset:0;display:flex;justify-content:space-between;pointer-events:none;padding:calc(8px + var(--st)) calc(8px + var(--sr)) calc(8px + var(--sb)) calc(8px + var(--sl));gap:8px}
 #locker>div{pointer-events:auto}
@@ -471,6 +472,7 @@ details.help summary::-webkit-details-marker{display:none}details.help div{margi
     <div class="opt"><span>소리</span><input id="vol" type="range" min="0" max="1" step="0.05" value="0.8"><span>화질</span><select id="gfx"><option value="low">낮음</option><option value="mid">보통</option><option value="high">높음</option></select></div>
     <div class="opt"><span>맵</span><select id="mapSel"><option value="">번갈아</option><option value="town">사막 마을</option><option value="dock">부두 야적장</option><option value="station">기차역</option><option value="castle">옛 성</option><option value="city">도심 교차로</option></select><span>봇</span><select id="botLv"><option value="0">쉬움</option><option value="1">보통</option><option value="2">어려움</option><option value="3">매우 어려움</option></select><span>조준선</span><select id="xhair"><option value="#ffffff">흰색</option><option value="#4ade80">초록</option><option value="#ffd23f">노랑</option><option value="#5ad1ff">하늘</option><option value="#ff5fa2">분홍</option></select></div>
     <div id="menuMsg"></div>
+    <div id="credit">총 모델: <a href="https://sketchfab.com/3d-models/low-poly-weapon-asset-pack-762c43cc1532421eb0452b64e2bdd483" target="_blank" rel="noopener">Low-Poly Weapon Asset Pack</a> by <a href="https://sketchfab.com/r2detta" target="_blank" rel="noopener">r2detta</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> (크기·색 조정)</div>
     <details class="help"><summary>조작법 보기</summary><div>
       <b>모바일</b> 왼쪽 스틱 이동(위로 끝까지 밀면 달리기) · 오른쪽 드래그 시점 · 사격 버튼 누른 채 밀면 쏘면서 조준 · 조준 버튼 = 정조준 · 앉기(달리다 누르면 슬라이딩)<br>
       <b>PC</b> WASD 이동 · Shift 달리기 · C 앉기 · 마우스 사격 · 우클릭(누르는 동안) 정조준 · R 장전 · 1 주무기 · 2 보조무기 · 3 칼 · Q 직전 무기 · 4·5·6 수류탄/연막/섬광 · B 상점 · Space 점프 · E 길게 = 폭탄 설치/해체 · T 무기 살펴보기 · Z·X·V·H 무전 · Tab 점수판 · P 나가기 · Esc 창 닫기<br>
