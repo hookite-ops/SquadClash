@@ -132,7 +132,7 @@ function loadFile(rel) {
   try {
     const raw = fs.readFileSync(full);
     const ext = path.extname(full);
-    const text = ['.html', '.js', '.css', '.json', '.svg'].includes(ext);
+    const text = ['.html', '.js', '.css', '.json', '.svg', '.bin'].includes(ext); // .bin: 총 모델 (압축이 잘 됨)
     entry = { raw, gz: text ? zlib.gzipSync(raw) : null, type: MIME[ext] || 'application/octet-stream', vendor: rel.startsWith('vendor/') };
   } catch { entry = null; }
   cache.set(rel, entry);

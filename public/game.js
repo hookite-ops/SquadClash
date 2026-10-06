@@ -2,6 +2,8 @@
 import * as THREE from './vendor/three.module.js';
 import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, VEH_WEAPON, W_KNIFE, W_PISTOL, MAPS, setMap, BOXES, SITES, siteAt, dirFrom, rayWorld, rayPlayer, hitNormal, HIT_M, segHitsSphere, groundAt, waterAt, boxesNear, PARTS, PART_SLOTS, PART_MAX, partSlots, partOk, cleanParts, effWeapon, SKIN_LV, SKIN_LV_NAME, skinLevel, OPS, OP_BASE } from './shared.js';
 import { dressOp, tickOps, opDraw } from './operators.js';
+import { loadGunModels } from './gunmodels.js';
+await Promise.race([loadGunModels(), new Promise((r) => setTimeout(r, 9000))]); // 실제 총 모델을 먼저 받아 둠 (늦으면 코드 모델로 시작)
 import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox, pulseSkin, skinFire } from './guns.js';
 import { paintTex, isPaint, initPaintEditor, paintUI } from './paint.js';
 import { makeRig, rigHold, rigShot, rigFlinch, rigMuzzle, animate as animRig, setAvatarFlash } from './avatar.js';
