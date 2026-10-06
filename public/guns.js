@@ -2366,28 +2366,30 @@ function energyCore(b, M, fc, uc, R, hw, mc, mr, md, ticks = 12) {
 const builders = { rifle, shotgun, sniper, pistol, revolver, sawed, smg, knife };
 const LABELS = ['', 'P-12', 'DB-2', 'AP-15', 'SP-13', 'RV-6', 'VX-22', 'SD-30', 'M-6', 'AS-7', 'BR-24', 'DM-12', 'SR-30', 'AR-25', 'LS-5', 'HS-5', 'LM-50', 'HM-100'];
 // ───────────── 실제 총 모델 (기본·무료 스킨) ─────────────
-// 'Low-Poly Weapon Asset Pack' by r2detta (CC BY 4.0). 모델은 gunmodels.js 가 읽어 둠. 유료(번들) 스킨은 형태가 바뀌므로 코드 모델을 그대로 씀.
+// 'Low-Poly Weapon Asset Pack' by r2detta (CC BY 4.0). 모델은 gunmodels.js 가 읽어 둠. 어떤 스킨이든 총 모양은 같고(AK 는 AK),
+// 유료 스킨은 재질(색·무늬·빛)과 장식(총몸 장식·총구 장치·파츠 스킨·둘레 효과)만 바뀜.
 // 자리 표기 [u, v] = 옆에서 본 상자 안의 % 위치: u 는 총구(0) → 개머리(100), v 는 위(0) → 아래(100)
 // g 오른손(손잡이) · f 왼손 · m 총구 높이 v · s 조준선 높이 v · top 조준경 파츠 자리 · un 총열 아래(손잡이·레이저) · mg 탄창 바닥 [u0, u1, v]
+// rc 총몸 [앞 u, 뒤 u, 윗면 v, 가운데 v] — 유료 스킨 장식이 붙는 자리
 // scope: 모델에 조준경이 붙어 있음 · wood: b50(중간 갈색)을 나무로 · supp: 소음기를 덧붙임 · k: 길이 배율
 const GLB_FIT = {
-  1: { n: 'Glock17', g: [80, 55], m: 17, s: 3, top: [45, 3], un: [25, 30], mg: [74, 90, 97] },
-  2: { n: 'SawedOff', g: [86, 65], f: [52, 35], m: 12, s: 3, un: [40, 40], wood30: true },
-  3: { n: 'Deagle', g: [83, 62], m: 22, s: 4, top: [45, 3], un: [30, 38], mg: [72, 88, 98] },
-  4: { n: 'Usp45_Silenced', g: [88, 62], m: 15, s: 2, top: [70, 2], un: [57, 35], mg: [84, 95, 98] },
-  5: { n: 'Revolver', g: [90, 65], m: 17, s: 3, top: [40, 2], un: [40, 30] },
-  6: { n: 'Kriss_Vector', g: [59, 45], f: [33, 38], m: 33, s: 6, top: [45, 8], un: [24, 36], mg: [40, 47, 98] },
-  7: { n: 'Mp5K', g: [83, 65], f: [38, 62], m: 22, s: 7, top: [50, 10], un: [22, 30], mg: [30, 40, 95], supp: true },
-  8: { n: 'Spas_12', g: [91, 72], f: [40, 42], m: 21, s: 15, top: [62, 16], un: [33, 55] },
-  9: { n: 'AA12', g: [70, 62], f: [35, 45], m: 40, s: 15, top: [45, 22], un: [33, 48], mg: [50, 58, 98] },
-  10: { n: 'Famas', g: [58, 62], f: [32, 44], m: 34, s: 20, top: [55, 4], un: [30, 47], mg: [68, 77, 98] },
-  11: { n: 'ScarH', g: [68, 72], f: [40, 52], m: 33, s: 10, top: [55, 15], un: [35, 48], mg: [48, 57, 98] },
-  12: { n: 'VSS_Sniper', g: [64, 70], f: [45, 55], m: 45, s: 13, scope: true, un: [42, 58], mg: [45, 55, 90] },
-  13: { n: 'AK47', g: [70, 72], f: [36, 28], m: 20, s: 6, top: [45, 8], un: [34, 30], mg: [40, 50, 95], wood: true },
-  14: { n: 'L115_Awp', g: [76, 70], f: [50, 55], m: 43, s: 20, scope: true, un: [45, 60], mg: [57, 65, 80] },
-  15: { n: 'Barett', g: [76, 70], f: [45, 40], m: 34, s: 15, scope: true, un: [45, 45], mg: [57, 67, 80] },
-  16: { n: 'M249', g: [70, 80], f: [38, 53], m: 30, s: 15, top: [50, 18], un: [38, 55], mg: [50, 56, 75] },
-  17: { n: 'Minigun', g: [96, 30], f: [57, 55], m: 30, s: 10, top: [65, 22], spin: true },
+  1: { n: 'Glock17', rc: [10, 90, 3, 15], g: [80, 55], m: 17, s: 3, top: [45, 3], un: [25, 30], mg: [74, 90, 97] },
+  2: { n: 'SawedOff', rc: [60, 80, 5, 30], g: [86, 65], f: [52, 35], m: 12, s: 3, un: [40, 40], wood30: true },
+  3: { n: 'Deagle', rc: [8, 90, 4, 20], g: [83, 62], m: 22, s: 4, top: [45, 3], un: [30, 38], mg: [72, 88, 98] },
+  4: { n: 'Usp45_Silenced', rc: [52, 98, 4, 15], g: [88, 62], m: 15, s: 2, top: [70, 2], un: [57, 35], mg: [84, 95, 98] },
+  5: { n: 'Revolver', rc: [55, 80, 5, 30], g: [90, 65], m: 17, s: 3, top: [40, 2], un: [40, 30] },
+  6: { n: 'Kriss_Vector', rc: [15, 75, 10, 25], g: [59, 45], f: [33, 38], m: 33, s: 6, top: [45, 8], un: [24, 36], mg: [40, 47, 98] },
+  7: { n: 'Mp5K', rc: [40, 95, 12, 25], g: [83, 65], f: [38, 62], m: 22, s: 7, top: [50, 10], un: [22, 30], mg: [30, 40, 95], supp: true },
+  8: { n: 'Spas_12', rc: [55, 85, 18, 35], g: [91, 72], f: [40, 42], m: 21, s: 15, top: [62, 16], un: [33, 55] },
+  9: { n: 'AA12', rc: [20, 75, 20, 35], g: [70, 62], f: [35, 45], m: 40, s: 15, top: [45, 22], un: [33, 48], mg: [50, 58, 98] },
+  10: { n: 'Famas', rc: [35, 90, 25, 40], g: [58, 62], f: [32, 44], m: 34, s: 20, top: [55, 4], un: [30, 47], mg: [68, 77, 98] },
+  11: { n: 'ScarH', rc: [50, 95, 15, 32], g: [68, 72], f: [40, 52], m: 33, s: 10, top: [55, 15], un: [35, 48], mg: [48, 57, 98] },
+  12: { n: 'VSS_Sniper', rc: [37, 70, 30, 45], g: [64, 70], f: [45, 55], m: 45, s: 13, scope: true, un: [42, 58], mg: [45, 55, 90] },
+  13: { n: 'AK47', rc: [42, 73, 5, 20], g: [70, 72], f: [36, 28], m: 20, s: 6, top: [45, 8], un: [34, 30], mg: [40, 50, 95], wood: true },
+  14: { n: 'L115_Awp', rc: [60, 90, 45, 55], g: [76, 70], f: [50, 55], m: 43, s: 20, scope: true, un: [45, 60], mg: [57, 65, 80] },
+  15: { n: 'Barett', rc: [55, 92, 30, 45], g: [76, 70], f: [45, 40], m: 34, s: 15, scope: true, un: [45, 45], mg: [57, 67, 80] },
+  16: { n: 'M249', rc: [50, 85, 15, 30], g: [70, 80], f: [38, 53], m: 30, s: 15, top: [50, 18], un: [38, 55], mg: [50, 56, 75] },
+  17: { n: 'Minigun', rc: [60, 90, 20, 40], g: [96, 30], f: [57, 55], m: 30, s: 10, top: [65, 22], spin: true },
 };
 const procRefs = new Map();
 function procRef(wi) { // 같은 무기의 코드 모델 (기본 스킨): 크기와 손 자리·조준 거리를 그대로 이어받음
@@ -2423,6 +2425,12 @@ function glbGun(wi, M, o) {
   let tip = -front[2], sight = at(0, F.s)[1], adsZ = F.scope ? P.adsZ : undefined, fore = F.f ? at(F.f[0], F.f[1]) : [P.fore[0], grip[1] + (P.fore[1] - P.grip[1]), grip[2] + (P.fore[2] - P.grip[2])]; // 권총: 왼손은 오른손 옆
   const pistol = WEAPONS[wi].slot === 'side', r = pistol ? 0.011 : 0.014;
   if (F.supp && !A.muz) { b.cyl(0.019, 0.019, tip - 0.01, 0.16, yM, M.poly, 0, 18); b.cyl(0.0195, 0.0195, tip + 0.13, 0.02, yM, M.steel, 0, 18); tip += 0.15; }
+  const K = o.kit;
+  if (K && F.rc) { // 유료 스킨 장식: 총몸 위·옆 장식과 총구 장치
+    const a = at(F.rc[1], F.rc[2]), c = at(F.rc[0], F.rc[3]), hw = pistol ? 0.0145 : wi === 17 ? 0.05 : 0.0225;
+    if (K.orn) K.orn(b, M, { f0: -a[2], f1: -c[2], top: a[1], u: c[1], hw, small: pistol });
+    if (K.muzzle && !A.muz && !F.supp && wi !== 4 && wi !== 12) /* 소음기가 붙은 모델은 그대로 */ tip = K.muzzle(b, M, tip - 0.004, yM, r, pistol ? 0.034 : 0.05);
+  }
   if (A.muz) tip = muzzleAtt(b, A.muz, tip, yM, r, M);
   if (A.opt && F.top && !F.scope) { const t = at(F.top[0], F.top[1]), f = -t[2]; rail(b, f - 0.07, f + 0.07, t[1] + 0.004, M); b.adsZ = undefined; sight = optic(b, A.opt, f, t[1] + 0.012, M); if (b.adsZ !== undefined) adsZ = b.adsZ; }
   if (F.un && A.grp && !pistol) { const t = at(F.un[0], F.un[1]); fore = underGrip(b, A.grp, -t[2], t[1], M); }
@@ -2437,10 +2445,11 @@ const cache = new Map();
 // parts = 파츠 번호 목록, lv = 스킨 레벨 (5 = 각성)
 export function makeGun(wi, skin = 0, parts, lv = 1, opt = {}) {
   if (!SKINS[skin]) skin = 0;
-  const pl = cleanParts(wi, parts), bun = !!(KITS[SKINS[skin].id] && KITS[SKINS[skin].id].fx.bundle), aw = skin > 0 && (lv >= 5 || bun), pt = bun && pl.length ? (lv >= 5 ? 2 : lv >= 3 ? 1 : 0) : 0, real = GLB.ready && !bun && !opt.proc && !!GLB_FIT[wi], key = wi + ':' + skin + ':' + pl.join('.') + (aw ? 'a' : '') + ':p' + pt + (real ? ':g' : ''); // real: 실제 총 모델
+  const pl = cleanParts(wi, parts), bun = !!(KITS[SKINS[skin].id] && KITS[SKINS[skin].id].fx.bundle), aw = skin > 0 && (lv >= 5 || bun), pt = bun && pl.length ? (lv >= 5 ? 2 : lv >= 3 ? 1 : 0) : 0, real = GLB.ready && !opt.proc && !!GLB_FIT[wi], key = wi + ':' + skin + ':' + pl.join('.') + (aw ? 'a' : '') + ':p' + pt + (real ? ':g' : ''); // real: 실제 총 모델
   if (!cache.has(key)) {
     const [fn, opt] = WEAPONS[wi].model, att = {}; for (const pi of pl) att[PARTS[pi].slot] = PARTS[pi].id;
-    const r = real ? glbGun(wi, matsFor(skin, aw), { att }) : null;
+    let r = null;
+    if (real) { PS = pt ? { lv: pt } : null; try { r = glbGun(wi, matsFor(skin, aw), { att, kit: bun ? KITS[SKINS[skin].id] : null }); } finally { PS = null; } }
     if (r) cache.set(key, r);
     else { PS = pt ? { lv: pt } : null; try { cache.set(key, builders[fn](matsFor(skin, aw), { ...(opt || {}), label: LABELS[wi] ? 'SC ' + LABELS[wi] : '', kit: KITS[SKINS[skin].id], att })); } finally { PS = null; } } // 파츠 스킨: 파츠를 단 유료 스킨, Lv.3·5
   } // 파츠 스킨: 파츠를 단 유료 스킨, Lv.3·5
