@@ -1,8 +1,8 @@
-// SQUAD CLASH — 실제 총 모델 (Sketchfab 'Low-Poly Weapon Asset Pack' by r2detta, CC-BY-4.0)
+// SQUAD CLASH — 실제 총 모델 (Sketchfab: D_U @DU1701 의 low-poly 총들, r2detta 'Low-Poly Weapon Asset Pack' — 모두 CC BY 4.0)
 // tools/extract_guns.mjs 가 만든 public/models/guns.bin 을 읽어, 무기 이름 → 색 단계별 모양(BufferGeometry) 으로 둔다.
 import * as THREE from './vendor/three.module.js';
 
-export const GLB = { ready: false, models: null, credit: 'r2detta — Low-Poly Weapon Asset Pack (CC BY 4.0, sketchfab.com/r2detta)' };
+export const GLB = { ready: false, models: null, credits: {} };
 let loading = null;
 export function loadGunModels() {
   if (loading) return loading;
@@ -12,13 +12,15 @@ export function loadGunModels() {
       const groups = {};
       for (const [key, g] of Object.entries(w.groups)) {
         const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(buf, base + g.p, g.n * 3), 3));
-        geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(buf, base + g.uv, g.n * 2), 2));
+        const q = new Int16Array(buf, base + g.p, g.n * 3), pos = new Float32Array(g.n * 3);
+        for (let k = 0; k < pos.length; k++) pos[k] = q[k] / 65534; // Int16 → 상자 크기 1 기준 좌표
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
         geo.setIndex(new THREE.BufferAttribute(g.big ? new Uint32Array(buf, base + g.i, g.ni) : new Uint16Array(buf, base + g.i, g.ni), 1));
         geo.computeVertexNormals(); geo.computeBoundingBox();
         groups[key] = geo;
       }
       models[name] = { size: w.size, groups };
+    GLB.credits = head.credits;
     }
     GLB.models = models; GLB.ready = true;
     return models;
