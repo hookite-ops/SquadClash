@@ -2366,28 +2366,31 @@ function energyCore(b, M, fc, uc, R, hw, mc, mr, md, ticks = 12) {
 const builders = { rifle, shotgun, sniper, pistol, revolver, sawed, smg, knife };
 const LABELS = ['', 'P-12', 'DB-2', 'AP-15', 'SP-13', 'RV-6', 'VX-22', 'SD-30', 'M-6', 'AS-7', 'BR-24', 'DM-12', 'SR-30', 'AR-25', 'LS-5', 'HS-5', 'LM-50', 'HM-100'];
 // ───────────── 실제 총 모델 (기본·무료 스킨) ─────────────
-// 'Low-Poly Weapon Asset Pack' by r2detta (CC BY 4.0). 모델은 gunmodels.js 가 읽어 둠. 유료(번들) 스킨은 형태가 바뀌므로 코드 모델을 그대로 씀.
+// 'Low-Poly Weapon Asset Pack' by r2detta (CC BY 4.0). 모델은 gunmodels.js 가 읽어 둠. 어떤 스킨이든 총 모양은 같고(AK 는 AK),
+// 유료 스킨은 재질(색·무늬·빛)과 장식(총몸 장식·총구 장치·파츠 스킨·둘레 효과)만 바뀜.
 // 자리 표기 [u, v] = 옆에서 본 상자 안의 % 위치: u 는 총구(0) → 개머리(100), v 는 위(0) → 아래(100)
 // g 오른손(손잡이) · f 왼손 · m 총구 높이 v · s 조준선 높이 v · top 조준경 파츠 자리 · un 총열 아래(손잡이·레이저) · mg 탄창 바닥 [u0, u1, v]
+// rc 총몸 [앞 u, 뒤 u, 윗면 v, 가운데 v] — 유료 스킨 장식이 붙는 자리
+// az: 정조준 때 총을 눈에서 떨어뜨리는 거리(가늠자가 너무 크게 보이는 총) · mu: 총구 u (0 이 아닐 때) · mag: 탄창 'drop' 또는 { t 위끝, b 아래끝, w 탄창 구멍, tilt }
 // scope: 모델에 조준경이 붙어 있음 · wood: b50(중간 갈색)을 나무로 · supp: 소음기를 덧붙임 · k: 길이 배율
 const GLB_FIT = {
-  1: { n: 'Glock17', g: [80, 55], m: 17, s: 3, top: [45, 3], un: [25, 30], mg: [74, 90, 97] },
-  2: { n: 'SawedOff', g: [86, 65], f: [52, 35], m: 12, s: 3, un: [40, 40], wood30: true },
-  3: { n: 'Deagle', g: [83, 62], m: 22, s: 4, top: [45, 3], un: [30, 38], mg: [72, 88, 98] },
-  4: { n: 'Usp45_Silenced', g: [88, 62], m: 15, s: 2, top: [70, 2], un: [57, 35], mg: [84, 95, 98] },
-  5: { n: 'Revolver', g: [90, 65], m: 17, s: 3, top: [40, 2], un: [40, 30] },
-  6: { n: 'Kriss_Vector', g: [59, 45], f: [33, 38], m: 33, s: 6, top: [45, 8], un: [24, 36], mg: [40, 47, 98] },
-  7: { n: 'Mp5K', g: [83, 65], f: [38, 62], m: 22, s: 7, top: [50, 10], un: [22, 30], mg: [30, 40, 95], supp: true },
-  8: { n: 'Spas_12', g: [91, 72], f: [40, 42], m: 21, s: 15, top: [62, 16], un: [33, 55] },
-  9: { n: 'AA12', g: [70, 62], f: [35, 45], m: 40, s: 15, top: [45, 22], un: [33, 48], mg: [50, 58, 98] },
-  10: { n: 'Famas', g: [58, 62], f: [32, 44], m: 34, s: 20, top: [55, 4], un: [30, 47], mg: [68, 77, 98] },
-  11: { n: 'ScarH', g: [68, 72], f: [40, 52], m: 33, s: 10, top: [55, 15], un: [35, 48], mg: [48, 57, 98] },
-  12: { n: 'VSS_Sniper', g: [64, 70], f: [45, 55], m: 45, s: 13, scope: true, un: [42, 58], mg: [45, 55, 90] },
-  13: { n: 'AK47', g: [70, 72], f: [36, 28], m: 20, s: 6, top: [45, 8], un: [34, 30], mg: [40, 50, 95], wood: true },
-  14: { n: 'L115_Awp', g: [76, 70], f: [50, 55], m: 43, s: 20, scope: true, un: [45, 60], mg: [57, 65, 80] },
-  15: { n: 'Barett', g: [76, 70], f: [45, 40], m: 34, s: 15, scope: true, un: [45, 45], mg: [57, 67, 80] },
-  16: { n: 'M249', g: [70, 80], f: [38, 53], m: 30, s: 15, top: [50, 18], un: [38, 55], mg: [50, 56, 75] },
-  17: { n: 'Minigun', g: [96, 30], f: [57, 55], m: 30, s: 10, top: [65, 22], spin: true },
+  1: { n: 'G21', mu: 7, g: [85, 62], m: 16, s: 2, top: [45, 1], un: [20, 27], rc: [8, 85, 2, 15], mag: 'drop' },
+  2: { n: 'SawedOff', rc: [60, 80, 5, 30], g: [86, 65], f: [52, 35], m: 12, s: 3, un: [40, 40], wood30: true },
+  3: { n: 'G18C', mu: 25, g: [88, 60], m: 16, s: 2, top: [58, 1], un: [38, 27], rc: [25, 94, 2, 15], mag: 'drop' },
+  4: { n: 'PB', g: [85, 65], m: 20, s: 2, top: [75, 3], un: [55, 33], rc: [50, 98, 2, 20], mag: 'drop' },
+  5: { n: 'Revolver', rc: [55, 80, 5, 30], g: [90, 65], m: 17, s: 3, top: [40, 2], un: [40, 30] },
+  6: { n: 'MP7', az: -0.46, g: [60, 72], f: [28, 55], m: 33, s: 7, top: [55, 8], un: [25, 60], rc: [10, 75, 10, 35], mag: 'drop' },
+  7: { n: 'MP5', g: [73, 72], f: [25, 40], m: 31, s: 8, top: [55, 8], un: [25, 48], rc: [12, 85, 7, 25], supp: true, mag: { t: [37, 58], b: [1, 47], w: [44, 42], tilt: 12 } },
+  8: { n: 'M4S90', g: [74, 55], f: [40, 32], m: 22, s: 8, top: [60, 6], un: [35, 45], rc: [45, 72, 7, 28] },
+  9: { n: 'Saiga12', g: [73, 65], f: [35, 25], m: 20, s: 3, top: [50, 3], un: [35, 30], rc: [21, 73, 3, 18], mag: { t: [35, 80], b: [8, 66], w: [56, 26], tilt: 15 } },
+  10: { n: 'Famas', rc: [35, 90, 25, 40], g: [58, 62], f: [32, 44], m: 34, s: 20, top: [55, 4], un: [30, 47], mg: [68, 77, 98] },
+  11: { n: 'SCAR16', g: [73, 78], f: [40, 45], m: 39, s: 10, top: [55, 20], un: [35, 50], rc: [50, 77, 20, 40], mag: { t: [49, 79], b: [30, 74], w: [53, 54], tilt: 10 } },
+  12: { n: 'VSS_Sniper', rc: [37, 70, 30, 45], g: [64, 70], f: [45, 55], m: 45, s: 13, scope: true, un: [42, 58], mg: [45, 55, 90] },
+  13: { n: 'AK47', rc: [42, 73, 5, 20], g: [70, 72], f: [36, 28], m: 20, s: 6, top: [45, 8], un: [34, 30], mg: [40, 50, 95], wood: true },
+  14: { n: 'SVDM', g: [76, 70], f: [35, 40], m: 37, s: 12, scope: true, un: [35, 47], rc: [47, 80, 25, 45], mag: { t: [45, 62], b: [45, 98], w: [57, 44], tilt: 5 } },
+  15: { n: 'Barett', rc: [55, 92, 30, 45], g: [76, 70], f: [45, 40], m: 34, s: 15, scope: true, un: [45, 45], mg: [57, 67, 80] },
+  16: { n: 'MG5', az: -0.5, g: [70, 75], f: [35, 35], m: 22, s: 8, top: [55, 10], un: [38, 45], rc: [48, 85, 10, 30], mag: { t: [39, 58], b: [39, 100], w: [60, 40], tilt: 0 } },
+  17: { n: 'PKM', az: -0.46, g: [72, 75], f: [45, 40], m: 31, s: 15, top: [60, 15], un: [40, 40], rc: [48, 75, 15, 35] },
 };
 const procRefs = new Map();
 function procRef(wi) { // 같은 무기의 코드 모델 (기본 스킨): 크기와 손 자리·조준 거리를 그대로 이어받음
@@ -2403,26 +2406,42 @@ function glbGun(wi, M, o) {
   if (!mdl) return null;
   const P = procRef(wi), [, sy, sz] = mdl.size, A = o.att || {};
   // 맞춤: 총열 높이는 코드 모델의 총구 높이에, 손잡이 앞뒤 자리는 코드 모델의 손잡이에. 크기는 손잡이~총구 거리가 같도록
-  const unit = (u, v) => [sy / 2 - (v / 100) * sy, -sz / 2 + (u / 100) * sz], gU = unit(F.g[0], F.g[1]), mU = unit(0, F.m);
+  const unit = (u, v) => [sy / 2 - (v / 100) * sy, -sz / 2 + (u / 100) * sz], gU = unit(F.g[0], F.g[1]), mU = unit(F.mu || 0, F.m);
   const sc = ((P.grip[2] - P.muzzle[2]) / (gU[1] - mU[1])) * (F.k || 1), off = [0, P.muzzle[1] - sc * mU[0], P.grip[2] - sc * gU[1]];
   const at = (u, v) => { const q = unit(u, v); return [0, sc * q[0] + off[1], sc * q[1] + off[2]]; };
   const mat = new THREE.Matrix4().makeTranslation(off[0], off[1], off[2]).multiply(new THREE.Matrix4().makeScale(sc, sc, sc)).multiply(new THREE.Matrix4().makeRotationY(Math.PI));
   const furn = M[(WEAPONS[wi].model[1] || {}).furn || 'furn'];
-  const role = (k) => ({ b30: F.wood30 ? M.wood : furn, b50: F.wood ? M.wood : furn, b60: M.recv, b70: M.poly, b80: M.dark, glass: M.glass, white: M.bolt })[k] || M.recv;
-  const b = new Builder(), front = at(0, F.m), yM = front[1];
+  const role = (k) => ({ b30: F.wood30 ? M.wood : furn, b50: F.wood ? M.wood : furn, b60: M.recv, b70: M.poly, b80: M.dark, glass: M.glass, white: M.bolt, // r2detta 밝기 단계
+    body: M.recv, metal: M.steel, poly: M.poly, light: M.bolt, brass: M.brass, tan: furn, wood: M.wood, olive: M.olive, accent: M.accent || M.bolt })[k] || M.recv; // D_U 재질 역할
+  const b = new Builder(), front = at(F.mu || 0, F.m), yM = front[1];
+  // 탄창: 모델에 따라 총 옆에 따로 놓여 있음 → 빼거나('drop') 탄창 위끝 t·아래끝 b 를 재서 탄창 구멍 w 에 꽂음 (tilt: 아래쪽이 앞으로 기운 각도)
+  let magM = null;
+  if (F.mag && F.mag !== 'drop') {
+    const raw = (u, v) => [sy / 2 - (v / 100) * sy, sz / 2 - (u / 100) * sz]; // 원래 모델 좌표 (총구가 +z)
+    const t = raw(...F.mag.t), bt = raw(...F.mag.b), w = raw(...F.mag.w), tau = ((F.mag.tilt || 0) * Math.PI) / 180;
+    const th = Math.atan2(Math.sin(tau), -Math.cos(tau)) - Math.atan2(bt[1] - t[1], bt[0] - t[0]); // (y,z) 평면: 아래로, 앞(+z)으로 tau 만큼
+    magM = new THREE.Matrix4().makeTranslation(0, w[0], w[1]).multiply(new THREE.Matrix4().makeRotationX(th)).multiply(new THREE.Matrix4().makeTranslation(0, -t[0], -t[1]));
+  }
+  const magMat = magM ? mat.clone().multiply(magM) : mat;
   if (F.spin) b.part('spin', [-front[2], yM, 0], 2.4, 'z');
   for (const [key, geo] of Object.entries(mdl.groups)) {
     const [grp, shade] = key.includes(':') ? key.split(':') : ['', key];
-    if (grp === 'spin' && !F.spin) continue;
+    if ((grp === 'spin' && !F.spin) || (grp === 'mag' && F.mag === 'drop')) continue;
     b.part(grp === 'mag' ? 'mag' : grp === 'spin' ? 'spin' : '');
-    b.add(geo, grp === 'mag' ? M.mag : grp === 'spin' ? (shade === 'white' ? M.bolt : M.steel) : role(shade), mat);
+    b.add(geo, grp === 'mag' ? (shade === 'brass' ? M.brass : shade === 'olive' ? M.olive : M.mag) : grp === 'spin' ? (shade === 'white' ? M.bolt : M.steel) : role(shade), grp === 'mag' ? magMat : mat);
   }
   b.part();
   // 파츠
   const grip = at(F.g[0], F.g[1]);
-  let tip = -front[2], sight = at(0, F.s)[1], adsZ = F.scope ? P.adsZ : undefined, fore = F.f ? at(F.f[0], F.f[1]) : [P.fore[0], grip[1] + (P.fore[1] - P.grip[1]), grip[2] + (P.fore[2] - P.grip[2])]; // 권총: 왼손은 오른손 옆
+  let tip = -front[2], sight = at(0, F.s)[1], adsZ = F.scope ? P.adsZ : F.az, fore = F.f ? at(F.f[0], F.f[1]) : [P.fore[0], grip[1] + (P.fore[1] - P.grip[1]), grip[2] + (P.fore[2] - P.grip[2])]; // 권총: 왼손은 오른손 옆
   const pistol = WEAPONS[wi].slot === 'side', r = pistol ? 0.011 : 0.014;
   if (F.supp && !A.muz) { b.cyl(0.019, 0.019, tip - 0.01, 0.16, yM, M.poly, 0, 18); b.cyl(0.0195, 0.0195, tip + 0.13, 0.02, yM, M.steel, 0, 18); tip += 0.15; }
+  const K = o.kit;
+  if (K && F.rc) { // 유료 스킨 장식: 총몸 위·옆 장식과 총구 장치
+    const a = at(F.rc[1], F.rc[2]), c = at(F.rc[0], F.rc[3]), hw = pistol ? 0.0145 : wi === 17 ? 0.05 : 0.0225;
+    if (K.orn) K.orn(b, M, { f0: -a[2], f1: -c[2], top: a[1], u: c[1], hw, small: pistol });
+    if (K.muzzle && !A.muz && !F.supp && wi !== 4 && wi !== 12) /* 소음기가 붙은 모델은 그대로 */ tip = K.muzzle(b, M, tip - 0.004, yM, r, pistol ? 0.034 : 0.05);
+  }
   if (A.muz) tip = muzzleAtt(b, A.muz, tip, yM, r, M);
   if (A.opt && F.top && !F.scope) { const t = at(F.top[0], F.top[1]), f = -t[2]; rail(b, f - 0.07, f + 0.07, t[1] + 0.004, M); b.adsZ = undefined; sight = optic(b, A.opt, f, t[1] + 0.012, M); if (b.adsZ !== undefined) adsZ = b.adsZ; }
   if (F.un && A.grp && !pistol) { const t = at(F.un[0], F.un[1]); fore = underGrip(b, A.grp, -t[2], t[1], M); }
@@ -2437,10 +2456,11 @@ const cache = new Map();
 // parts = 파츠 번호 목록, lv = 스킨 레벨 (5 = 각성)
 export function makeGun(wi, skin = 0, parts, lv = 1, opt = {}) {
   if (!SKINS[skin]) skin = 0;
-  const pl = cleanParts(wi, parts), bun = !!(KITS[SKINS[skin].id] && KITS[SKINS[skin].id].fx.bundle), aw = skin > 0 && (lv >= 5 || bun), pt = bun && pl.length ? (lv >= 5 ? 2 : lv >= 3 ? 1 : 0) : 0, real = GLB.ready && !bun && !opt.proc && !!GLB_FIT[wi], key = wi + ':' + skin + ':' + pl.join('.') + (aw ? 'a' : '') + ':p' + pt + (real ? ':g' : ''); // real: 실제 총 모델
+  const pl = cleanParts(wi, parts), bun = !!(KITS[SKINS[skin].id] && KITS[SKINS[skin].id].fx.bundle), aw = skin > 0 && (lv >= 5 || bun), pt = bun && pl.length ? (lv >= 5 ? 2 : lv >= 3 ? 1 : 0) : 0, real = GLB.ready && !opt.proc && !!GLB_FIT[wi], key = wi + ':' + skin + ':' + pl.join('.') + (aw ? 'a' : '') + ':p' + pt + (real ? ':g' : ''); // real: 실제 총 모델
   if (!cache.has(key)) {
     const [fn, opt] = WEAPONS[wi].model, att = {}; for (const pi of pl) att[PARTS[pi].slot] = PARTS[pi].id;
-    const r = real ? glbGun(wi, matsFor(skin, aw), { att }) : null;
+    let r = null;
+    if (real) { PS = pt ? { lv: pt } : null; try { r = glbGun(wi, matsFor(skin, aw), { att, kit: bun ? KITS[SKINS[skin].id] : null }); } finally { PS = null; } }
     if (r) cache.set(key, r);
     else { PS = pt ? { lv: pt } : null; try { cache.set(key, builders[fn](matsFor(skin, aw), { ...(opt || {}), label: LABELS[wi] ? 'SC ' + LABELS[wi] : '', kit: KITS[SKINS[skin].id], att })); } finally { PS = null; } } // 파츠 스킨: 파츠를 단 유료 스킨, Lv.3·5
   } // 파츠 스킨: 파츠를 단 유료 스킨, Lv.3·5

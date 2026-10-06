@@ -10,6 +10,8 @@ import { paintTex } from './paint.js';
 import { initFx, flashTex, addTracer, emitSpark, emitChip, spark, puff, lightFlash, explode, glow, shock, updateFx } from './fx.js';
 import { makePost, TONE } from './post.js';
 import { initAudio, sfxShot, sfxBoom, sfxSkin, sfxUI } from './audio.js';
+import { loadGunModels } from './gunmodels.js';
+await loadGunModels(); // 게임과 같은 실제 총 모델
 
 const DUR = 46, RENDER = /[?&]render/.test(location.search), $ = (id) => document.getElementById(id);
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: false });
