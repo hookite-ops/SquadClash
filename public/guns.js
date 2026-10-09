@@ -533,7 +533,8 @@ function matsFor(skin, aw) {
 export function tickSkins(t) {
   for (const a of animated) a.f(a.M, t);
   const k = pulseK * Math.max(0, 1 - (performance.now() / 1000 - pulseAt) / 0.8) ** 2; // 꺼낼 때 한 번 확 밝아짐
-  for (const [m, b0] of exoGlow) m.emissiveIntensity = b0 * (0.8 + 0.25 * Math.sin(t * 2.7 + b0) + k * 2); // 외계 무기의 빛
+  for (const [m, b0] of exoGlow) m.emissiveIntensity = b0 * (0.8 + 0.25 * Math.sin(t * 2.7 + b0) + k * 2); // 높은 등급 스킨 부품의 빛
+  if (exFlow) exFlow.offset.x = -t * 0.45; // 빛 선을 따라 흐르는 띠
   for (const M of bundleSets) { // 얼티밋 스킨: 빛나는 부품이 숨 쉬듯 일렁임
     M._glow.forEach(([m, b], i) => { m.emissiveIntensity = b * (0.82 + 0.22 * Math.sin(t * 3.1 + i * 1.7) + k * 2.6); });
     if (k && M.body.emissiveMap) M.body.emissiveIntensity *= 1 + k * 2;
@@ -2425,13 +2426,13 @@ function glbGun(wi, M, o) {
     magM = new THREE.Matrix4().makeTranslation(0, w[0], w[1]).multiply(new THREE.Matrix4().makeRotationX(th)).multiply(new THREE.Matrix4().makeTranslation(0, -t[0], -t[1]));
   }
   const magMat = magM ? mat.clone().multiply(magM) : mat;
-  const EX = o.exo ? ADORN[o.exo] : null, verts = EX ? [] : null; let magBox = null; // 높은 등급 스킨 장식에 쓸 실제 총의 꼭짓점·탄창 자리
+  const EX = o.exo ? ADORN[o.exo] : null, tris = EX ? [] : null, mtris = EX ? [] : null; let magBox = null; // 높은 등급 스킨 장식에 쓸 실제 총의 삼각형(겉면 재기)·탄창 자리
   if (F.spin) b.part('spin', [-front[2], yM, 0], 2.4, 'z');
   for (const [key, geo] of Object.entries(mdl.groups)) {
     const [grp, shade] = key.includes(':') ? key.split(':') : ['', key];
     if ((grp === 'spin' && !F.spin) || (grp === 'mag' && F.mag === 'drop')) continue;
-    if (EX && grp === 'mag') { const bx = geo.boundingBox.clone().applyMatrix4(magMat); magBox = magBox ? magBox.union(bx) : bx; if (EX.replaceMag) continue; } // 탄창 대신 컨셉 부품
-    if (verts && grp !== 'mag') { const q = geo.attributes.position.array; for (let i = 0; i < q.length; i += 3) verts.push(-sc * q[i], sc * q[i + 1] + off[1], -sc * q[i + 2] + off[2]); }
+    if (EX && grp === 'mag') { const bx = geo.boundingBox.clone().applyMatrix4(magMat); magBox = magBox ? magBox.union(bx) : bx; }
+    if (EX) (grp === 'mag' ? mtris : tris).push({ p: geo.attributes.position.clone().applyMatrix4(grp === 'mag' ? magMat : mat).array, idx: geo.index.array });
     b.part(grp === 'mag' ? 'mag' : grp === 'spin' ? 'spin' : '');
     b.add(geo, grp === 'mag' ? (shade === 'brass' ? M.brass : shade === 'olive' ? M.olive : M.mag) : grp === 'spin' ? (shade === 'white' ? M.bolt : M.steel) : role(shade), grp === 'mag' ? magMat : mat);
   }
@@ -2452,15 +2453,29 @@ function glbGun(wi, M, o) {
   if (F.un && A.grp && !pistol) { const t = at(F.un[0], F.un[1]); fore = underGrip(b, A.grp, -t[2], t[1], M); }
   if (F.un && A.las) { const t = at(F.un[0] + 4, F.un[1]); laserAtt(b, -t[2], t[1] - 0.008, pistol ? 0 : -0.024, M); }
   if (F.mg && A.mag) { const t0 = at(F.mg[0], F.mg[2]), t1 = at(F.mg[1], F.mg[2]); b.part('mag'); magAtt(b, A.mag, -t0[2], -t1[2], t0[1], pistol ? 0.026 : 0.03, M, 0); b.part(); }
-  if (EX) { // 높은 등급 스킨: 실제 총의 단면을 재서 컨셉 부품을 붙임
-    const sec = exSections(verts, yM), rc = F.rc || [10, 85, 5, 25], rA = at(rc[0], rc[3]), rB = at(rc[1], rc[2]), rMid = rA[1], rTop = rB[1], cat = WEAPONS[wi].cat, big = cat === 'mg' ? 1.2 : cat === 'sg' ? 1.08 : pistol ? 0.7 : 1;
-    let back = -9; for (let i = 2; i < verts.length; i += 3) if (verts[i] > back) back = verts[i];
-    const c = { b, add: (g, m, mx) => b.add(g, m, mx || null, !!g.attributes.uv), X: exoMats(o.exo), M, sh: M.recv, sh2: M.mag || M.recv, zM: front[2], zT: -tip, yB: yM, br: pistol ? 0.008 : 0.011 * big, r0: rA[2], r1: rB[2], fore, grip, S: sight, back, mag: magBox, side: pistol, cat, big };
-    c.recAt = (z) => sec(z - 0.012, z + 0.012, rMid - 0.035, rTop + 0.006);
-    c.rec = sec(c.r0, c.r1, rMid - 0.035, rTop + 0.006);
-    c.hgd = pistol ? sec(c.zM, c.zM + 0.05, yM - 0.05, yM + 0.03) : sec(fore[2] - 0.03, fore[2] + 0.03, yM - 0.06, yM + 0.04);
-    c.stock = !pistol && back - c.r1 > 0.06;
-    c.stockAt = (t) => { const z = c.r1 + (back - c.r1) * Math.min(1, Math.max(0, t)); return sec(z - 0.012, z + 0.012); };
+  if (EX) { // 높은 등급 스킨: 실제 총 겉면을 재서(exMap) 총몸·덮개·탄창·손잡이·개머리 자리를 찾고, 스킨마다 다른 부품을 그 자리에 맞춰 붙임
+    const map = exMap(tris), rc = F.rc || [10, 85, 5, 25], rA = at(rc[0], rc[3]), rB = at(rc[1], rc[2]), rMid = rA[1], rTop = rB[1], cat = WEAPONS[wi].cat, big = cat === 'mg' ? 1.2 : cat === 'sg' ? 1.08 : pistol ? 0.7 : 1;
+    let back = -9; for (const { p } of tris) for (let i = 2; i < p.length; i += 3) if (p[i] > back) back = p[i];
+    const probe = (z) => { let best = null, bd = 9; for (const r of map.runs(true, z, yM - 0.07, Math.min(sight - 0.001, yM + 0.06))) { const d = yM < r[0] ? r[0] - yM : yM > r[1] ? yM - r[1] : 0; if (d < bd) { bd = d; best = r; } } return bd < 0.006 ? best : null; }; // 총열 높이를 지나는 덩어리
+    let br = 9; for (let z = front[2] + 0.003; z < front[2] + 0.05; z += 0.003) { const r = probe(z); if (r) br = Math.min(br, (r[1] - r[0]) / 2); }
+    br = pistol ? 0.008 : br > 0.025 ? 0.011 * big : Math.max(0.0045, br); // 총열 반지름
+    const thick = (z) => { const r = probe(z); return r && (r[1] - r[0]) / 2 > br * 1.6; };
+    let h0 = fore[2], h1 = fore[2]; // 왼손이 잡는 총열덮개 앞뒤 (총열보다 굵은 곳)
+    if (!pistol && thick(fore[2])) { while (h0 - 0.004 > front[2] + 0.015 && thick(h0 - 0.004)) h0 -= 0.004; while (h1 + 0.004 < rA[2] && thick(h1 + 0.004)) h1 += 0.004; }
+    if (h1 - h0 < 0.05) { h0 = Math.max(front[2] + 0.03, fore[2] - 0.07); h1 = Math.min(rA[2] - 0.002, fore[2] + 0.05); }
+    const sec = (z) => { let n = 0, a = 0, bb = 0, w = 0; for (const d of [-0.004, 0, 0.004]) { const r = probe(z + d); if (!r) continue; n++; a += r[0]; bb += r[1]; w += map.wAt(z + d, r[0], r[1]); } return n ? { y0: a / n, y1: bb / n, w: Math.max(br, w / n) } : { y0: yM - br * 1.8, y1: yM + br * 1.8, w: br * 1.8 }; };
+    const c = { b, add: (g, m, mx) => b.add(g, m, mx || null, !!g.attributes.uv), X: exoMats(o.exo), M, sh: M.recv, sh2: M.mag || M.recv, zM: front[2], zT: -tip, yB: yM, br, r0: rA[2], r1: rB[2], fore, grip, S: sight, back, mag: magBox, side: pistol, cat, big, map, hz: [h0, h1], sec };
+    const recLo = pistol ? rMid - (rTop - rMid) * 0.15 : rMid - (rTop - rMid) * 1.3, recHi = Math.min(rTop + 0.004, sight - 0.003), reg = (c.reg = {});
+    reg.rec = exRegion(map, true, rA[2] + 0.002, rB[2] - 0.002, (recLo + recHi) / 2, recLo, recHi, 0.008);
+    reg.hg = pistol ? null : exRegion(map, true, h0 + 0.003, h1 - 0.003, yM, yM - 0.07, Math.min(sight - 0.003, yM + 0.06), 0.006);
+    c.stock = !pistol && back - rB[2] > 0.06;
+    reg.stk = c.stock ? exRegion(map, true, rB[2] + 0.004, back - 0.004, rMid, -9, sight - 0.004, 0.012) : null;
+    reg.grp = exRegion(map, false, Math.max(recLo, grip[1] + 0.12), grip[1] - 0.12, grip[2], grip[2] - 0.06, grip[2] + 0.08, 0.012, '', 0.09, grip[1]);
+    if (magBox && mtris.length) { const zc = (magBox.min.z + magBox.max.z) / 2; let yt = magBox.max.y - 0.004; for (const r of map.runs(true, zc, magBox.min.y, magBox.max.y + 0.05)) if (r[1] > magBox.max.y - 0.006) yt = Math.min(yt, r[0] - 0.003); reg.mg = exRegion(exMap(mtris), false, yt, magBox.min.y + 0.002, zc, magBox.min.z - 0.01, magBox.max.z + 0.01, 0.008, 'mag'); }
+    c.panel = (R, s, poly, op) => exPanel(c, R, s, poly, op);
+    c.both = (fn) => { for (const s of [-1, 1]) fn(s); };
+    c.sleeve = (z0, z1, op = {}) => { const pad = op.pad ?? 0.003, k = op.k || (() => 1), prof = (z) => { const q = sec(z), kk = k((z - z0) / (z1 - z0)), y = (q.y0 + q.y1) / 2; return { w: (q.w + pad) * kk, h: Math.max(0.003, Math.min(((q.y1 - q.y0) / 2 + pad) * kk, sight - 0.004 - y)), y }; }; if (op.mat) c.add(exLoft(z0, z1, (t) => prof(z0 + (z1 - z0) * t), op.p || 2, op.nz || Math.max(6, Math.round((z1 - z0) / 0.006)), op.nr || 22), op.mat); return prof; };
+    c.helix = (z0, z1, r, turns, tr, mat, y = yM, ph = 0) => { const pts = [], n = Math.max(12, Math.round(turns * 14)); for (let k = 0; k <= n; k++) { const t = k / n, a = ph + t * turns * Math.PI * 2; pts.push([Math.cos(a) * r, y + Math.sin(a) * r, z0 + (z1 - z0) * t]); } c.add(exPath(pts, tr, false, 5), mat); };
     EX.build(c);
     if (c.tip !== undefined) tip = -c.tip;
   }
@@ -2470,31 +2485,34 @@ export const GLB_WEAPONS = Object.keys(GLB_FIT).map(Number);
 
 // ───────────── 외계·마법공학 무기 (얼티밋·레전드 스킨) ─────────────
 // 높은 등급 스킨: 총의 기본 모양(실제 총 모델)은 그대로 두고, 스킨마다 컨셉이 완전히 다른 외계·마법공학 부품을 붙임 (ADORN).
-const EXO = {
-  platinum: { glow: 0x6fd8ff, trim: 'silver' },   // 하드라이트: 떠 있는 흰 석판들과 그 사이 빛의 면
-  damascus: { glow: 0xffa040, trim: 'gold' },     // 건블레이드: 휘어진 카타나 칼날, 코등이, 감은 자루, 칼집 개머리
-  obsidian: { glow: 0xb04aff, trim: 'black' },    // 사신의 낫: 들쭉날쭉한 흑요석 결정, 총열 아래로 휘는 낫날
-  diamond: { glow: 0xbfeaff, trim: 'silver' },    // 수정 프리즘: 투명한 육각 수정 몸통, 끝에 떠서 도는 다이아몬드, 왕관 가시
-  atomic: { glow: 0xff6a1a, trim: 'gold' },       // 원자로 캐논: 냉각핀 드럼, 코일 총열, 냉각관, 방사능 통
-  orion: { glow: 0x7a9cff, trim: 'silver' },      // 아스트롤라베: 가는 틀, 세 축으로 도는 혼천의 고리, 별자리 선
-  darkmatter: { glow: 0xc040ff, trim: 'black' },  // 특이점: 검은 구체와 도는 강착원반, 중력 렌즈 고리
-  crimson: { glow: 0xff2a3a, trim: 'white' },     // 메카 레일건: 각진 장갑, 두 줄 레일과 전기 아크, 유압 실린더
-  dragon: { glow: 0xff3a1a, trim: 'gold' },       // 용: 비늘 마디 목, 등가시, 입 벌린 머리 총구, 꼬리 개머리
-  phoenix: { glow: 0xffb020, trim: 'gold' },      // 불사조: 펼친 깃털 날개, 부리 총구, 볏, 꼬리깃 개머리
-  aqua: { glow: 0x30e0ff, trim: 'white' },        // 수중 메카: 물방울 선체, 지느러미, 덕트 속에서 도는 임펠러, 물탱크
+const EXO = { // glow 빛 색 · trim 테두리 금속 · alt/alt2 스킨마다 다른 두 번째·세 번째 재질
+  platinum: { glow: 0x6fd8ff, trim: 'gold', alt: { color: 0xf4f6fa, metalness: 0.15, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.05 }, alt2: { color: 0x0e1c2e, metalness: 0.6, roughness: 0.12, clearcoat: 1 } }, // 흰 세라믹·짙은 유리
+  damascus: { glow: 0xffa040, trim: 'gold', alt: { color: 0x0d0b0c, metalness: 0.2, roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.04 }, alt2: { color: 0x9a1218, metalness: 0, roughness: 0.75 } }, // 검은 옻칠·붉은 비단끈
+  obsidian: { glow: 0xb04aff, trim: 'black', alt: { color: 0xd8cfbd, metalness: 0.05, roughness: 0.55 }, alt2: { color: 0xc8ccd4, metalness: 1, roughness: 0.2 } }, // 뼈·은
+  diamond: { glow: 0xbfeaff, trim: 'silver', alt: { color: 0xf3f5f8, metalness: 1, roughness: 0.07 }, alt2: { color: 0x2a5cff, metalness: 0.3, roughness: 0.05 } }, // 백금·사파이어
+  atomic: { glow: 0xff6a1a, trim: 'copper', alt: { color: 0xf2c20a, metalness: 0.1, roughness: 0.4 }, alt2: { color: 0x26231f, metalness: 0.8, roughness: 0.42 } }, // 경고 노랑·검은 쇠
+  orion: { glow: 0x7a9cff, trim: 'silver', alt: { color: 0x0c1a3e, metalness: 0.35, roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.05 }, alt2: { color: 0xd8b25a, metalness: 1, roughness: 0.2 } }, // 남색 법랑·놋쇠
+  darkmatter: { glow: 0xc040ff, trim: 'black', alt: { color: 0x14111b, metalness: 0.85, roughness: 0.28 }, alt2: { color: 0x2a1240, metalness: 0.6, roughness: 0.2 } }, // 흑연·짙은 보라
+  crimson: { glow: 0xff2a3a, trim: 'white', alt: { color: 0xc8101c, metalness: 0.3, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08 }, alt2: { color: 0x1a1b1f, metalness: 0.85, roughness: 0.3 } }, // 빨간 장갑·검은 뼈대
+  dragon: { glow: 0xff3a1a, trim: 'gold', alt: { color: 0x0f0c0e, metalness: 0.7, roughness: 0.18 }, alt2: { color: 0xece4d2, metalness: 0.1, roughness: 0.3 } }, // 검은 비늘 바탕·상아 이빨
+  phoenix: { glow: 0xffb020, trim: 'gold', alt: { color: 0xff9a30, metalness: 0.9, roughness: 0.18, emissive: 0x803000, emissiveIntensity: 0.6 }, alt2: { color: 0xff2a18, metalness: 0.3, roughness: 0.04, emissive: 0xc01000, emissiveIntensity: 1.4 }, alt3: { color: 0x7a0c08, metalness: 0.5, roughness: 0.16, clearcoat: 1, clearcoatRoughness: 0.05 } }, // 깃털 주황금·루비·진홍 법랑
+  aqua: { glow: 0x30e0ff, trim: 'white', alt: { color: 0x0d4aa8, metalness: 0.4, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.06 }, alt2: { color: 0x1a1d22, metalness: 0.2, roughness: 0.6 } }, // 짙은 파랑·고무
 };
 const exoGlow = [];
 const EXM = {};
+let exFlow = null; // 빛 선을 따라 흐르는 밝은 띠 (바탕은 은은히 켜 둠)
 function exoMats(id) {
   if (EXM[id]) return EXM[id];
   const T = EXO[id], c = new THREE.Color(T.glow);
-  const trim = { gold: { color: 0xffcf6a, metalness: 1, roughness: 0.16 }, silver: { color: 0xe8edf4, metalness: 1, roughness: 0.12 }, black: { color: 0x1a1720, metalness: 0.9, roughness: 0.22 }, white: { color: 0xf2f4f8, metalness: 0.3, roughness: 0.28, clearcoat: 1 } }[T.trim];
-  const g = std({ color: c, emissive: c, emissiveIntensity: 2.4, roughness: 0.35, metalness: 0, wear: 0 });
+  const trim = { gold: { color: 0xffcf6a, metalness: 1, roughness: 0.16 }, silver: { color: 0xe8edf4, metalness: 1, roughness: 0.12 }, copper: { color: 0xd98a52, metalness: 1, roughness: 0.2 }, black: { color: 0x1a1720, metalness: 0.9, roughness: 0.22 }, white: { color: 0xf2f4f8, metalness: 0.3, roughness: 0.28, clearcoat: 1 } }[T.trim];
+  if (!exFlow) { exFlow = texOf(field(64, (u, v, o) => { const d = u % 1, k = 0.55 + 0.45 * Math.exp(-(((d - 0.5) / 0.09) ** 2)); o[0] = o[1] = o[2] = Math.round(k * 255); }), false, 1); exFlow.repeat.set(3, 1); }
+  const g = std({ color: c, emissive: c, emissiveMap: exFlow, emissiveIntensity: 2.4, roughness: 0.35, metalness: 0, wear: 0 });
   const gd = std({ color: c, emissive: c, emissiveIntensity: 1.6, roughness: 0.4, metalness: 0, wear: 0, side: THREE.DoubleSide, transparent: true, opacity: 0.8, depthWrite: false });
   const hot = std({ color: 0xffffff, emissive: c.clone().lerp(new THREE.Color(0xffffff), 0.45), emissiveIntensity: 3.6, roughness: 0.2, metalness: 0, wear: 0 });
-  const R = { trim: std({ ...trim, wear: 0 }), glow: g, glowD: gd, hot, void: std({ color: 0x020203, metalness: 0.2, roughness: 0.05, wear: 0 }),
+  const R = { trim: std({ ...trim, wear: 0 }), glow: g, glowD: gd, hot, void: std({ color: 0x020203, metalness: 0.2, roughness: 0.05, wear: 0 }), alt: std({ ...T.alt, wear: 0 }), alt2: std({ ...T.alt2, wear: 0 }), alt3: T.alt3 ? std({ ...T.alt3, wear: 0 }) : null, steel: std({ color: 0xe6eaf0, metalness: 1, roughness: 0.06, wear: 0 }),
     glass: std({ color: c.clone().lerp(new THREE.Color(0xffffff), 0.6), metalness: 0.1, roughness: 0.02, transparent: true, opacity: 0.45, emissive: c, emissiveIntensity: 0.6, wear: 0, depthWrite: false }) };
-  exoGlow.push([g, 2.4], [gd, 1.6], [hot, 3.6]);
+  if (!R.alt3) R.alt3 = R.alt;
+  exoGlow.push([g, 3.8], [gd, 1.6], [hot, 3.6]);
   return (EXM[id] = R);
 }
 // ── 모양 도구 (좌표: 총구가 -z, 위가 +y) ──
@@ -2531,170 +2549,488 @@ const exRing = (r, tk, z, y = 0, seg = 28, ts = 8) => new THREE.TorusGeometry(r,
 const exFeather = (len, wd) => [[0, 0], [len * 0.25, wd], [len * 0.8, wd * 0.55], [len, 0], [len * 0.7, -wd * 0.35], [len * 0.2, -wd * 0.4]];
 function exRng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 
-// ── 높은 등급 스킨의 컨셉 장식: 실제 총 (모양 그대로 — AK 는 AK) 위에 스킨마다 다른 외계·마법공학 부품을 붙임 ──
-// c 의 자리 (모두 실제 총에서 잰 값): zM 총구 z(파츠 전) · zT 총구 z(소음기·파츠 후) · yB 총열 높이 · br 총열 굵기 · r0·r1 총몸 앞뒤 z
-//   rec 총몸 단면 { w 반너비, yc 가운데, hh 반높이, y0, y1 } · hgd 손 앞 총열덮개 단면 · stockAt(t) 개머리 단면 (t 0 앞 → 1 뒤끝)
-//   fore·grip 손 자리 · S 조준선 높이 · back 총 뒤끝 z · mag 탄창 상자(Box3, 없으면 null) · side 권총 · big 크기 배율
-// c.tip 을 정하면 그 z 가 새 총구 (총구 장치가 앞으로 길어질 때 — 불꽃·총알이 거기서 나감)
+// ── 실제 총 겉면 재기: 높은 등급 스킨 부품을 실제 총 겉면에 딱 맞게 붙이려고, 옆에서 본 2mm 격자마다 겉면 x 를 기록 ──
+//   R: 그 칸에서 가장 바깥 +x (오른쪽 겉면) · L: 가장 바깥 -x (왼쪽 겉면). 삼각형을 옆면(z,y)에 찍어서 채움
+function exMap(tris, h = 0.002) {
+  let z0 = 9, z1 = -9, y0 = 9, y1 = -9;
+  for (const { p } of tris) for (let i = 0; i < p.length; i += 3) { const y = p[i + 1], z = p[i + 2]; if (z < z0) z0 = z; if (z > z1) z1 = z; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  z0 -= h; y0 -= h;
+  const nz = Math.ceil((z1 - z0) / h) + 3, ny = Math.ceil((y1 - y0) / h) + 3, R = new Float32Array(nz * ny).fill(-9), L = new Float32Array(nz * ny).fill(9);
+  for (const { p, idx } of tris) for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3, za = p[a + 2], ya = p[a + 1], zb = p[b + 2], yb = p[b + 1], zc = p[c + 2], yc = p[c + 1];
+    const d = (zb - za) * (yc - ya) - (zc - za) * (yb - ya); if (Math.abs(d) < 1e-10) continue;
+    const i0 = Math.max(0, Math.ceil((Math.min(za, zb, zc) - z0) / h)), i1 = Math.min(nz - 1, Math.floor((Math.max(za, zb, zc) - z0) / h)), j0 = Math.max(0, Math.ceil((Math.min(ya, yb, yc) - y0) / h)), j1 = Math.min(ny - 1, Math.floor((Math.max(ya, yb, yc) - y0) / h));
+    for (let i = i0; i <= i1; i++) { const z = z0 + i * h; for (let j = j0; j <= j1; j++) { const y = y0 + j * h, w1 = ((zb - z) * (yc - y) - (zc - z) * (yb - y)) / d, w2 = ((zc - z) * (ya - y) - (za - z) * (yc - y)) / d, w3 = 1 - w1 - w2;
+      if (w1 < -1e-3 || w2 < -1e-3 || w3 < -1e-3) continue; const x = w1 * p[a] + w2 * p[b] + w3 * p[c], k = i * ny + j; if (x > R[k]) R[k] = x; if (x < L[k]) L[k] = x; } }
+  }
+  const on = (i, j) => i >= 0 && j >= 0 && i < nz && j < ny && R[i * ny + j] > -9;
+  return { h, on,
+    runs(cols, t, lo, hi) { // cols: z=t 세로줄의 y 덩어리들 / 아니면 y=t 가로줄의 z 덩어리들 (세 칸 이하 틈은 이음)
+      const out = [], o0 = cols ? y0 : z0, n = cols ? ny : nz, k = Math.round((t - (cols ? z0 : y0)) / h), m0 = Math.max(0, Math.ceil((lo - o0) / h)), m1 = Math.min(n - 1, Math.floor((hi - o0) / h));
+      let s = -1, e = -1;
+      for (let m = m0; m <= m1; m++) if (cols ? on(k, m) : on(m, k)) { if (s < 0) s = m; else if (m - e > 3) { out.push([o0 + s * h, o0 + e * h]); s = m; } e = m; }
+      if (s >= 0) out.push([o0 + s * h, o0 + e * h]);
+      return out;
+    },
+    wAt(z, a, b) { const i = Math.round((z - z0) / h); let w = 0; for (let di = -1; di <= 1; di++) for (let j = Math.round((a - y0) / h); j <= Math.round((b - y0) / h); j++) if (on(i + di, j)) { const k = (i + di) * ny + j; w = Math.max(w, R[k], -L[k]); } return w; },
+    xAt(z, y, s, rz, ry) { // (z,y) 둘레 겉면 x — 튀어나온 장전손잡이·움푹한 구멍에 끌려가지 않게 가운데쯤 값
+      const i = Math.round((z - z0) / h), j = Math.round((y - y0) / h), v = [];
+      for (let di = -rz; di <= rz; di++) for (let dj = -ry; dj <= ry; dj++) if (on(i + di, j + dj)) v.push(s > 0 ? R[(i + di) * ny + j + dj] : L[(i + di) * ny + j + dj]);
+      if (!v.length) return NaN; v.sort((p, q) => p - q); return v[Math.min(v.length - 1, (v.length * (s > 0 ? 0.62 : 0.38)) | 0)];
+    } };
+}
+// 영역: 축(cols: z / 아니면 y)을 t0→t1 로 걸으며 앞 칸 가운데에 가장 가까운 덩어리를 따라감 (갑자기 두 배로 넓어지면 다른 부품에 닿은 것 → 멈춤)
+function exTrack(map, cols, t0, t1, seed, lo, hi, minW, maxW) {
+  if (!map || Math.abs(t1 - t0) < 0.006) return [];
+  const n = Math.max(3, Math.round(Math.abs(t1 - t0) / (map.h * 1.5))), P = []; let m = seed, pw = 0;
+  for (let k = 0; k <= n; k++) {
+    const t = t0 + ((t1 - t0) * k) / n, rs = map.runs(cols, t, typeof lo === 'function' ? lo(t) : lo, typeof hi === 'function' ? hi(t) : hi);
+    let best = null, bd = 1e9; for (const r of rs) { if (r[1] - r[0] < minW || r[1] - r[0] > maxW) continue; const d = m < r[0] ? r[0] - m : m > r[1] ? m - r[1] : 0; if (d < bd) { bd = d; best = r; } }
+    if (best && pw && best[1] - best[0] > pw * 2 + 0.01) break;
+    if (best && bd < 0.012) { P.push({ t, a: best[0], b: best[1] }); m = (best[0] + best[1]) / 2; pw = best[1] - best[0]; } else P.push({ t });
+  }
+  let i1 = P.length - 1; while (i1 >= 0 && P[i1].a === undefined) i1--;
+  const i0 = P.findIndex((q) => q.a !== undefined);
+  return i0 < 0 ? [] : P.slice(i0, i1 + 1);
+}
+// at(u) → { t, a, b } (u 0 = 시작 쪽, a<b 는 가로지르는 쪽 범위). mid 를 주면 그 자리에서 양쪽으로 따라가 이음
+function exRegion(map, cols, t0, t1, seed, lo, hi, minW = 0.004, part = '', maxW = 9, mid) {
+  let Q;
+  if (mid === undefined) Q = exTrack(map, cols, t0, t1, seed, lo, hi, minW, maxW);
+  else { const A = exTrack(map, cols, mid, t0, seed, lo, hi, minW, maxW), B = exTrack(map, cols, mid, t1, seed, lo, hi, minW, maxW); Q = [...A.reverse(), ...B.slice(1)]; }
+  if (Q.length < 4) return null;
+  for (let k = 0; k < Q.length; k++) if (Q[k].a === undefined) { let e = k + 1; while (Q[e].a === undefined) e++; const A = Q[k - 1], B = Q[e], f = (Q[k].t - A.t) / (B.t - A.t); Q[k].a = A.a + (B.a - A.a) * f; Q[k].b = A.b + (B.b - A.b) * f; }
+  const S = Q.map((q, k) => { let a = 0, b = 0, w = 0; for (let d = -2; d <= 2; d++) { const r = Q[k + d]; if (r) { a += r.a; b += r.b; w++; } } return { t: q.t, a: a / w, b: b / w }; });
+  const N = S.length - 1, at = (u) => { const f = Math.min(N, Math.max(0, u * N)), i = Math.min(N - 1, f | 0), g = f - i, A = S[i], B = S[i + 1]; return { t: A.t + (B.t - A.t) * g, a: A.a + (B.a - A.a) * g, b: A.b + (B.b - A.b) * g }; };
+  let H = 0; for (const q of S) H += q.b - q.a;
+  return { cols, at, len: Math.abs(S[N].t - S[0].t), H: Math.max(0.004, H / S.length), map, part };
+}
+const exZY = (R, u, v) => { const q = R.at(u), w = q.a + (q.b - q.a) * v; return R.cols ? [q.t, w] : [w, q.t]; }; // 영역 (u,v) → [z, y]
+function exField(R, s) { // 영역 겉면 x 를 (u,v) 격자로 재고 (빈칸은 이웃으로, 한 번 흐림) 쌍선형으로 읽음
+  const key = s > 0 ? 'fR' : 'fL'; if (R[key]) return R[key];
+  const NU = Math.max(4, Math.min(48, Math.round(R.len / 0.008))), NV = 8, W = NV + 1, map = R.map, ru = Math.max(1, Math.round(R.len / NU / map.h / 2)), rv = Math.max(1, Math.round(R.H / NV / map.h / 2)), X = new Float32Array((NU + 1) * W);
+  for (let i = 0; i <= NU; i++) for (let j = 0; j <= NV; j++) { const [z, y] = exZY(R, i / NU, j / NV); X[i * W + j] = R.cols ? map.xAt(z, y, s, ru, rv) : map.xAt(z, y, s, rv, ru); }
+  for (let it = 0; it < NU + NV; it++) { let left = 0; for (let i = 0; i <= NU; i++) for (let j = 0; j <= NV; j++) { if (!isNaN(X[i * W + j])) continue; let sum = 0, n = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii > NU || jj > NV) continue; const x = X[ii * W + jj]; if (!isNaN(x)) { sum += x; n++; } } if (n) X[i * W + j] = sum / n; else left++; } if (!left) break; }
+  for (let k = 0; k < X.length; k++) X[k] = isNaN(X[k]) ? s * 0.012 : s * Math.max(0.002, s * X[k]);
+  // 판은 판답게: 세로줄마다 가운데 값으로 평평하게 펴고(앞뒤로만 부드럽게), 그 둘레 1.5mm 안에서만 실제 굴곡을 따름 → 튀어나온 장전손잡이·조정간은 판을 뚫고 나옴
+  const col = []; for (let i = 0; i <= NU; i++) { const v = []; for (let j = 0; j <= NV; j++) v.push(s * X[i * W + j]); v.sort((p, q) => p - q); col.push(s * Math.min(v[NV >> 1] + 0.004, v[Math.round(NV * 0.8)])); } // 4mm 안쪽으로 튀어나온 건 판이 덮음
+  const cs = col.map((_, i) => { let sum = 0, n = 0; for (let d = -2; d <= 2; d++) if (col[i + d] !== undefined) { sum += col[i + d]; n++; } return sum / n; });
+  const Y = new Float32Array(X.length); for (let i = 0; i <= NU; i++) for (let j = 0; j <= NV; j++) { let sum = 0, n = 0; for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) { const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii > NU || jj > NV) continue; sum += X[ii * W + jj]; n++; } Y[i * W + j] = cs[i] + Math.max(-0.0015, Math.min(0.0008, sum / n - cs[i])); }
+  return (R[key] = (u, v) => { const fu = Math.min(NU, Math.max(0, u * NU)), fv = Math.min(NV, Math.max(0, v * NV)), i = Math.min(NU - 1, fu | 0), j = Math.min(NV - 1, fv | 0), a = fu - i, b = fv - j; return Y[i * W + j] * (1 - a) * (1 - b) + Y[(i + 1) * W + j] * a * (1 - b) + Y[i * W + j + 1] * (1 - a) * b + Y[(i + 1) * W + j + 1] * a * b; });
+}
+const exPath = (pts, r, closed = false, rs) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((q) => XV(q)), closed, 'catmullrom', 0.25), Math.min(240, Math.max(6, Math.round(pts.length * 1.3))), r, rs || (r < 0.0006 ? 3 : r < 0.0012 ? 4 : 6), closed); // 점들을 잇는 가는 관 (테·선). 가늘수록 둘레 칸을 줄임
+function exDense(R, uv, closed) { // (u,v) 꺾은선을 겉면을 따라가도록 잘게 나눔
+  const out = [], n = uv.length - (closed ? 0 : 1);
+  for (let k = 0; k < n; k++) { const A = uv[k], B = uv[(k + 1) % uv.length], L = Math.hypot((B[0] - A[0]) * R.len, (B[1] - A[1]) * R.H), m = Math.max(1, Math.ceil(L / 0.008)); for (let i = 0; i < m; i++) out.push([A[0] + ((B[0] - A[0]) * i) / m, A[1] + ((B[1] - A[1]) * i) / m]); }
+  if (!closed) out.push(uv[uv.length - 1]);
+  return out;
+}
+// 붙임판: 영역 R 의 (u,v) 다각형(세로로 자르면 한 토막인 모양)을 s 쪽(+1 오른쪽, -1 왼쪽) 겉면에 딱 붙인 얇은 판. 앞면은 살짝 좁혀 모서리를 깎음
+function exPanel(c, R, s, poly, o = {}) {
+  if (!R) return null;
+  const F = exField(R, s), off = o.off ?? 0.0007, th = o.th ?? 0.0016, bw = o.bev ?? th * 0.8, top = off + th;
+  let u0 = 1, u1 = 0; for (const q of poly) { u0 = Math.min(u0, q[0]); u1 = Math.max(u1, q[0]); }
+  if (u1 - u0 < 1e-3) return null;
+  const NU = o.nu || Math.max(3, Math.min(40, Math.round(((u1 - u0) * R.len) / 0.005))), NV = o.nv || 5;
+  const span = (u) => { let lo = 9, hi = -9; for (let k = 0; k < poly.length; k++) { const p = poly[k], q = poly[(k + 1) % poly.length]; if (u < Math.min(p[0], q[0]) - 1e-9 || u > Math.max(p[0], q[0]) + 1e-9) continue; if (Math.abs(q[0] - p[0]) < 1e-9) { lo = Math.min(lo, p[1], q[1]); hi = Math.max(hi, p[1], q[1]); } else { const v = p[1] + ((q[1] - p[1]) * (u - p[0])) / (q[0] - p[0]); lo = Math.min(lo, v); hi = Math.max(hi, v); } } return lo > hi ? [0.5, 0.5] : [lo, hi]; };
+  const P = (u, v, lift) => { const [z, y] = exZY(R, u, v); return [F(u, v) + s * lift, y, z]; };
+  const du = Math.min((u1 - u0) * 0.25, bw / R.len);
+  const grid = (lift, ins) => { const g = []; for (let i = 0; i <= NU; i++) { const u = ins ? u0 + du + ((u1 - u0 - 2 * du) * i) / NU : u0 + ((u1 - u0) * i) / NU, [lo, hi] = span(u), q = R.at(u), dv = ins ? Math.min((hi - lo) * 0.25, bw / Math.max(1e-3, q.b - q.a)) : 0, row = []; for (let j = 0; j <= NV; j++) row.push(P(u, lo + dv + ((hi - lo - 2 * dv) * j) / NV, lift)); g.push(row); } return g; };
+  const B = grid(off, false), T = grid(top, true), pos = [];
+  const tri = (a, b, d, w) => { const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = d[0] - a[0], vy = d[1] - a[1], vz = d[2] - a[2], nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; if (nx * w[0] + ny * w[1] + nz * w[2] < 0) pos.push(...a, ...d, ...b); else pos.push(...a, ...b, ...d); };
+  const quad = (a, b, e, d, w) => { tri(a, b, e, w); tri(a, e, d, w); };
+  for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) { quad(T[i][j], T[i + 1][j], T[i + 1][j + 1], T[i][j + 1], [s, 0, 0]); quad(B[i][j], B[i + 1][j], B[i + 1][j + 1], B[i][j + 1], [-s, 0, 0]); }
+  for (let i = 0; i < NU; i++) for (const j of [0, NV]) { const r = B[i][NV >> 1]; quad(T[i][j], T[i + 1][j], B[i + 1][j], B[i][j], [0, B[i][j][1] - r[1], B[i][j][2] - r[2]]); }
+  for (let j = 0; j < NV; j++) for (const i of [0, NU]) { const r = B[NU >> 1][j]; quad(T[i][j], T[i][j + 1], B[i][j + 1], B[i][j], [0, B[i][j][1] - r[1], B[i][j][2] - r[2]]); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  const inP = (fn) => { c.b.part(R.part); fn(); c.b.part(); };
+  inP(() => c.add(g, o.mat || c.sh));
+  const loop = () => { const L = []; for (let i = 0; i <= NU; i++) L.push(T[i][0]); for (let j = 1; j <= NV; j++) L.push(T[NU][j]); for (let i = NU - 1; i >= 0; i--) L.push(T[i][NV]); for (let j = NV - 1; j >= 1; j--) L.push(T[0][j]); return L; };
+  const pf = { s, R, top, u0, u1, span,
+    pt: (u, v, lift = 0) => P(u, v, top + lift),
+    line(uv, r, mat, lift = 0, closed = false) { const pts = exDense(R, uv, closed).map(([u, v]) => P(u, v, top + lift + r * 0.35)); inP(() => c.add(exPath(pts, r, closed), mat)); return pf; },
+    screw(u, v, r, mat) { const p = P(u, v, top + 0.0005); inP(() => { c.add(new THREE.CylinderGeometry(r, r * 1.12, 0.0012, 10).rotateZ(Math.PI / 2).translate(p[0], p[1], p[2]), mat); }); return pf; },
+    put(geo, mat, u, v, lift = 0) { const p = P(u, v, top + lift); inP(() => c.add(geo.translate(p[0], p[1], p[2]), mat)); return pf; },
+  };
+  if (o.rim) { const rr = o.rr || 0.0008; inP(() => c.add(exPath(loop().map((p) => [p[0] + s * rr * 0.2, p[1], p[2]]), rr, true), o.rim)); }
+  return pf;
+}
+// 판 모양 (u: 0 앞/위 → 1 뒤/아래, v: 0 아래/앞 → 1 위/뒤). 여백 m·깎은 모서리 k 는 실제 길이(m)
+const plRect = (R, m = 0.003, u0 = 0, u1 = 1, v0 = 0, v1 = 1) => { const a = u0 + m / R.len, b = u1 - m / R.len, lo = v0 + m / R.H, hi = v1 - m / R.H; return [[a, lo], [b, lo], [b, hi], [a, hi]]; };
+const plCham = (R, m, k, u0 = 0, u1 = 1, v0 = 0, v1 = 1) => { const a = u0 + m / R.len, b = u1 - m / R.len, lo = v0 + m / R.H, hi = v1 - m / R.H, cu = Math.min((b - a) * 0.3, k / R.len), cv = Math.min((hi - lo) * 0.3, k / R.H); return [[a, lo + cv], [a + cu, lo], [b - cu, lo], [b, lo + cv], [b, hi - cv], [b - cu, hi], [a + cu, hi], [a, hi - cv]]; };
+const plArrow = (R, m, k, u0 = 0, u1 = 1, v0 = 0, v1 = 1, back = false) => { const a = u0 + m / R.len, b = u1 - m / R.len, lo = v0 + m / R.H, hi = v1 - m / R.H, cu = Math.min((b - a) * 0.4, k / R.len), mid = (lo + hi) / 2; return back ? [[a, lo], [b - cu, lo], [b, mid], [b - cu, hi], [a, hi]] : [[a, mid], [a + cu, lo], [b, lo], [b, hi], [a + cu, hi]]; };
+const plJag = (R, m, n, amp, seed, u0 = 0, u1 = 1, v0 = 0, v1 = 1) => { // 들쭉날쭉한 결정 조각
+  const rnd = exRng(seed), a = u0 + m / R.len, b = u1 - m / R.len, lo = v0 + m / R.H, hi = v1 - m / R.H, bot = [], tp = [];
+  for (let k = 0; k <= n; k++) { const u = a + ((b - a) * k) / n, e = k === 0 || k === n ? 0.5 : 1; bot.push([u, lo + amp * e * rnd()]); tp.push([u, hi - amp * e * rnd()]); }
+  return [...bot, ...tp.reverse()];
+};
+const exArc = (R, uc, vc, r, a0, a1, n = 12) => { const o = []; for (let k = 0; k <= n; k++) { const a = a0 + ((a1 - a0) * k) / n; o.push([uc + (Math.cos(a) * r) / R.len, vc + (Math.sin(a) * r) / R.H]); } return o; }; // 판 위 원호 (반지름은 실제 길이)
+const exSide = (g, s) => g.rotateY(s * Math.PI / 2); // +z 를 보던 평평한 모양을 s 쪽 바깥(±x)을 보게
+const exDome = (rx, ry, rz, s, seg = 10) => new THREE.SphereGeometry(1, seg, Math.max(3, seg >> 1), 0, Math.PI * 2, 0, Math.PI / 2).rotateZ(-s * Math.PI / 2).scale(rx, ry, rz); // s 쪽으로 볼록한 반구 (비늘·보석 받침)
+function exMerge(gs) { const ps = gs.map((g) => (g.index ? g.toNonIndexed() : g)), n = ps.reduce((a, g) => a + g.attributes.position.count, 0), pos = new Float32Array(n * 3); let o = 0; for (const g of ps) { pos.set(g.attributes.position.array, o * 3); o += g.attributes.position.count; } const r = new THREE.BufferGeometry(); r.setAttribute('position', new THREE.BufferAttribute(pos, 3)); r.computeVertexNormals(); return r; }
+// ── 높은 등급 스킨의 컨셉 장식: 실제 총 (모양 그대로 — AK 는 AK) 을 실제 총기 설계하듯 부품 단위로 다시 꾸밈 ──
+// 실제 총 겉면을 재서(exMap) 총몸·총열덮개·탄창·손잡이·개머리 자리에 맞춰 붙임판·덮개·총구 장치·고정 고리를 붙이고, 그 위에 스킨마다 다른 상징 부품을 얹음
+// c 의 자리 (모두 실제 총에서 잰 값): zM 총구 z(파츠 전) · zT 총구 z(소음기·파츠 후) · yB 총열 높이 · br 총열 반지름 · S 조준선 높이 (이 위로는 아무것도 안 올림)
+//   reg.rec 총몸 · reg.hg 손 앞 총열덮개 · reg.stk 개머리 · reg.grp 손잡이 · reg.mg 탄창 (영역: 붙임판을 붙일 자리, 없으면 null)
+//   hz [앞, 뒤] 총열덮개 z · sec(z) 그 자리 총열덮개 단면 {y0, y1, w} · fore·grip 손 자리 · back 총 뒤끝 z · mag 탄창 상자 · side 권총 · big 크기 배율
+//   panel(영역, 쪽, 모양, {mat, rim, off, th}) 붙임판 → { pt(u,v), line(점들), screw(u,v), put(모양), top } · sleeve(z0, z1, {pad, p, mat}) 덮개 → 단면 함수
+// c.tip 을 정하면 그 z 가 새 총구 (불꽃·총알이 거기서 나감)
+const exBand = (c, pr, za, zb, grow, mat, p = 2) => c.add(exLoft(za, zb, (t) => { const q = pr(za + (zb - za) * t); return { w: q.w + grow, h: q.h + grow, y: q.y }; }, p, 2, 22), mat); // 덮개를 두르는 띠
+const exRadial = (c, n, r, z, y, geoFn, mat, a0 = 0) => { for (let k = 0; k < n; k++) { const a = a0 + (k * Math.PI * 2) / n; c.add(geoFn().rotateZ(a - Math.PI / 2).translate(Math.cos(a) * r, y + Math.sin(a) * r, z), mat); } }; // 총열 둘레로 n 개 (+y 가 바깥인 모양)
+const exBolt = (r = 0.0012, h = 0.003) => new THREE.CylinderGeometry(r, r * 1.15, h, 8); // 바깥(+y)을 보는 볼트 머리
+const exStar = (r, t) => { const g = new THREE.OctahedronGeometry(1, 0).scale(t, r, t), h = new THREE.OctahedronGeometry(1, 0).scale(t, t, r); return exMerge([g, h]); }; // 네 갈래 별 (옆을 봄)
+function exScales(c, R, s, mat, sz, u0 = 0, u1 = 1, v0 = 0, v1 = 1, lift = 0, mat2) { // 겹친 비늘: 앞이 둥글고 뒤가 뾰족한 비늘판을 엇갈린 줄로, 뒤끝이 들리게 깔기 (앞 비늘 뒤끝이 뒤 비늘을 덮음)
+  if (!R) return; const F = exField(R, s), du = (sz * 0.72) / R.len, dv = (sz * 0.78) / R.H, sh = new THREE.Shape(); [[-0.5, 0], [-0.32, 0.42], [0.1, 0.5], [0.55, 0], [0.1, -0.5], [-0.32, -0.42]].forEach(([z, y], i) => (i ? sh.lineTo(z * sz, y * sz * 0.85) : sh.moveTo(z * sz, y * sz * 0.85)));
+  const base = new THREE.ExtrudeGeometry(sh, { depth: 0.0006, bevelEnabled: true, bevelThickness: 0.0012, bevelSize: Math.min(0.0018, sz * 0.12), bevelSegments: 1, bevelOffset: -Math.min(0.0018, sz * 0.12), curveSegments: 3 }).applyMatrix4(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0), new THREE.Vector3(-1, 0, 0)));
+  c.b.part(R.part);
+  for (let i = 0, u = u1 - du * 0.5; u > u0; u -= du, i++) for (let v = v0 + dv * (i % 2 ? 1 : 0.5); v < v1; v += dv) { const [z, y] = exZY(R, u, v), x = F(u, v) + s * (0.0004 + lift); c.add(base.clone().translate(s > 0 ? 0.0018 : -0.0012, 0, 0).rotateY(s * 0.3).translate(x, y, z), mat2 && (i + Math.round(v * 9)) % 7 === 0 ? mat2 : mat); }
+  c.b.part();
+}
 const ADORN = {
-  platinum: { build(c) { // 하드라이트: 총몸 옆에 떠 있는 흰 석판, 총열 양옆 석판 날 사이에 빛의 면
-    const { add, X, sh, sh2, zM, zT, yB, br, rec, fore, side, big } = c, gap = 0.004, hh = Math.max(0.012, rec.hh * 1.15);
-    for (const s of [-1, 1]) { const x = s * (rec.w + gap + 0.0018); add(exBox(c.r0 + 0.008, c.r1 - 0.008, 0.0018, hh, rec.yc, x, 6, 0.8, 1), sh); add(exBox(c.r0 + 0.02, c.r1 - 0.02, 0.0009, 0.0012, rec.yc, x + s * 0.002, 2), X.glow); add(new THREE.OctahedronGeometry(hh * 0.3, 0).scale(0.4, 1, 1.8).translate(x + s * 0.003, rec.yc, (c.r0 + c.r1) / 2), X.hot); }
-    const hf = side ? zM + 0.02 : Math.max(zM + 0.04, fore[2] - 0.05), bl = zT - (side ? 0.022 : 0.045) * big;
-    for (const s of [-1, 1]) { add(exBox(bl, hf, 0.003, br * 1.7, yB, s * (br + 0.007), 6, 0.35, 1), sh2); add(exBox(bl + 0.008, hf - 0.008, 0.0009, br * 0.7, yB, s * (br + 0.0035), 2), X.glow); }
-    add(exBox(bl + 0.006, zT + 0.01, br + 0.004, 0.0011, yB, 0, 2), X.glass);
-    add(new THREE.SphereGeometry(br * 0.85, 14, 10).translate(0, yB, bl + 0.01), X.hot);
-    if (c.stock) for (let k = 0; k < 2; k++) { const q = c.stockAt(0.25 + k * 0.4); for (const s of [-1, 1]) add(exBox(q.z - 0.025, q.z + 0.025, 0.0016, q.hh * 0.7, q.yc, s * (q.w + gap), 6), sh2); }
-    c.tip = bl + 0.004;
+  platinum: { build(c) { // 하드라이트 프라임: 금테 두른 흰 세라믹 판·짙은 유리판·하늘빛 선, 각진 흰 총열덮개, 총구 양옆에 떠 있는 빛의 날
+    const { add, X, zT, yB, br, S, side, big, reg } = c, [h0, h1] = c.hz;
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plArrow(R, 0.002, 0.03), { mat: X.alt, rim: X.trim, rr: 0.0009 }), q = c.panel(R, s, plCham(R, 0.006, 0.005, 0.22, 0.97, 0.2, 0.8), { mat: X.alt2, off: p.top + 0.0002, th: 0.0008, rim: X.trim, rr: 0.0005 });
+        q.line([[0.27, 0.5], [0.9, 0.5]], 0.0008, X.glow).line([[0.34, 0.3], [0.62, 0.3], [0.68, 0.36]], 0.00045, X.glow).line([[0.5, 0.7], [0.86, 0.7]], 0.00045, X.glow);
+        q.put(new THREE.CylinderGeometry(0.0055 * big, 0.0055 * big, 0.0014, 6).rotateZ(Math.PI / 2), X.hot, 0.33, 0.58, 0.0006); q.put(new THREE.TorusGeometry(0.0072 * big, 0.0007, 4, 6), X.trim, 0.33, 0.58, 0.0004).put(exSide(new THREE.TorusGeometry(0.0072 * big, 0.0007, 4, 6), s), X.trim, 0.33, 0.58, 0.0004);
+        for (const [u, v] of [[0.16, 0.32], [0.16, 0.68], [0.985, 0.1], [0.985, 0.9]]) p.screw(u, v, 0.0011, X.trim); }
+      if (reg.mg) { const R2 = reg.mg, p = c.panel(R2, s, plCham(R2, 0.002, 0.004), { mat: X.alt, rim: X.trim, rr: 0.0007 }); if (p) { c.panel(R2, s, plRect(R2, 0.0005, 0.12, 0.78, 0.4, 0.6), { mat: X.glow, off: p.top + 0.0001, th: 0.0006 }); for (let k = 0; k < 6; k++) p.line([[0.14 + k * 0.11, 0.3], [0.14 + k * 0.11, 0.36]], 0.0004, X.trim); c.panel(R2, s, plRect(R2, 0, 0.86, 1, 0, 1), { mat: X.trim, off: 0.0005, th: 0.0024 }); } }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plCham(R3, 0.003, 0.005, 0.05, 1), { mat: X.alt, rim: X.trim, rr: 0.0007 }); if (p) p.line([[0.15, 0.35], [0.85, 0.55]], 0.0006, X.glow); }
+      if (reg.stk) { const R4 = reg.stk, p = c.panel(R4, s, plArrow(R4, 0.003, 0.03, 0, 0.92, 0, 1, true), { mat: X.alt, rim: X.trim, rr: 0.0009 }); if (p) { const q = c.panel(R4, s, plCham(R4, 0.008, 0.006, 0.08, 0.7, 0.25, 0.75), { mat: X.alt2, off: p.top + 0.0002, th: 0.0008 }); q && q.line([[0.12, 0.5], [0.66, 0.5]], 0.0008, X.glow); p.screw(0.05, 0.3, 0.0011, X.trim).screw(0.05, 0.7, 0.0011, X.trim); } c.panel(R4, s, plRect(R4, 0, 0.93, 1, 0, 1), { mat: X.trim, off: 0.0004, th: 0.0022 }); }
+    });
+    if (!side) { // 손 앞 덮개: 각진 흰 세라믹 + 금 띠 + 옆 가운데로 갈라진 빛 + 위 통풍구
+      const pr = c.sleeve(h0, h1, { pad: 0.0028, p: 4, mat: X.alt });
+      exBand(c, pr, h0 - 0.002, h0 + 0.009, 0.0016, X.trim, 4); exBand(c, pr, h1 - 0.009, h1 + 0.002, 0.0016, X.trim, 4);
+      c.both((s) => { const pts = []; for (let k = 0; k <= 14; k++) { const z = h0 + 0.012 + ((h1 - h0 - 0.024) * k) / 14, q = pr(z); pts.push([s * (q.w + 0.0003), q.y, z]); } add(exPath(pts, 0.0009, false, 5), X.glow); });
+      for (let z = h0 + 0.016; z < h1 - 0.014; z += 0.013) { const q = pr(z); c.both((s) => add(exBox(z - 0.0035, z + 0.0035, 0.0007, q.h * 0.14, q.y + q.h * 0.6, s * q.w * 0.97, 2), X.glow)); }
+      // 빛의 날: 덮개 앞 금 발사구에서 총구 너머까지 떠 있는 흰 날 두 장 (사이에 빛의 면)
+      const q0 = pr(h0 + 0.004), bx = q0.w + 0.005, zr = h0 + 0.004, zf = zT - 0.055 * big, H = Math.min(0.03 * big, q0.h * 1.4);
+      c.both((s) => { const prof = [[zr, yB - H * 0.45], [zr, yB + H * 0.55], [zr - (zr - zf) * 0.55, yB + H * 0.32], [zf + 0.012, yB + 0.003], [zf, yB - 0.001], [zf + 0.02, yB - H * 0.2], [zr - (zr - zf) * 0.4, yB - H * 0.4]];
+        add(exFin(prof, 0.0018, s * bx), X.glowD); add(exPath([...prof, prof[0]].map(([z, y]) => [s * (bx + 0.0011), y, z]), 0.0009, false, 4), X.glow); add(exPath([...prof, prof[0]].map(([z, y]) => [s * (bx - 0.0011), y, z]), 0.0009, false, 4), X.glow);
+        add(exBox(zr - 0.002, zr + 0.016, 0.0034, H * 0.62, yB + H * 0.05, s * bx, 8, 1, 0.85), X.alt); add(exBox(zr + 0.002, zr + 0.012, 0.0036, H * 0.12, yB + H * 0.05, s * bx, 2), X.trim);
+        add(exFin(prof, 0.0026, s * bx), X.alt); add(exPath(prof.slice(2, 6).map(([z, y]) => [s * (bx + 0.0014), y, z]), 0.0007, false, 4), X.glow);
+        add(exPath([[s * (bx + 0.0014), yB + H * 0.1, zr - 0.004], [s * (bx + 0.0014), yB + H * 0.1, zr - (zr - zf) * 0.5]], 0.0005, false, 4), X.glow);
+        add(new THREE.SphereGeometry(0.0022, 10, 8).translate(s * (q0.w + 0.0025), q0.y, zr + 0.004), X.trim); add(exCyl(0.0007, 0.0007, zr - 0.002, zr + 0.004, 6, q0.y, s * (q0.w + 0.004)), X.glow); });
+      add(exBox(zf + 0.02, zT + 0.004, bx - 0.002, 0.0011, yB, 0, 2), X.glass);
+    }
+    // 총구: 금 고정 고리(나사 4) + 흰 각진 몸통 + 빛 고리
+    const mr = br * 1.6, m0 = zT - 0.002, ml = (side ? 0.02 : 0.03) * big;
+    add(exCyl(mr, mr, m0, m0 + 0.011, 20, yB), X.trim); exRadial(c, 4, mr, m0 + 0.0055, yB, () => exBolt(0.0011, 0.002), X.alt, Math.PI / 4);
+    add(exLoft(m0 - ml, m0, (t) => ({ w: mr * (0.82 + 0.18 * t), h: Math.min(mr * (0.82 + 0.18 * t), S - yB - 0.004), y: yB }), 4, 6, 20), X.alt);
+    add(exRing(mr * 0.9, 0.0009, m0 - ml * 0.55, yB, 24, 5), X.glow); add(exRing(mr * 0.72, 0.0008, m0 - ml - 0.0005, yB, 24, 5), X.hot);
+    c.tip = m0 - ml;
   } },
-  damascus: { build(c) { // 건블레이드: 총열 아래로 길게 뻗은 카타나 칼날, 둥근 코등이, 총열덮개의 감은 끈, 떠서 도는 문양
-    const { b, add, X, sh, zM, zT, yB, br, fore, side, big } = c, h = c.hgd;
-    const zb = side ? zM + 0.04 : fore[2] - 0.035, zt = zT - (side ? 0.05 : 0.16) * big, bh = (side ? 0.013 : 0.02) * big, yT = h.y0 - 0.002, n = 14, spine = [], edge = [];
-    for (let i = 0; i <= n; i++) { const t = i / n, z = zb + (zt - zb) * t, ys = yT + (yB - yT) * 0.75 * t * t; spine.push([z, ys]); edge.push([z, ys - bh * (1 - 0.5 * t)]); }
-    add(exFin([...spine, [zt - 0.016, spine[n][1] - bh * 0.15], ...edge.slice().reverse()], 0.004, 0, 0.001), sh);
-    for (const s of [-1, 1]) add(exTube(edge.map(([z, y], i) => [s * 0.0031, y + bh * (0.22 + 0.07 * Math.sin(i * 1.9)), z]), 0.0009, 40, 5), X.glow); // 하몬
-    add(exTube(spine.map(([z, y]) => [0, y + 0.0014, z]), 0.0022, 30), X.trim);
-    const yc = (h.y0 + h.y1) / 2, tr = Math.max((h.y1 - h.y0) / 2, h.w) + 0.009; // 코등이
-    add(exCyl(tr, tr, zb - 0.004, zb + 0.003, 32, yc), X.trim); add(exRing(tr * 0.82, 0.0014, zb - 0.0045, yc, 32, 6), X.glow);
-    if (!side) { const z0 = zb + 0.008, z1 = c.r0 - 0.005, nd = Math.max(2, Math.round((z1 - z0) / 0.026)); for (let k = 0; k < nd; k++) for (const s of [-1, 1]) add(new THREE.OctahedronGeometry(1, 0).scale(0.0016, (h.y1 - h.y0) * 0.34, 0.01), X.trim, xAt(s * (h.w + 0.0012), yc, z0 + ((k + 0.5) * (z1 - z0)) / nd)); } // 감은 끈
-    b.part('rune', [-(zb + zt) / 2, yB, 0], -0.9, 'z'); for (const k of [0.35, 0.7]) { const z = zb + (zt - zb) * k; add(exRing(tr * 0.9, 0.001, z, yB, 6, 4), X.glow); add(exRing(tr * 0.7, 0.0008, z, yB, 3, 4), X.glow); } b.part();
-    if (c.stock) for (const s of [-1, 1]) add(exTube([0.12, 0.38, 0.64, 0.9].map((t) => { const q = c.stockAt(t); return [s * (q.w + 0.0012), q.yc + q.hh * 0.35 * Math.sin(t * 9), q.z]; }), 0.0012, 24, 5), X.glow); // 칼집 끈
+  damascus: { build(c) { // 사무라이 건블레이드: 검은 옻칠 판에 금 물결(세이가이하)·금 가문, 붉은 끈으로 감은 손 앞 자루와 코등이, 총열 아래 카타나 칼날
+    const { add, X, zM, zT, yB, br, S, side, big, reg } = c, [h0, h1] = c.hz;
+    const waves = (p, R, u0, u1, v0, r) => { const st = (r * 2) / R.len; for (let row = 0; row < 2; row++) for (let u = u0 + (row ? st / 2 : 0); u <= u1 + 1e-6; u += st) for (const k of [1, 0.6]) p.line(exArc(R, u, v0 + (row * r * 0.95) / R.H, r * k, 0.05, Math.PI - 0.05, k < 1 ? 4 : 6), 0.00035, X.trim); };
+    const sakura = (p, u, v, r) => { for (let k = 0; k < 5; k++) { const a = (k * Math.PI * 2) / 5 + Math.PI / 2, [z, y] = exZY(p.R, u, v), q = p.pt(u, v, 0.0004); add(new THREE.SphereGeometry(1, 8, 6).scale(0.0006, r * 0.42, r * 0.3).rotateX(-a + Math.PI / 2).translate(q[0], y + Math.sin(a) * r * 0.55, z + Math.cos(a) * r * 0.55), X.trim); } const q = p.pt(u, v, 0.0008); add(new THREE.SphereGeometry(r * 0.2, 8, 6).translate(q[0], q[1], q[2]), X.glow); };
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plCham(R, 0.002, 0.006), { mat: X.alt, rim: X.trim, rr: 0.0009 }); waves(p, R, 0.06, 0.94, 0.12, 0.0055 * big); const mu = 0.8, mv = 0.66; p.put(exSide(new THREE.TorusGeometry(0.0085 * big, 0.0008, 5, 28), s), X.trim, mu, mv, 0.0003); p.put(exSide(new THREE.TorusGeometry(0.0062 * big, 0.0005, 5, 28), s), X.trim, mu, mv, 0.0003); sakura(p, mu, mv, 0.0055 * big); }
+      if (reg.mg) { const R2 = reg.mg, p = c.panel(R2, s, plCham(R2, 0.002, 0.004), { mat: X.alt, rim: X.trim, rr: 0.0007 }); if (p) { sakura(p, 0.45, 0.5, 0.006); p.line([[0.15, 0.5], [0.3, 0.5]], 0.0004, X.trim).line([[0.6, 0.5], [0.8, 0.5]], 0.0004, X.trim); } }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plRect(R3, 0.002, 0.04, 1), { mat: X.alt2, rim: X.trim, rr: 0.0007 }); if (p) for (let k = -2; k < 7; k++) { const d = 0.006 / R3.len * 2.4; p.line([[0.04 + k * d, 0.08], [0.04 + (k + 2) * d, 0.92]], 0.0007, X.alt); p.line([[0.04 + (k + 2) * d, 0.08], [0.04 + k * d, 0.92]], 0.0007, X.alt); } }
+      if (reg.stk) { const R4 = reg.stk, p = c.panel(R4, s, plCham(R4, 0.003, 0.006, 0, 0.93), { mat: X.alt, rim: X.trim, rr: 0.0009 }); if (p) { waves(p, R4, 0.1, 0.85, 0.12, 0.0065 * big); sakura(p, 0.5, 0.68, 0.006 * big); } c.panel(R4, s, plRect(R4, 0, 0.93, 1, 0, 1), { mat: X.trim, off: 0.0004, th: 0.0024 }); }
+    });
+    if (reg.stk) for (const u of [0.18, 0.26]) { const q = reg.stk.at(u), w = c.map.wAt(q.t, q.a, q.b) + 0.0022; add(exLoft(q.t - 0.003, q.t + 0.003, () => ({ w, h: (q.b - q.a) / 2 + 0.0022, y: (q.a + q.b) / 2 }), 2, 2, 20), X.alt2); } // 개머리 끈
+    let tsubaZ = zM + 0.04;
+    if (!side) { // 손 앞 자루: 검은 옻칠 + 붉은 비단끈 엇갈려 감기(마름모) + 금 메누키 + 금 띠
+      const pr = c.sleeve(h0, h1, { pad: 0.0026, p: 2, mat: X.alt }), nT = Math.max(3, Math.round((h1 - h0) / 0.024));
+      for (const dir of [1, -1]) for (const ph of [0, Math.PI]) { const pts = []; for (let k = 0; k <= nT * 12; k++) { const t = k / (nT * 12), z = h0 + 0.008 + (h1 - h0 - 0.016) * t, q = pr(z), a = dir * t * nT * Math.PI * 2 + ph; pts.push([Math.cos(a) * (q.w + 0.0011), q.y + Math.sin(a) * (q.h + 0.0011), z]); } add(exPath(pts, 0.0017, false, 5), X.alt2); }
+      exBand(c, pr, h0 - 0.002, h0 + 0.007, 0.0022, X.trim); exBand(c, pr, h1 - 0.007, h1 + 0.002, 0.0022, X.trim);
+      const qm = pr((h0 + h1) / 2); c.both((s) => add(new THREE.SphereGeometry(1, 12, 8).scale(0.0026, 0.0045, 0.016).translate(s * (qm.w + 0.0028), qm.y, (h0 + h1) / 2), X.trim));
+      // 코등이: 검은 쇠 판 + 금 테 + 금 덧쇠(세파) + 투각 꽃잎
+      const q0 = pr(h0), tr = Math.max(q0.w, q0.h) + 0.016 * big, th = Math.min(tr, S - 0.003 - q0.y); tsubaZ = h0 - 0.004;
+      add(exLoft(tsubaZ - 0.003, tsubaZ + 0.002, () => ({ w: tr, h: th, y: q0.y }), 2.4, 2, 32), X.alt2 === X.alt ? X.trim : X.void);
+      add(exLoft(tsubaZ - 0.0034, tsubaZ + 0.0024, () => ({ w: tr + 0.0012, h: th + 0.0012, y: q0.y }), 2.4, 2, 32).scale(1, 1, 1), X.trim);
+      for (const dz of [-0.0045, 0.0035]) add(exLoft(tsubaZ + dz - 0.0008, tsubaZ + dz + 0.0008, () => ({ w: q0.w + 0.004, h: q0.h + 0.004, y: q0.y }), 2, 2, 24), X.trim);
+      for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + (k * Math.PI) / 2; add(new THREE.SphereGeometry(1, 10, 6).scale(tr * 0.17, tr * 0.17, 0.0012).translate(Math.cos(a) * tr * 0.72, q0.y + Math.sin(a) * Math.min(tr, th) * 0.72, tsubaZ - 0.0034), X.trim); }
+      // 카타나: 총열 아래로 뻗은 칼날 (휜 등, 하몬 빛, 금 칼등, 피홈, 칼끝), 칼날 뿌리 금 하바키 + 총열 앞 금 총검 고리
+      const zb = tsubaZ - 0.004, zt = zT - 0.14 * big, bh = 0.021 * big, yR = q0.y - q0.h * 0.35, yF = yB - br - 0.0035, n = 18, spine = [], edge = [];
+      for (let i = 0; i <= n; i++) { const t = i / n, z = zb + (zt - zb) * t, ys = yR + (yF - yR) * Math.min(1, t * 1.6) + 0.006 * big * t * t; spine.push([z, ys]); const tip = t > 0.86 ? (t - 0.86) / 0.14 : 0; edge.push([z, ys - bh * (1 - 0.3 * t) * (1 - tip * tip)]); }
+      add(exFin([...spine, ...edge.slice(0, n).reverse()], 0.0036, 0, 0.0008), X.steel);
+      c.both((s) => { add(exPath(edge.slice(1, n).map(([z, y], i) => [s * 0.0021, y + bh * (0.26 + 0.1 * Math.sin(i * 1.7)), z]), 0.0012, false, 4), X.glow); add(exPath(edge.slice(1, n + 1).map(([z, y]) => [s * 0.0008, y + 0.0008, z]), 0.0009, false, 4), X.hot); add(exPath(spine.slice(1, 13).map(([z, y]) => [s * 0.0019, y - bh * 0.28, z]), 0.0007, false, 4), X.void); });
+      add(exPath(spine.map(([z, y]) => [0, y + 0.0012, z]), 0.002, false, 6), X.trim);
+      add(exBox(zb - 0.012, zb + 0.001, 0.0034, bh * 0.6, yR - bh * 0.42, 0, 4), X.trim);
+      const zr = zM + 0.03; add(exCyl(br * 1.45, br * 1.45, zr - 0.004, zr + 0.004, 16, yB), X.trim); add(exBox(zr - 0.003, zr + 0.003, 0.0024, (yB - br * 1.2 - spine[12][1]) / 2 + 0.002, (yB - br * 1.2 + spine[12][1]) / 2, 0, 4), X.trim);
+    }
+    // 총구: 금 칼끝 모양 소염기
+    const m0 = zT - 0.002, ml = (side ? 0.018 : 0.028) * big;
+    add(exCyl(br * 1.5, br * 1.5, m0, m0 + 0.008, 18, yB), X.trim);
+    add(exLoft(m0 - ml, m0, (t) => ({ w: br * (0.5 + 0.9 * t), h: br * (0.7 + 0.9 * t), y: yB + br * 0.2 * (1 - t) }), 3, 6, 18), X.trim);
+    add(exRing(br * 1.2, 0.0008, m0 - ml * 0.4, yB, 20, 5), X.glow);
+    c.tip = m0 - ml * 0.7;
   } },
-  obsidian: { build(c) { // 사신의 낫: 총몸에 박힌 흑요석 결정, 손 앞 아래로 휘는 낫날, 총구 앞 세 갈래 결정 가시
-    const { b, add, X, zM, zT, yB, br, rec, fore, side, big } = c, R = exRng(11), h = c.hgd, n = side ? 7 : 12;
-    for (let k = 0; k < n; k++) { const s = k % 2 ? 1 : -1, t = R(), z = c.r0 + (c.r1 - c.r0) * (0.05 + t * 0.85), len = (0.022 + R() * 0.03) * big * (side ? 0.6 : 1), w = 0.004 + R() * 0.005, y = rec.y0 + (rec.y1 - rec.y0) * (0.25 + R() * 0.6);
-      add(new THREE.OctahedronGeometry(1, 0).scale(w, w * 0.8, len), k % 4 === 0 ? X.glass : X.void, exRot(s * (rec.w + w * 0.5), y, z, (R() - 0.5) * 0.5, s * (0.25 + R() * 0.3), 0)); }
-    if (!side) { const z0 = fore[2] - 0.04, zt = zM + (z0 - zM) * 0.2, y0 = h.y0 - 0.002, H = Math.max(0.05, (h.y1 - h.y0) * 1.8) * big, outer = [], inner = [];
-      for (let i = 0; i <= 12; i++) { const u = i / 12, z = z0 - (z0 - zt) * u, y = y0 - H * u ** 1.7; outer.push([z, y]); inner.push([z0 - (z0 - zt) * u * 0.95 + 0.004, y + H * 0.42 * (1 - u) ** 1.2]); }
-      add(exFin([...outer, ...inner.slice().reverse()], 0.004, 0, 0.001), X.void); add(exTube(inner.slice(1).map(([z, y]) => [0, y - 0.002, z]), 0.0013, 30, 5), X.glow); }
-    const e0 = zM + 0.02, tz = zT - 0.035 * big;
-    for (let k = 0; k < 3; k++) { const a = Math.PI / 2 + (k * Math.PI * 2) / 3, cc = Math.cos(a), ss = Math.sin(a), r = br * 2.2; add(exLimb([cc * r, yB + ss * r, e0], [cc * br * 0.45, yB + ss * br * 0.45, tz], 0.0045 * big, 0.0011, 1.4), X.void); }
-    add(new THREE.SphereGeometry(br * 0.75, 12, 10).translate(0, yB, tz + 0.008), X.hot);
-    if (c.stock) for (let k = 0; k < 4; k++) { const q = c.stockAt(0.2 + k * 0.2); add(new THREE.OctahedronGeometry(1, 0).scale(0.0035, 0.012 * (1 - k * 0.15), 0.006), X.void, exRot((k % 2 ? 1 : -1) * (q.w + 0.002), q.yc + q.hh * 0.55, q.z, 0.7, 0, (k % 2 ? -1 : 1) * 0.35)); }
-    const wz = (c.r0 + zM) / 2; b.part('wisp', [-wz, yB, 0], 0.7, 'z'); for (let k = 0; k < 4; k++) { const a = k * 1.57 + 0.4; add(new THREE.OctahedronGeometry(1, 0).scale(0.0022, 0.0022, 0.006), X.glow, xAt(Math.cos(a) * 0.05 * big, yB + Math.sin(a) * 0.05 * big, wz + (k - 1.5) * 0.035)); } b.part();
+  obsidian: { build(c) { // 흑요석 리퍼: 들쭉날쭉한 흑요석 판과 보랏빛 금, 결정이 돋은 각진 덮개, 뼈 고리에 달린 낫날, 결정 가시 총구, 개머리의 척추뼈
+    const { b, add, X, zT, yB, br, S, side, big, reg } = c, [h0, h1] = c.hz, rnd = exRng(7);
+    const crack = (p, u0, u1, v, n) => { const pts = []; for (let k = 0; k <= n; k++) pts.push([u0 + ((u1 - u0) * k) / n, v + (k % 2 ? 0.16 : -0.12) * (0.5 + rnd())]); p.line(pts, 0.0006, X.glow); };
+    const shard = (p, u, v, len, w, tilt) => { const q = p.pt(u, v, 0); add(new THREE.OctahedronGeometry(1, 0).scale(len, w, w * 1.4).translate(p.s * len * 0.55, 0, 0).rotateY(p.s * tilt).rotateZ(p.s * (rnd() - 0.5) * 0.6).translate(q[0], q[1], q[2]), rnd() < 0.3 ? X.glass : X.void); };
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plJag(R, 0.002, 9, 0.14, 3 + s), { mat: X.void, rim: X.trim, rr: 0.0006 }); crack(p, 0.08, 0.92, 0.5, 9); crack(p, 0.3, 0.7, 0.28, 4); const q = c.panel(R, s, plJag(R, 0.006, 5, 0.18, 9 + s, 0.55, 0.95, 0.35, 0.95), { mat: X.glass, off: p.top + 0.0002, th: 0.0012 }); for (let k = 0; k < 5; k++) shard(p, 0.1 + k * 0.18, 0.75 + rnd() * 0.15, (0.008 + rnd() * 0.01) * big, 0.0025, 0.9); }
+      if (reg.mg) { const R2 = reg.mg, p = c.panel(R2, s, plJag(R2, 0.002, 6, 0.12, 21 + s), { mat: X.void, rim: X.trim, rr: 0.0005 }); if (p) { const pts = []; for (let k = 0; k <= 6; k++) pts.push([0.1 + k * 0.13, 0.5 + (k % 2 ? 0.2 : -0.2)]); p.line(pts, 0.0006, X.glow); } }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plJag(R3, 0.003, 5, 0.12, 31 + s, 0.05, 1), { mat: X.void }); if (p) crack(p, 0.1, 0.9, 0.5, 5); }
+      if (reg.stk) { const R4 = reg.stk, p = c.panel(R4, s, plJag(R4, 0.003, 8, 0.12, 41 + s, 0, 0.96), { mat: X.void, rim: X.trim, rr: 0.0006 }); if (p) { crack(p, 0.05, 0.9, 0.45, 8); for (let k = 0; k < 4; k++) { const u = 0.12 + k * 0.2, a = R4.at(u), q = p.pt(u, 0.92, 0); add(exPath([[q[0], q[1], q[2]], [q[0] + s * 0.004, (a.a + a.b) / 2, q[2] + 0.003], [q[0], a.a + (a.b - a.a) * 0.08, q[2]]], 0.0016, false, 5), X.alt); } } }
+    });
+    if (reg.stk) { const R4 = reg.stk; for (let k = 0; k < 7; k++) { const u = 0.06 + k * 0.13, q = R4.at(u); if (q.b > S - 0.008) continue; add(exBox(q.t - 0.006, q.t + 0.006, 0.0045, 0.0028, q.b + 0.0015, 0, 3), X.alt); add(new THREE.ConeGeometry(0.0022, 0.009 * big, 5).translate(0, 0.0045 * big, 0).rotateX(0.5).translate(0, q.b + 0.003, q.t), X.alt); } } // 척추뼈
+    if (!side) { // 손 앞: 각진 흑요석 덮개 + 보랏빛 이음선 + 결정 무더기 + 뼈 고리에 매단 낫날
+      const pr = c.sleeve(h0, h1, { pad: 0.0028, p: 1.35, mat: X.void });
+      c.both((s) => add(exPath([0, 0.25, 0.5, 0.75, 1].map((t) => { const z = h0 + 0.006 + (h1 - h0 - 0.012) * t, q = pr(z); return [s * (q.w + 0.0004), q.y, z]; }), 0.0008, false, 4), X.glow));
+      for (let k = 0; k < 6; k++) { const z = h0 + (h1 - h0) * (0.1 + 0.15 * k), q = pr(z), s = k % 2 ? 1 : -1; add(new THREE.OctahedronGeometry(1, 0).scale(0.004, 0.004, (0.012 + rnd() * 0.01) * big).rotateY(s * 0.5).rotateX(-0.35).translate(s * q.w * 0.8, q.y + q.h * 0.45, z), k % 3 ? X.void : X.glass); }
+      const zc = h0 + 0.012; exBand(c, pr, zc - 0.005, zc + 0.005, 0.0022, X.alt, 1.35);
+      const q0 = pr(zc), z0 = zc - 0.003, zt = zT + 0.01, y0 = q0.y - q0.h - 0.004, H = Math.max(0.075, q0.h * 3) * big, outer = [], inner = [];
+      for (let i = 0; i <= 14; i++) { const u = i / 14, z = z0 - (z0 - zt) * u, y = y0 - H * u ** 1.6; outer.push([z, y]); inner.push([z0 - (z0 - zt) * u * 0.93 + 0.004, y + H * 0.5 * (1 - u) ** 1.1]); }
+      add(exFin([...outer, ...inner.slice().reverse()], 0.004, 0, 0.001), X.alt2); add(exPath(outer.slice(1).map(([z, y]) => [0, y + 0.0006, z]), 0.0016, false, 5), X.glow); add(exPath(inner.slice(1).map(([z, y]) => [0, y - 0.0012, z]), 0.0014, false, 5), X.void);
+      c.both((s) => add(exPath(outer.slice(0, 13).map(([z, y]) => [s * 0.0021, y + 0.003, z]), 0.0006, false, 4), X.glass));
+      for (let k = 1; k < 5; k++) { const [z, y] = outer[k * 3]; add(new THREE.ConeGeometry(0.0022, 0.012 * big, 4).rotateX(-2.4).translate(0, y + 0.003, z), X.alt); }
+      add(exPath([[0, q0.y - q0.h - 0.001, zc], [0, y0 - 0.006, zc + 0.006], [0, y0 - 0.012, z0 - 0.004]], 0.0028, false, 6), X.alt);
+    }
+    // 총구: 검은 고리 + 다섯 갈래 결정 가시 + 보랏빛 구슬
+    const e0 = zT + 0.006, tz = zT - 0.04 * big; add(exCyl(br * 1.6, br * 1.6, zT - 0.004, e0, 10, yB), X.trim);
+    for (let k = 0; k < 5; k++) { const a = Math.PI / 2 + (k * Math.PI * 2) / 5, cc = Math.cos(a), ss = Math.sin(a), r = br * 2; if (yB + ss * r > S - 0.003) continue; add(exLimb([cc * r, yB + ss * r, e0], [cc * br * 0.6, yB + ss * br * 0.6, tz], 0.0045 * big, 0.0009, 1.5), k % 2 ? X.glass : X.void); }
+    add(new THREE.SphereGeometry(br * 0.8, 12, 10).translate(0, yB, tz + 0.01), X.hot);
+    const wz = (h0 + zT) / 2; b.part('wisp', [-wz, yB, 0], 0.7, 'z'); for (let k = 0; k < 5; k++) { const a = k * 1.26 + 0.4; add(new THREE.OctahedronGeometry(1, 0).scale(0.002, 0.002, 0.007), X.glow, xAt(Math.cos(a) * 0.05 * big, yB + Math.sin(a) * 0.04 * big, wz + (k - 2) * 0.03)); } b.part();
     c.tip = tz;
   } },
-  diamond: { build(c) { // 수정: 총열을 감싼 육각 수정과 테, 총구 앞에 떠서 도는 다이아몬드와 왕관 가시
-    const { b, add, X, zM, zT, yB, br, rec, fore, side, big } = c, z0 = zM + 0.01, z1 = side ? zM + 0.055 : Math.max(zM + 0.06, Math.min(c.r0, fore[2] - 0.035)), R = br * 2.2;
-    const hx = (r, rb, a, bz) => new THREE.CylinderGeometry(rb, r, bz - a, 6).rotateX(Math.PI / 2).rotateZ(Math.PI / 6).translate(0, yB, (a + bz) / 2);
-    add(hx(R * 0.92, R, z0, z1), X.glass);
-    const nk = Math.max(2, Math.round((z1 - z0) / 0.08)); for (let k = 0; k <= nk; k++) add(new THREE.TorusGeometry(R * 1.04, 0.0022, 6, 6).rotateZ(Math.PI / 6).translate(0, yB, z0 + ((z1 - z0) * k) / nk), X.trim);
-    const dz = zT - 0.03 * big; b.part('gem', [-dz, yB, 0], 1.4, 'z'); add(new THREE.OctahedronGeometry(1, 0).scale(R * 0.8, R * 0.8, 0.026 * big).translate(0, yB, dz), X.glass); add(new THREE.OctahedronGeometry(1, 0).scale(R * 0.38, R * 0.38, 0.014 * big).translate(0, yB, dz), X.hot); b.part();
-    for (let k = 0; k < 6; k++) { const a = (k * Math.PI) / 3; add(new THREE.ConeGeometry(0.0026, 0.017 * big, 5).rotateX(-Math.PI / 2).translate(Math.cos(a) * R * 1.05, yB + Math.sin(a) * R * 1.05, zT - 0.006), X.trim); }
-    const room = Math.max(0.004, c.S - rec.y1 - 0.01); // 총몸 위 앞쪽 수정 (조준선 아래, 옆으로 비켜서)
-    for (let k = 0; k < (side ? 2 : 3); k++) { const z = c.r0 + (c.r1 - c.r0) * (0.05 + k * 0.1), hg = Math.min(room, (0.015 - k * 0.003) * big); for (const s of [-1, 1]) add(new THREE.OctahedronGeometry(1, 0).scale(0.0028, hg, 0.004), X.glass, xAt(s * rec.w * 0.7, rec.y1 + hg * 0.55, z)); }
-    for (const s of [-1, 1]) add(new THREE.OctahedronGeometry(1, 0).scale(0.0025, rec.hh * 0.6, (c.r1 - c.r0) * 0.22), X.glass, xAt(s * (rec.w + 0.0028), rec.yc, (c.r0 + c.r1) / 2));
-    if (c.stock) { const q = c.stockAt(0.5); for (const s of [-1, 1]) add(new THREE.OctahedronGeometry(1, 0).scale(0.0025, q.hh * 0.65, (c.back - c.r1) * 0.28), X.glass, xAt(s * (q.w + 0.0028), q.yc, q.z)); }
-    const oz = (z0 + z1) / 2; b.part('orb', [-oz, yB, 0], 0.8, 'z'); for (let k = 0; k < 3; k++) { const a = k * 2.09; add(new THREE.OctahedronGeometry(0.004, 0), X.glass, xAt(Math.cos(a) * R * 1.8, yB + Math.sin(a) * R * 1.8, oz + (k - 1) * 0.03)); } b.part();
+  diamond: { build(c) { // 다이아몬드 크라운: 백금 투조 판에 소용돌이 금속 장식·박힌 보석, 은테 육각 수정 덮개, 보석 박힌 왕관 총구와 도는 다이아몬드
+    const { b, add, X, zT, yB, br, S, side, big, reg } = c, [h0, h1] = c.hz;
+    const scroll = (p, u, v, r, dir) => { const pts = []; for (let k = 0; k <= 22; k++) { const t = k / 22, a = dir * t * Math.PI * 3, rr = r * (1 - t * 0.85); pts.push([u + (Math.cos(a) * rr) / p.R.len, v + (Math.sin(a) * rr) / p.R.H]); } p.line(pts, 0.0007, X.trim); };
+    const gem = (p, u, v, r) => { // 큰 보석: 은 받침 고리 + 발톱 4 + 유리 보석 + 속 빛
+      const s = p.s; p.put(exSide(new THREE.TorusGeometry(r * 1.08, 0.0009, 5, 24), s), X.trim, u, v, 0.0006); p.put(new THREE.OctahedronGeometry(1, 0).scale(r * 0.9, r, r).translate(s * r * 0.15, 0, 0), X.glass, u, v, 0); p.put(new THREE.OctahedronGeometry(1, 0).scale(r * 0.4, r * 0.45, r * 0.45).translate(s * r * 0.2, 0, 0), X.hot, u, v, 0);
+      for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + (k * Math.PI) / 2; p.put(new THREE.ConeGeometry(0.0008, r * 0.7, 4).rotateZ(-s * Math.PI / 2).rotateX(a).translate(s * r * 0.3, Math.sin(a) * r * 0.95, Math.cos(a) * r * 0.95), X.trim, u, v, 0); } };
+    const pave = (p, u0, u1, v, n) => { for (let k = 0; k < n; k++) p.put(new THREE.OctahedronGeometry(0.0016, 0), X.glass, u0 + ((u1 - u0) * k) / Math.max(1, n - 1), v, 0.0008); };
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plCham(R, 0.002, 0.006), { mat: X.alt2, rim: X.trim, rr: 0.0011 }); const n = Math.max(4, Math.round(R.len / 0.007)); pave(p, 0.06, 0.94, 0.13, n); pave(p, 0.06, 0.94, 0.87, n); scroll(p, 0.2, 0.5, 0.009 * big, 1); scroll(p, 0.8, 0.5, 0.009 * big, -1); scroll(p, 0.35, 0.42, 0.006 * big, -1); scroll(p, 0.65, 0.42, 0.006 * big, 1); gem(p, 0.5, 0.52, Math.min(0.009 * big, R.H * 0.28)); }
+      if (reg.mg) { const R2 = reg.mg, p = c.panel(R2, s, plCham(R2, 0.002, 0.004), { mat: X.alt2, rim: X.trim, rr: 0.0009 }); if (p) { p.line([[0.1, 0.36], [0.85, 0.36]], 0.0006, X.trim).line([[0.1, 0.64], [0.85, 0.64]], 0.0006, X.trim); pave(p, 0.12, 0.83, 0.5, Math.max(4, Math.round(R2.len / 0.008))); } }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plCham(R3, 0.003, 0.005, 0.05, 1), { mat: X.alt2, rim: X.trim, rr: 0.0009 }); if (p) { scroll(p, 0.35, 0.5, 0.008, 1); scroll(p, 0.7, 0.5, 0.006, -1); } }
+      if (reg.stk) { const R4 = reg.stk, p = c.panel(R4, s, plCham(R4, 0.003, 0.008, 0, 0.95), { mat: X.alt2, rim: X.trim, rr: 0.0011 }); if (p) { scroll(p, 0.18, 0.5, 0.011 * big, 1); scroll(p, 0.45, 0.45, 0.008 * big, -1); gem(p, 0.72, 0.52, Math.min(0.011 * big, R4.H * 0.25)); pave(p, 0.05, 0.9, 0.88, Math.max(4, Math.round(R4.len / 0.008))); } c.panel(R4, s, plRect(R4, 0, 0.95, 1, 0, 1), { mat: X.trim, off: 0.0004, th: 0.0022 }); }
+    });
+    if (!side) { // 손 앞: 은테 육각 수정 덮개 (테 고리·모서리 막대·속 빛 심지)
+      let Rh = 0; for (let z = h0; z <= h1; z += 0.01) { const q = c.sec(z); Rh = Math.max(Rh, q.w, (q.y1 - q.y0) / 2); } Rh = Math.min(Rh + 0.003, S - yB - 0.004); const yc = (c.sec((h0 + h1) / 2).y0 + c.sec((h0 + h1) / 2).y1) / 2 * 0 + yB;
+      add(new THREE.CylinderGeometry(Rh, Rh, h1 - h0, 6, 1).rotateX(Math.PI / 2).rotateZ(Math.PI / 6).translate(0, yc, (h0 + h1) / 2), X.glass);
+      for (let z = h0; z <= h1 + 1e-6; z += (h1 - h0) / Math.max(2, Math.round((h1 - h0) / 0.03))) add(new THREE.TorusGeometry(Rh * 1.02, 0.0018, 4, 6).rotateZ(Math.PI / 6).translate(0, yc, z), X.trim);
+      for (let k = 0; k < 6; k++) { const a = (k * Math.PI) / 3; add(exCyl(0.0011, 0.0011, h0, h1, 6, yc + Math.sin(a) * Rh * 1.02, Math.cos(a) * Rh * 1.02), X.trim); }
+      add(exCyl(br * 0.9, br * 0.9, h0 + 0.004, h1 - 0.004, 10, yB), X.hot);
+    }
+    // 총구: 은 왕관 (뾰족한 여섯 끝마다 작은 보석) + 앞에서 도는 다이아몬드
+    const R = br * 2.1, z0 = zT + 0.004; add(exCyl(R, R * 0.9, z0 - 0.012, z0, 24, yB), X.trim); add(exRing(R, 0.0012, z0 - 0.012, yB, 24, 5), X.hot);
+    for (let k = 0; k < 6; k++) { const a = Math.PI / 2 + (k * Math.PI) / 3, x = Math.cos(a) * R, y = yB + Math.sin(a) * R; if (y > S - 0.003) continue; add(new THREE.ConeGeometry(0.0028, 0.018 * big, 5).rotateX(-Math.PI / 2).translate(x, y, z0 - 0.02 * big), X.trim); add(new THREE.OctahedronGeometry(0.0022, 0), X.glass, xAt(x, y, z0 - 0.03 * big)); }
+    const dz = z0 - 0.04 * big; b.part('gem', [-dz, yB, 0], 1.4, 'z'); add(new THREE.OctahedronGeometry(1, 0).scale(R * 0.75, R * 0.75, 0.024 * big).translate(0, yB, dz), X.glass); add(new THREE.OctahedronGeometry(1, 0).scale(R * 0.35, R * 0.35, 0.013 * big).translate(0, yB, dz), X.hot); b.part();
+    const oz = (h0 + zT) / 2; b.part('orb', [-oz, yB, 0], 0.8, 'z'); for (let k = 0; k < 3; k++) { const a = k * 2.09; add(new THREE.OctahedronGeometry(0.004, 0), X.glass, xAt(Math.cos(a) * 0.045 * big, yB + Math.sin(a) * 0.035 * big, oz + (k - 1) * 0.03)); } b.part();
     c.tip = dz - 0.02 * big;
   } },
-  atomic: { build(c) { // 원자로: 손 앞 총열을 감싼 냉각핀 드럼, 총열 코일, 냉각관, 탄창 대신 방사능 통
-    const { b, add, X, sh, zM, zT, yB, br, rec, fore, side, big } = c, d1 = side ? zM + 0.05 : fore[2] - 0.035, d0 = side ? zM + 0.012 : Math.max(zM + 0.03, d1 - 0.1 * big), R = br * 2.3, dm = (d0 + d1) / 2;
-    add(exCyl(R * 0.92, R, d0, d1, 22, yB), sh);
-    add(exCyl(R * 1.06, R * 1.06, dm - 0.007, dm + 0.007, 22, yB), X.glow);
-    const nf = Math.max(2, Math.round((d1 - d0) / 0.018)); for (let k = 0; k < nf; k++) { const z = d0 + 0.004 + k * ((d1 - d0 - 0.008) / nf); if (Math.abs(z + 0.002 - dm) < 0.01) continue; add(exCyl(R * 1.2, R * 1.2, z, z + 0.0035, 22, yB), X.trim); }
-    const nc = side ? 2 : 4; for (let k = 0; k < nc; k++) add(exRing(br * 1.6, br * 0.38, zM + 0.012 + ((d0 - zM - 0.02) * k) / Math.max(1, nc - 1), yB, 20, 8), k % 2 ? X.glow : X.trim);
-    add(exCyl(br * 2, br * 1.3, zT - 0.012, zT + 0.006, 16, yB), X.trim); add(new THREE.SphereGeometry(br * 0.8, 12, 10).translate(0, yB, zT - 0.01), X.hot);
-    for (const s of [-1, 1]) add(exTube([[s * rec.w * 0.95, rec.y1 - 0.004, c.r0 + 0.04], [s * (rec.w + 0.01), rec.y1, c.r0 - 0.01], [s * R * 0.95, yB + R * 0.55, d1 + 0.012], [s * R * 0.75, yB + R * 0.7, dm + 0.012]], 0.0028 * big, 24), s > 0 ? X.glow : X.trim);
+  atomic: { build(c) { // 아토믹 리액터: 총몸 옆 볼트 박은 원자로 창(유리 돔 속 빛나는 노심)·경고 줄무늬, 손 앞 구리 냉각핀 방열기, 총열 구리 코일, 탄창 연료봉, 개머리 냉각통
+    const { b, add, X, zM, zT, yB, br, S, side, big, reg } = c, [h0, h1] = c.hz;
+    const hazard = (p, u0, u1, v0, v1) => { const R = p.R, st = 0.007 / R.len; for (let u = u0; u < u1 - st * 0.5; u += st * 2) p.line([[u, v0], [Math.min(u1, u + st), v1]], 0.0013, X.void); };
+    const port = (p, u, v, r) => { const s = p.s; p.put(exSide(new THREE.TorusGeometry(r, r * 0.16, 8, 28), s), X.trim, u, v, 0.0005); p.put(exDome(r * 0.55, r * 0.86, r * 0.86, s, 14), X.glass, u, v, 0); p.put(new THREE.SphereGeometry(r * 0.45, 12, 10), X.hot, u, v, 0); for (let k = 0; k < 8; k++) { const a = (k * Math.PI) / 4; p.put(exBolt(0.0009, 0.0024).rotateZ(-s * Math.PI / 2), X.alt2, u + (Math.cos(a) * r * 1.3) / p.R.len, v + (Math.sin(a) * r * 1.3) / p.R.H, 0.0004); } };
+    const trefoil = (p, u, v, r) => { const s = p.s; p.put(exSide(new THREE.CircleGeometry(r, 24), s), X.alt, u, v, 0.0003); for (let k = 0; k < 3; k++) p.put(exSide(new THREE.RingGeometry(r * 0.25, r * 0.85, 10, 1, Math.PI / 2 + (k * Math.PI * 2) / 3 - Math.PI / 6, Math.PI / 3), s), X.void, u, v, 0.0006); p.put(exSide(new THREE.CircleGeometry(r * 0.15, 12), s), X.void, u, v, 0.0006); };
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plCham(R, 0.002, 0.005), { mat: X.alt2, rim: X.trim, rr: 0.001 }); const hz = c.panel(R, s, plRect(R, 0.004, 0.05, 0.95, 0.06, 0.26), { mat: X.alt, off: p.top + 0.0002, th: 0.0008 }); hazard(hz, 0.07, 0.93, 0.06, 0.26); port(p, 0.5, 0.6, Math.min(0.011 * big, R.H * 0.3)); for (const [u, v] of [[0.06, 0.5], [0.06, 0.85], [0.95, 0.5], [0.95, 0.85]]) p.screw(u, v, 0.0012, X.trim); p.line([[0.22, 0.62], [0.36, 0.62]], 0.0012, X.trim).line([[0.64, 0.62], [0.8, 0.62]], 0.0012, X.trim); }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plRect(R3, 0.003, 0.05, 1), { mat: X.alt2, rim: X.trim, rr: 0.0007 }); if (p) for (let k = 0; k < 5; k++) p.line([[0.15 + k * 0.17, 0.15], [0.15 + k * 0.17, 0.85]], 0.0009, X.trim); }
+      if (reg.stk) { const R4 = reg.stk, p = c.panel(R4, s, plCham(R4, 0.003, 0.006, 0, 0.94), { mat: X.alt2, rim: X.trim, rr: 0.001 }); if (p) { trefoil(p, 0.25, 0.55, Math.min(0.012 * big, R4.H * 0.32)); const hz = c.panel(R4, s, plRect(R4, 0.003, 0.5, 0.92, 0.12, 0.3), { mat: X.alt, off: p.top + 0.0002, th: 0.0008 }); hazard(hz, 0.52, 0.9, 0.12, 0.3);
+        const q = p.pt(0.68, 0.66, 0), L = Math.min(0.06, R4.len * 0.35) * big, r = 0.0075 * big; add(exCyl(r, r, q[2] - L / 2, q[2] + L / 2, 16, q[1], q[0] + s * r), X.trim); add(exCyl(r * 1.05, r * 1.05, q[2] - L * 0.3, q[2] + L * 0.3, 16, q[1], q[0] + s * r), X.glass); add(exCyl(r * 0.6, r * 0.6, q[2] - L * 0.3, q[2] + L * 0.3, 12, q[1], q[0] + s * r), X.glow); for (const d of [-0.5, 0.5]) add(exCyl(r * 1.15, r * 1.15, q[2] + d * L - 0.002, q[2] + d * L + 0.002, 16, q[1], q[0] + s * r), X.alt2); } c.panel(R4, s, plRect(R4, 0, 0.94, 1, 0, 1), { mat: X.trim, off: 0.0004, th: 0.0022 }); }
+    });
     const m = c.mag;
-    if (m) { const mz = (m.min.z + m.max.z) / 2, mh = (m.max.y - m.min.y) * 0.5, my = m.max.y - (m.max.y - m.min.y) * 0.42, vx = m.max.x + 0.006; b.part('mag'); // 탄창 옆에 꽂은 방사능 약병
-      for (const s of [-1, 1]) { add(new THREE.CylinderGeometry(0.0055, 0.0055, mh, 12).translate(s * vx, my, mz), X.glass); add(new THREE.CylinderGeometry(0.0038, 0.0038, mh * 0.9, 10).translate(s * vx, my, mz), X.glow); for (const d of [-1, 1]) add(new THREE.CylinderGeometry(0.0065, 0.0065, 0.004, 12).translate(s * vx, my + d * mh * 0.5, mz), X.trim); } b.part(); }
-    else for (const s of [-1, 1]) { add(exCyl(0.008, 0.008, c.r0 + 0.01, c.r0 + 0.05, 14, rec.yc, s * (rec.w + 0.008)), X.trim); add(exCyl(0.0085, 0.0085, c.r0 + 0.022, c.r0 + 0.038, 14, rec.yc, s * (rec.w + 0.008)), X.glow); }
-    c.tip = zT - 0.012;
+    if (m) { const mz = (m.min.z + m.max.z) / 2, mh = (m.max.y - m.min.y) * 0.5, my = m.max.y - (m.max.y - m.min.y) * 0.45, vx = m.max.x + 0.0065; b.part('mag'); // 탄창 옆 연료봉 (유리관 속 빛, 구리 마개, 고정 고리)
+      for (const s of [-1, 1]) { add(new THREE.CylinderGeometry(0.0055, 0.0055, mh, 12).translate(s * vx, my, mz), X.glass); add(new THREE.CylinderGeometry(0.0034, 0.0034, mh * 0.92, 10).translate(s * vx, my, mz), X.glow); for (const d of [-1, 1]) add(new THREE.CylinderGeometry(0.0066, 0.0066, 0.004, 12).translate(s * vx, my + d * mh * 0.5, mz), X.trim); for (const d of [-0.2, 0.2]) add(new THREE.TorusGeometry(0.0058, 0.0007, 4, 12).rotateX(Math.PI / 2).translate(s * vx, my + d * mh, mz), X.alt2); } b.part(); }
+    if (!side) { // 손 앞 방열기: 검은 쇠 몸통 + 구리 냉각핀 + 가운데 빛 창 + 앞뒤 볼트 테
+      const pr = c.sleeve(h0, h1, { pad: 0.002, p: 2, mat: X.alt2 }), zm = (h0 + h1) / 2;
+      for (let z = h0 + 0.01; z < h1 - 0.008; z += 0.0075) { if (Math.abs(z - zm) < 0.012) continue; exBand(c, pr, z - 0.0013, z + 0.0013, 0.0045, X.trim); }
+      add(exLoft(zm - 0.009, zm + 0.009, () => { const q = pr(zm); return { w: q.w + 0.0035, h: q.h + 0.0035, y: q.y }; }, 2, 2, 24), X.glass); add(exLoft(zm - 0.007, zm + 0.007, () => { const q = pr(zm); return { w: q.w + 0.0018, h: q.h + 0.0018, y: q.y }; }, 2, 2, 24), X.glow);
+      for (const z of [h0 + 0.003, h1 - 0.003]) { exBand(c, pr, z - 0.003, z + 0.003, 0.003, X.alt2); const q = pr(z); for (let k = 0; k < 8; k++) { const a = (k * Math.PI) / 4; add(exBolt(0.001, 0.0025).rotateZ(a - Math.PI / 2).translate(Math.cos(a) * (q.w + 0.0045), q.y + Math.sin(a) * (q.h + 0.0045), z), X.trim); } }
+      c.both((s) => { const q = pr(h1 - 0.01), R = reg.rec; if (!R) return; const p = exField(R, s), x = p(0.5, 0.6); add(exPath([[x + s * 0.004, R.at(0.42).a + (R.at(0.42).b - R.at(0.42).a) * 0.6, R.at(0.42).t], [s * (q.w + 0.006), q.y + q.h * 0.3, c.r0 - 0.004], [s * (q.w + 0.0045), q.y + q.h * 0.4, h1 - 0.002]], 0.0022 * big, false, 8), X.trim); });
+      c.helix(zM + 0.008, h0 - 0.004, br * 1.35, Math.max(3, (h0 - zM) / 0.0055), 0.0012, X.trim);
+    }
+    // 총구: 구리 방사형 냉각핀 + 빛 노심
+    const m0 = zT - 0.002, ml = (side ? 0.018 : 0.026) * big;
+    add(exCyl(br * 1.5, br * 1.6, m0 - ml, m0, 16, yB), X.alt2); for (let k = 0; k < 4; k++) add(exCyl(br * 2.1, br * 2.1, m0 - ml + 0.003 + k * (ml / 4), m0 - ml + 0.0045 + k * (ml / 4), 16, yB), X.trim);
+    add(new THREE.SphereGeometry(br * 0.85, 12, 10).translate(0, yB, m0 - ml), X.hot);
+    c.tip = m0 - ml;
   } },
-  orion: { build(c) { // 별자리: 총몸 왼쪽의 혼천의(별 핵 둘레를 세 축으로 도는 고리), 총몸·개머리의 별자리 선, 총구의 네 갈래 별
-    const { b, add, X, zM, zT, yB, br, rec, side, big } = c, cz = (c.r0 + c.r1) / 2, ar = (side ? 0.017 : 0.03) * big, ax = -(rec.w + ar + 0.006), ay = rec.yc; // 1인칭에서 보이는 왼쪽
-    add(exLimb([-rec.w * 0.9, ay, cz], [ax + ar * 0.3, ay, cz], 0.0028, 0.0028), X.trim);
-    add(new THREE.SphereGeometry(ar * 0.36, 16, 12).translate(ax, ay, cz), X.hot);
-    b.part('arm1', [-cz, ay, ax], 0.9, 'z'); add(new THREE.TorusGeometry(ar, 0.0015, 6, 36).translate(ax, ay, cz), X.trim); b.part();
-    b.part('arm2', [-cz, ay, ax], -1.3, 'x'); add(new THREE.TorusGeometry(ar * 0.8, 0.0012, 6, 36).rotateY(Math.PI / 2).translate(ax, ay, cz), X.glow); b.part();
-    b.part('arm3', [-cz, ay, ax], 0.6, 'y'); add(new THREE.TorusGeometry(ar * 1.12, 0.0011, 6, 36).rotateX(Math.PI / 2).translate(ax, ay, cz), X.trim); b.part();
-    const pts0 = [[0, -0.3], [0.18, 0.25], [0.34, -0.05], [0.44, 0.02], [0.54, 0.09], [0.74, -0.32], [0.95, 0.2]]; // 가운데 셋 = 오리온의 허리띠
-    const cons = (s, z0, z1, f) => { const P = pts0.map(([t, y]) => { const z = z0 + (z1 - z0) * t, q = f(z); return [s * (q.w + 0.0012), q.yc + q.hh * y * 1.3, z]; }); P.forEach((p) => add(new THREE.SphereGeometry(0.002, 8, 6), X.hot, xAt(...p))); for (let i = 0; i + 1 < P.length; i++) add(exTube([P[i], P[i + 1]], 0.0005, 2, 4), X.glow); };
-    cons(1, c.r0, c.r1, (z) => c.recAt(z)); if (c.stock) for (const s of [-1, 1]) cons(s, c.r1 + 0.012, c.back - 0.02, (z) => c.stockAt((z - c.r1) / (c.back - c.r1)));
-    add(new THREE.OctahedronGeometry(1, 0).scale(0.0028, 0.014 * big, 0.0028).translate(0, yB, zT - 0.012), X.hot); add(new THREE.OctahedronGeometry(1, 0).scale(0.014 * big, 0.0028, 0.0028).translate(0, yB, zT - 0.012), X.hot);
-    for (let k = 0; k < (side ? 2 : 3); k++) add(exRing(br * 1.5, 0.0009, zM + 0.015 + k * 0.03, yB), X.glow);
-    c.tip = zT - 0.012;
+  orion: { build(c) { // 오리온 성좌: 남색 법랑 판에 은으로 새긴 성도(천구 좌표선·별자리), 총몸 왼쪽 놋쇠 받침의 아스트롤라베, 손 앞 놋쇠 망원경 경통, 렌즈 총구
+    const { b, add, X, zT, yB, br, S, side, big, reg } = c, [h0, h1] = c.hz;
+    const pts0 = [[0, -0.3], [0.18, 0.25], [0.34, -0.05], [0.44, 0.02], [0.54, 0.09], [0.74, -0.32], [0.95, 0.2]];
+    const chart = (p, u0, u1) => { const R = p.R; for (const k of [0.35, 0.65, 0.95]) p.line(exArc(R, u0, 0.05, R.H * k, 0.02, Math.PI / 2, 14), 0.0003, X.trim); for (const a of [0.4, 0.8, 1.2]) p.line([[u0, 0.05], [u0 + (Math.cos(a) * R.H * 0.95) / R.len, 0.05 + Math.sin(a) * 0.95]], 0.0003, X.trim);
+      const P = pts0.map(([t, y]) => [u0 + (u1 - u0) * t, 0.5 + y * 1.1]); P.forEach(([u, v], i) => p.put(i >= 2 && i <= 4 ? exStar(0.0035, 0.0007) : new THREE.SphereGeometry(0.0016, 8, 6), X.hot, u, v, 0.0006)); for (let i = 0; i + 1 < P.length; i++) p.line([P[i], P[i + 1]], 0.0004, X.glow); };
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plCham(R, 0.002, 0.005), { mat: X.alt, rim: X.trim, rr: 0.0009 }); chart(p, s > 0 ? 0.08 : 0.55, s > 0 ? 0.92 : 0.95); }
+      if (reg.mg) { const R2 = reg.mg, p = c.panel(R2, s, plCham(R2, 0.002, 0.004), { mat: X.alt, rim: X.trim, rr: 0.0007 }); if (p) for (let k = 0; k < 5; k++) { const u = 0.14 + k * 0.17, r = Math.min(0.004, R2.H * 0.18); p.put(exSide(new THREE.CircleGeometry(r, 16), s), X.hot, u, 0.5, 0.0003); p.put(exSide(new THREE.CircleGeometry(r, 16), s), X.alt, u, 0.5 + ((k - 2) * r * 0.55) / R2.H, 0.0006); p.put(exSide(new THREE.TorusGeometry(r * 1.15, 0.0003, 4, 16), s), X.trim, u, 0.5, 0.0004); } }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plCham(R3, 0.003, 0.005, 0.05, 1), { mat: X.alt, rim: X.trim, rr: 0.0007 }); if (p) p.put(exStar(0.005, 0.0009), X.hot, 0.45, 0.5, 0.0008); }
+      if (reg.stk) { const R4 = reg.stk, p = c.panel(R4, s, plCham(R4, 0.003, 0.007, 0, 0.94), { mat: X.alt, rim: X.trim, rr: 0.0009 }); if (p) { const r = Math.min(0.012 * big, R4.H * 0.3); p.put(exSide(new THREE.CircleGeometry(r, 28), s), X.hot, 0.72, 0.55, 0.0003); p.put(exSide(new THREE.CircleGeometry(r * 0.88, 28), s), X.alt, 0.72 + (r * 0.42) / R4.len, 0.55 + (r * 0.2) / R4.H, 0.0007); const P = [[0.08, 0.6], [0.2, 0.75], [0.3, 0.55], [0.42, 0.68], [0.52, 0.4]]; P.forEach(([u, v]) => p.put(new THREE.SphereGeometry(0.0015, 8, 6), X.hot, u, v, 0.0006)); for (let i = 0; i + 1 < P.length; i++) p.line([P[i], P[i + 1]], 0.0004, X.glow); } c.panel(R4, s, plRect(R4, 0, 0.94, 1, 0, 1), { mat: X.alt2, off: 0.0004, th: 0.0022 }); }
+    });
+    { // 아스트롤라베 (1인칭에서 보이는 왼쪽): 놋쇠 받침대 → 눈금 테 두른 남색 원판 + 빛나는 레테 + 세 축으로 도는 고리 + 별 핵
+      const R = reg.rec, cz = R ? R.at(0.5).t : (c.r0 + c.r1) / 2, q = R ? R.at(0.5) : { a: yB - 0.02, b: yB + 0.02 }, ar = (side ? 0.017 : 0.03) * big, xs = R ? exField(R, -1)(0.5, 0.5) : -0.02, ax = xs - ar * 0.55 - 0.008, ay = Math.min((q.a + q.b) / 2 + 0.004, S - ar - 0.006);
+      add(exLimb([xs, ay, cz], [ax + ar * 0.2, ay, cz], 0.0032, 0.0026), X.alt2); add(exBox(cz - 0.012, cz + 0.012, 0.0015, 0.006, ay, xs - 0.001, 6), X.alt2);
+      add(new THREE.CylinderGeometry(ar * 0.82, ar * 0.82, 0.0016, 36).rotateZ(Math.PI / 2).translate(ax + 0.003, ay, cz), X.alt); add(new THREE.TorusGeometry(ar * 0.84, 0.0013, 5, 40).rotateY(Math.PI / 2).translate(ax + 0.003, ay, cz), X.alt2);
+      for (let k = 0; k < 24; k++) { const a = (k * Math.PI) / 12; add(new THREE.BoxGeometry(0.0012, k % 3 ? 0.0022 : 0.004, 0.0007).rotateX(-a).translate(ax + 0.0022, ay + Math.cos(a) * ar * 0.74, cz + Math.sin(a) * ar * 0.74), X.trim); }
+      add(new THREE.TorusGeometry(ar * 0.45, 0.0007, 4, 30, Math.PI * 1.4).rotateY(Math.PI / 2).translate(ax + 0.0014, ay + ar * 0.12, cz), X.glow); add(new THREE.TorusGeometry(ar * 0.6, 0.0006, 4, 30).rotateY(Math.PI / 2).translate(ax + 0.0014, ay - ar * 0.15, cz - ar * 0.05), X.glow);
+      add(new THREE.SphereGeometry(ar * 0.2, 16, 12).translate(ax, ay, cz), X.hot);
+      b.part('arm1', [-cz, ay, ax], 0.9, 'z'); add(new THREE.TorusGeometry(ar, 0.0016, 6, 40).translate(ax, ay, cz), X.trim); b.part();
+      b.part('arm2', [-cz, ay, ax], -1.3, 'x'); add(new THREE.TorusGeometry(ar * 0.66, 0.0012, 6, 36).rotateY(Math.PI / 2).translate(ax, ay, cz), X.glow); b.part();
+      b.part('arm3', [-cz, ay, ax], 0.6, 'y'); add(new THREE.TorusGeometry(ar * 1.12, 0.0012, 6, 40).rotateX(Math.PI / 2).translate(ax, ay, cz), X.alt2); add(new THREE.SphereGeometry(0.0022, 8, 6).translate(ax + ar * 1.12, ay, cz), X.hot); b.part();
+    }
+    if (!side) { // 손 앞: 앞으로 갈수록 가늘어지는 놋쇠 망원경 경통 세 마디 + 은 고리 눈금 + 별 점선
+      const pr = c.sleeve(h0, h1, { pad: 0.003, p: 2, mat: null }), n = 3, L = (h1 - h0) / n;
+      for (let k = 0; k < n; k++) { const za = h0 + k * L, zb = za + L, kk = 0.86 + 0.07 * k; add(exLoft(za, zb, (t) => { const q = pr(za + (zb - za) * t); return { w: q.w * kk + 0.002 * k, h: Math.min(q.h * kk + 0.002 * k, S - 0.004 - q.y), y: q.y }; }, 2, 6, 22), k % 2 ? X.alt : X.alt2); const q = pr(za); exBand(c, () => ({ w: q.w * kk + 0.002 * k, h: Math.min(q.h * kk + 0.002 * k, S - 0.005 - q.y), y: q.y }), za - 0.0025, za + 0.0025, 0.0016, X.trim); for (let j = 0; j < 16; j++) { const a = (j * Math.PI) / 8; add(new THREE.BoxGeometry(0.0006, 0.0006, 0.004).translate(Math.cos(a) * (q.w * kk + 0.002 * k + 0.0024), q.y + Math.sin(a) * Math.min(q.h * kk + 0.002 * k + 0.0024, S - 0.003 - q.y), za + 0.0045), X.trim); } }
+      c.both((s) => { for (let k = 0; k < 7; k++) { const z = h0 + 0.01 + k * ((h1 - h0 - 0.02) / 6), q = pr(z); add(k % 3 === 1 ? exStar(0.0026, 0.0006).translate(s * (q.w * 0.95 + 0.004), q.y, z) : new THREE.SphereGeometry(0.0011, 6, 5).translate(s * (q.w * 0.95 + 0.0035), q.y, z), X.hot); } });
+    }
+    // 총구: 놋쇠 렌즈 테 + 유리 렌즈 + 네 갈래 별
+    const m0 = zT - 0.002, mr = br * 1.8; add(exCyl(mr, mr * 0.9, m0 - 0.014, m0, 24, yB), X.alt2); add(exRing(mr, 0.0012, m0 - 0.014, yB, 28, 5), X.trim); add(new THREE.CircleGeometry(mr * 0.8, 24).rotateY(Math.PI).translate(0, yB, m0 - 0.0145), X.glass);
+    add(exStar(0.016 * big, 0.0028).rotateY(Math.PI / 2).translate(0, yB, m0 - 0.022), X.hot);
+    c.tip = m0 - 0.022;
   } },
-  darkmatter: { build(c) { // 특이점: 손 앞 총열 아래 매달린 검은 구체와 세로로 도는 강착원반, 총열을 따라 일그러진 중력 렌즈 고리
-    const { b, add, X, zM, zT, yB, br, rec, fore, side, big } = c, h = c.hgd, R = (side ? 0.012 : 0.022) * big, sz = side ? zM + 0.035 : fore[2] - 0.075, sy = h.y0 - R - 0.006;
-    add(exLimb([0, h.y0 + 0.003, sz], [0, sy + R * 0.6, sz], 0.0035, 0.0028), X.trim);
-    add(new THREE.SphereGeometry(R, 22, 16).translate(0, sy, sz), X.void); add(new THREE.TorusGeometry(R * 1.03, 0.0011, 6, 40).rotateY(Math.PI / 2).translate(0, sy, sz), X.hot);
-    b.part('disk', [-sz, sy, 0], 2.2, 'x'); add(new THREE.RingGeometry(R * 1.2, R * 2.0, 40, 1).rotateY(Math.PI / 2).translate(0, sy, sz), X.glowD); for (let k = 0; k < 5; k++) { const a = k * 1.26; add(new THREE.BoxGeometry(0.003, 0.008, 0.002).rotateX(a + 0.6).translate(0, sy + Math.sin(a) * R * 1.6, sz + Math.cos(a) * R * 1.6), X.hot); } b.part();
-    const l0 = zM + 0.006, l1 = side ? zM + 0.03 : Math.max(zM + 0.04, sz - R * 2.2), nl = side ? 2 : 4; b.part('lens', [-(l0 + l1) / 2, yB, 0], -1.5, 'z');
-    for (let k = 0; k < nl; k++) { const t = (k + 0.5) / nl, z = l1 - (l1 - l0) * t, rr = br * (2.5 - t * 1.1); add(new THREE.TorusGeometry(rr, 0.0013, 6, 30).scale(1, 0.75 + 0.2 * Math.sin(k * 2), 1).translate(0, yB, z), k % 2 ? X.glow : X.trim); } b.part();
-    add(new THREE.SphereGeometry(br * 0.75, 12, 10).translate(0, yB, zT - 0.008), X.void); add(exRing(br * 1.05, 0.0009, zT - 0.008, yB), X.hot);
-    for (const s of [-1, 1]) add(exTube([[s * (rec.w + 0.001), rec.yc + rec.hh * 0.3, c.r0 + 0.02], [s * (rec.w + 0.001), rec.yc - rec.hh * 0.25, (c.r0 + c.r1) / 2], [s * (rec.w + 0.001), rec.yc + rec.hh * 0.1, c.r1 - 0.02]], 0.001, 16, 4), X.glow); // 갈라진 빛
-    b.part('debris', [-sz, sy, 0], 0.5, 'x'); for (let k = 0; k < 4; k++) { const a = k * 1.57 + 0.3; add(new THREE.BoxGeometry(0.0045, 0.0045, 0.0045).rotateX(a).rotateY(a), X.void, xAt((k % 2 ? 1 : -1) * (h.w + 0.012), sy + Math.sin(a) * R * 2.4, sz + Math.cos(a) * R * 2.4)); } b.part();
-    c.tip = zT - 0.008;
+  darkmatter: { build(c) { // 다크 매터 보이드: 깨져서 떠 있는 검은 판 조각 사이로 보랏빛, 마디마다 갈라진 덮개, 받침 팔에 매달린 검은 구체와 강착원반, 총열 렌즈 고리
+    const { b, add, X, zM, zT, yB, br, S, fore, side, big, reg } = c, [h0, h1] = c.hz;
+    const shatter = (R, s, n, seed, u0 = 0, u1 = 1) => { if (!R) return null; const base = c.panel(R, s, plRect(R, 0.003, u0, u1), { mat: X.glow, th: 0.0005 }); const rnd = exRng(seed), gap = 0.0035 / R.len; let u = u0, k = 0; const cuts = [u0]; for (let i = 1; i < n; i++) cuts.push(u0 + ((u1 - u0) * (i + (rnd() - 0.5) * 0.5)) / n); cuts.push(u1);
+      for (let i = 0; i < n; i++) { const a = cuts[i] + (i ? gap : 0), bb = cuts[i + 1] - (i < n - 1 ? gap : 0), lift = 0.0014 + (i % 2) * 0.0016, sk = (rnd() - 0.5) * 0.12; const q = c.panel(R, s, [[a + sk * 0.3, 0.06 + rnd() * 0.08], [bb, 0.05 + rnd() * 0.06], [bb - sk * 0.3, 0.94 - rnd() * 0.06], [a, 0.95 - rnd() * 0.08]], { mat: i % 3 === 1 ? X.alt2 : X.alt, off: lift, th: 0.0014, rim: X.trim, rr: 0.0004 }); if (q && i % 2 === 0) q.line([[a + 0.02, 0.3], [bb - 0.02, 0.3]], 0.0003, X.glow); k++; } return base; };
+    c.both((s) => { shatter(reg.rec, s, 4, 3 + s); shatter(reg.mg, s, 3, 13 + s); shatter(reg.grp, s, 2, 23 + s, 0.05, 1); shatter(reg.stk, s, 4, 33 + s, 0, 0.95); });
+    if (!side) { // 손 앞: 마디마다 끊어져 떠 있는 검은 덮개 (틈마다 보랏빛)
+      const pr = c.sleeve(h0, h1, { pad: 0.0018, p: 2.2, mat: X.glow }), n = Math.max(3, Math.round((h1 - h0) / 0.032));
+      for (let k = 0; k < n; k++) { const za = h0 + ((h1 - h0) * k) / n + 0.002, zb = h0 + ((h1 - h0) * (k + 1)) / n - 0.002, g = 0.0016 + (k % 2) * 0.0012; add(exLoft(za, zb, (t) => { const q = pr(za + (zb - za) * t); return { w: q.w + g, h: Math.min(q.h + g, S - 0.004 - q.y), y: q.y }; }, 2.2, 4, 22), k % 2 ? X.alt2 : X.alt); exBand(c, pr, za - 0.0006, za + 0.0012, g + 0.0006, X.trim, 2.2); }
+    }
+    // 특이점: 손 앞 아래 받침 팔 셋에 매달린 검은 구체 + 세로로 도는 강착원반 + 사건의 지평선 테
+    const q0 = c.sec(side ? zM + 0.04 : Math.max(h0 + 0.02, fore[2] - 0.06)), R = (side ? 0.012 : 0.021) * big, sz = side ? zM + 0.035 : Math.max(h0 + 0.02, fore[2] - 0.06), sy = q0.y0 - R - 0.008;
+    for (const d of [-1, 0, 1]) add(exPath([[d * 0.006, q0.y0 + 0.002, sz + d * 0.004], [d * R * 0.7, sy + R * 0.9, sz + d * R * 0.3], [d * R * 1.05, sy + R * 0.3, sz]], 0.0011, false, 5), X.trim);
+    add(new THREE.SphereGeometry(R, 24, 18).translate(0, sy, sz), X.void); add(new THREE.TorusGeometry(R * 1.05, 0.0012, 6, 44).rotateY(Math.PI / 2).translate(0, sy, sz), X.hot); add(new THREE.TorusGeometry(R * 1.12, 0.001, 5, 44).translate(0, sy, sz), X.trim);
+    b.part('disk', [-sz, sy, 0], 2.2, 'x'); add(new THREE.RingGeometry(R * 1.25, R * 2.1, 44, 1).rotateY(Math.PI / 2).translate(0, sy, sz), X.glowD); for (let k = 0; k < 6; k++) { const a = k * 1.05; add(new THREE.BoxGeometry(0.003, 0.007, 0.002).rotateX(a + 0.6).translate(0, sy + Math.sin(a) * R * 1.7, sz + Math.cos(a) * R * 1.7), X.hot); } b.part();
+    const l0 = zM + 0.006, l1 = side ? zM + 0.03 : Math.max(zM + 0.04, h0 - 0.004), nl = side ? 2 : 4; b.part('lens', [-(l0 + l1) / 2, yB, 0], -1.5, 'z');
+    for (let k = 0; k < nl; k++) { const t = (k + 0.5) / nl, z = l1 - (l1 - l0) * t, rr = br * (2.6 - t * 1.1); add(new THREE.TorusGeometry(rr, 0.0013, 6, 30).scale(1, 0.75 + 0.2 * Math.sin(k * 2), 1).translate(0, yB, z), k % 2 ? X.glow : X.trim); } b.part();
+    // 총구: 검은 구슬 + 보랏빛 지평선 + 도는 빛 고리
+    const m0 = zT - 0.002; add(exCyl(br * 1.4, br * 1.6, m0 - 0.008, m0, 16, yB), X.alt); add(new THREE.SphereGeometry(br * 1.1, 14, 12).translate(0, yB, m0 - 0.016), X.void); add(exRing(br * 1.25, 0.001, m0 - 0.016, yB, 28, 5), X.hot);
+    b.part('halo', [-(m0 - 0.016), yB, 0], 2.6, 'z'); add(new THREE.TorusGeometry(br * 2.2, 0.0007, 4, 30, Math.PI * 1.3).translate(0, yB, m0 - 0.016), X.glow); b.part();
+    b.part('debris', [-sz, sy, 0], 0.5, 'x'); for (let k = 0; k < 5; k++) { const a = k * 1.26 + 0.3; add(new THREE.BoxGeometry(0.004, 0.004, 0.004).rotateX(a).rotateY(a), X.alt, xAt((k % 2 ? 1 : -1) * (q0.w + 0.012), sy + Math.sin(a) * R * 2.4, sz + Math.cos(a) * R * 2.4)); } b.part();
+    c.tip = m0 - 0.016;
   } },
-  crimson: { build(c) { // 메카: 총몸 옆 장갑판·통풍구, 손 앞 각진 장갑 덮개, 총구 앞으로 뻗은 두 줄 레일과 전기 아크, 개머리 유압 실린더
-    const { add, X, sh, sh2, zM, zT, yB, br, rec, fore, side, big } = c, h = c.hgd;
-    for (const s of [-1, 1]) { const x = s * (rec.w + 0.0032); add(exBox(c.r0 + 0.008, c.r1 - 0.008, 0.003, rec.hh * 0.88, rec.yc, x, 10, 0.85, 1), sh2); add(exBox(c.r0 + 0.02, c.r1 - 0.03, 0.0009, 0.0014, rec.yc - rec.hh * 0.35, x + s * 0.0032, 2), X.glow); for (let k = 0; k < 3; k++) add(exBox(c.r1 - 0.045 + k * 0.011, c.r1 - 0.04 + k * 0.011, 0.0009, rec.hh * 0.42, rec.yc + rec.hh * 0.22, x + s * 0.0031, 2), X.void); }
-    if (!side) { const z0 = Math.max(zM + 0.02, fore[2] - 0.13), z1 = fore[2] - 0.035, w = Math.max(h.w, br * 1.6) + 0.004, top = h.y1 + 0.004; for (const s of [-1, 1]) { add(exBox(z0, z1, 0.0028, (top - h.y0) / 2 + 0.002, (top + h.y0) / 2, s * w, 10, 0.8, 1), sh); add(exBox(z0 + 0.008, z1 - 0.008, 0.0009, 0.0013, (top + h.y0) / 2, s * (w + 0.003), 2), X.glow); } add(exBox(z0, z1, w, 0.0026, top, 0, 10, 0.8, 1), sh); }
-    const ra = yB + br * 2.1, rb = yB - br * 2.1, e1 = side ? zM + 0.03 : Math.max(zM + 0.04, fore[2] - 0.13), e0 = zT - (side ? 0.03 : 0.06) * big;
-    for (const y of [ra, rb]) { add(exBox(e0, e1, br * 1.1, br * 0.42, y, 0, 10, 0.75, 1), sh2); add(exBox(e0 + 0.005, e1 - 0.01, br * 0.7, 0.001, y - Math.sign(y - yB) * br * 0.45, 0, 2), X.glow); }
-    for (let k = 0; k < 3; k++) { const z = e0 + 0.012 + (k * (zT - e0 - 0.01)) / 3, pts = []; for (let i = 0; i <= 6; i++) pts.push([(i % 2 ? 1 : -1) * 0.003, rb + br * 0.45 + ((ra - rb - br * 0.9) * i) / 6, z + (i % 2 ? 0.003 : -0.003)]); add(exTube(pts, 0.0009, 18, 4), X.hot); }
-    if (c.stock) for (const s of [-1, 1]) { const a = c.stockAt(0.15), q = c.stockAt(0.75); add(exLimb([s * (a.w + 0.005), a.yc - a.hh * 0.2, a.z], [s * (q.w + 0.005), q.yc, q.z], 0.004, 0.004), X.trim); add(exLimb([s * (a.w + 0.005), a.yc - a.hh * 0.2, a.z], [s * (a.w + 0.005), a.yc - a.hh * 0.1, a.z + (q.z - a.z) * 0.45], 0.0026, 0.0026), sh2); }
-    add(new THREE.CircleGeometry(0.0032, 12).rotateY(Math.PI).translate(rec.w * 0.55, rec.y1 + 0.003, c.r0 + 0.01), X.hot); // 센서 눈
+  crimson: { build(c) { // 크림슨 메카 레일건: 패널선·통풍구·경고 표시를 넣은 흰 장갑판과 빨간 줄, 손 앞 각진 장갑 덮개와 축전기, 총구 앞 두 줄 레일과 그것을 잡는 멍에틀, 개머리 유압 실린더
+    const { add, X, zM, zT, yB, br, S, side, big, reg } = c, [h0, h1] = c.hz;
+    const vents = (p, u0, u1, v0, v1, n) => { for (let k = 0; k < n; k++) { const u = u0 + ((u1 - u0) * (k + 0.5)) / n; p.line([[u, v0], [u + 0.012, v1]], 0.0009, X.alt2); } };
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plCham(R, 0.002, 0.008), { mat: X.trim, rim: X.alt2, rr: 0.0006 }); const st = c.panel(R, s, plArrow(R, 0.004, 0.012, 0.05, 0.75, 0.22, 0.4), { mat: X.alt, off: p.top + 0.0001, th: 0.0007 }); p.line([[0.35, 0.05], [0.35, 0.95]], 0.0004, X.alt2).line([[0.72, 0.05], [0.72, 0.95]], 0.0004, X.alt2).line([[0.35, 0.62], [0.95, 0.62]], 0.0004, X.alt2); vents(p, 0.76, 0.95, 0.68, 0.92, 5); p.put(new THREE.BoxGeometry(0.0008, 0.003, 0.009), X.glow, 0.5, 0.78, 0.0004).put(new THREE.BoxGeometry(0.0008, 0.003, 0.004), X.alt, 0.6, 0.78, 0.0004); for (const [u, v] of [[0.06, 0.15], [0.06, 0.85], [0.97, 0.15], [0.97, 0.85]]) p.screw(u, v, 0.001, X.alt2); }
+      if (reg.mg) { const R2 = reg.mg, p = c.panel(R2, s, plCham(R2, 0.002, 0.005), { mat: X.trim, rim: X.alt2, rr: 0.0005 }); if (p) { for (let k = 0; k < 6; k++) p.put(new THREE.BoxGeometry(0.0008, 0.0024, Math.min(0.009, R2.H * 0.45)), k < 4 ? X.glow : X.alt2, 0.15 + k * 0.1, 0.5, 0.0004); c.panel(R2, s, plRect(R2, 0.001, 0.8, 0.95, 0, 1), { mat: X.alt, off: p.top + 0.0001, th: 0.0007 }); } }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plCham(R3, 0.003, 0.005, 0.05, 1), { mat: X.alt2, rim: X.trim, rr: 0.0006 }); if (p) vents(p, 0.2, 0.8, 0.3, 0.7, 6); }
+      if (reg.stk) { const R4 = reg.stk, p = c.panel(R4, s, plCham(R4, 0.003, 0.01, 0, 0.94), { mat: X.trim, rim: X.alt2, rr: 0.0006 }); if (p) { c.panel(R4, s, plArrow(R4, 0.004, 0.015, 0.06, 0.8, 0.3, 0.46, true), { mat: X.alt, off: p.top + 0.0001, th: 0.0007 }); p.line([[0.45, 0.05], [0.45, 0.95]], 0.0004, X.alt2); }
+        const a = R4.at(0.1), q = R4.at(0.75), wa = c.map.wAt(a.t, a.a, a.b) + 0.006, wq = c.map.wAt(q.t, q.a, q.b) + 0.006; add(exLimb([s * wa, a.a + (a.b - a.a) * 0.3, a.t], [s * wq, q.a + (q.b - q.a) * 0.45, q.t], 0.0042, 0.0042), X.alt2); add(exLimb([s * wa, a.a + (a.b - a.a) * 0.3, a.t], [s * (wa + (wq - wa) * 0.5), a.a + (a.b - a.a) * 0.32 + ((q.a + (q.b - q.a) * 0.45) - (a.a + (a.b - a.a) * 0.3)) * 0.5, a.t + (q.t - a.t) * 0.5], 0.0029, 0.0029), X.bolt || X.trim); c.panel(R4, s, plRect(R4, 0, 0.94, 1, 0, 1), { mat: X.alt2, off: 0.0004, th: 0.003 }); }
+    });
+    { const R = reg.rec; if (R) { const q = R.at(0.12); if (q.b + 0.004 < S) add(new THREE.CircleGeometry(0.0034, 14).rotateX(-Math.PI / 2).translate(0, q.b + 0.0012, q.t), X.hot); } } // 센서 눈
+    if (!side) { // 손 앞: 각진 흰 장갑 덮개 + 빨간 줄 + 옆 축전기
+      const pr = c.sleeve(h0, h1, { pad: 0.003, p: 7, mat: X.trim });
+      c.both((s) => { const pts = [0, 1].map((t) => { const z = h0 + 0.006 + (h1 - h0 - 0.012) * t, q = pr(z); return [s * (q.w + 0.0002), q.y - q.h * 0.35, z]; }); add(exBox(pts[0][2], pts[1][2], 0.0008, 0.0025, pts[0][1], pts[0][0], 2), X.alt); const qm = pr((h0 + h1) / 2), L = Math.min(0.05, (h1 - h0) * 0.45), r = 0.0045 * big; add(exCyl(r, r, (h0 + h1) / 2 - L / 2, (h0 + h1) / 2 + L / 2, 14, qm.y + qm.h * 0.25, s * (qm.w + r + 0.0005)), X.alt2); for (const d of [-0.5, 0.5]) add(exCyl(r * 1.08, r * 1.08, (h0 + h1) / 2 + d * L - 0.002, (h0 + h1) / 2 + d * L + 0.002, 14, qm.y + qm.h * 0.25, s * (qm.w + r + 0.0005)), X.glow); });
+      for (let z = h0 + 0.01; z < h1 - 0.006; z += 0.02) exBand(c, pr, z - 0.0005, z + 0.0005, 0.0006, X.alt2, 7);
+    }
+    // 레일: 손 앞에서 총구 너머까지 위아래 두 줄 + 그것을 총열에 잡아주는 멍에틀 + 레일 사이 전기 아크 + 발사 수정
+    const ra = Math.min(yB + br * 2.2, S - 0.005), rb = yB - br * 2.2, e1 = side ? zM + 0.03 : h0 - 0.002, e0 = zT - (side ? 0.035 : 0.07) * big, rw = br * 1.2;
+    for (const y of [ra, rb]) { add(exBox(e0, e1, rw, br * 0.42, y, 0, 10, 0.8, 1), X.alt2); add(exBox(e0 + 0.004, e1 - 0.006, rw * 0.6, 0.0008, y - Math.sign(y - yB) * br * 0.45, 0, 2), X.glow); add(exBox(e0, e0 + 0.008, rw * 1.1, br * 0.5, y, 0, 10), X.alt); }
+    for (let z = e1 - 0.012; z > e0 + 0.01; z -= 0.032) { for (const s of [-1, 1]) add(exBox(z - 0.003, z + 0.003, 0.0013, (ra - rb) / 2 + br * 0.4, yB, s * (rw + 0.0013), 6), X.trim); add(exCyl(br * 1.15, br * 1.15, z - 0.003, z + 0.003, 14, yB), X.trim); }
+    for (let k = 0; k < 4; k++) { const z = e0 + 0.012 + (k * (zT - e0 - 0.01)) / 4, pts = []; for (let i = 0; i <= 6; i++) pts.push([(i % 2 ? 1 : -1) * 0.003, rb + br * 0.45 + ((ra - rb - br * 0.9) * i) / 6, z + (i % 2 ? 0.003 : -0.003)]); add(exPath(pts, 0.0008, false, 4), X.hot); }
+    add(new THREE.OctahedronGeometry(1, 0).scale(br * 0.7, br * 0.7, 0.012 * big).translate(0, yB, e0 + 0.012), X.hot);
     c.tip = e0;
   } },
-  dragon: { build(c) { // 용: 총구를 문 용머리(입이 새 총구), 손 앞 총열덮개를 감싼 비늘 마디, 총몸 위 등가시, 발톱, 개머리 끝 꼬리
-    const { add, X, sh, sh2, zT, yB, br, rec, fore, side, big } = c, h = c.hgd, hl = (side ? 0.05 : 0.085) * big, hz0 = zT - hl * 0.55, hz1 = zT + hl * 0.45, hw = Math.max(br * 2, 0.014 * big), hh = hw * 0.85;
-    add(exLoft(hz0, hz1, (t) => ({ w: hw * (0.5 + 0.5 * t), h: hh * (0.42 + 0.4 * t), y: yB + hh * (0.55 + 0.25 * t) }), 2, 10, 16), sh);
-    add(exLoft(hz0 + 0.006, hz1 - hl * 0.15, (t) => ({ w: hw * (0.45 + 0.4 * t), h: hh * 0.3, y: yB - hh * (0.75 + 0.2 * t) }), 2, 8, 14), sh2);
-    add(exLoft(hz1 - 0.004, hz1 + hl * 0.5, (t) => ({ w: hw * (1 - 0.15 * t), h: hh * (0.95 - 0.15 * t), y: yB + hh * 0.12 }), 2, 6, 16), sh);
-    add(new THREE.SphereGeometry(hh * 0.42, 14, 10).translate(0, yB, hz0 + hl * 0.12), X.hot);
-    for (const s of [-1, 1]) { add(exTube([[s * hw * 0.5, yB + hh, hz0 + hl * 0.6], [s * hw, yB + hh * 1.6, hz1 + hl * 0.2], [s * hw * 1.2, yB + hh * 1.75, hz1 + hl * 0.6]], 0.0022 * big, 12), X.trim); add(new THREE.SphereGeometry(hh * 0.15, 8, 6).translate(s * hw * 0.6, yB + hh * 0.95, hz0 + hl * 0.4), X.hot); }
-    for (let k = 0; k < 4; k++) for (const s of [-1, 1]) add(new THREE.ConeGeometry(0.0016, 0.007, 4).rotateX(Math.PI).translate(s * hw * 0.32, yB + hh * 0.22, hz0 + 0.004 + k * hl * 0.14), X.trim);
-    if (!side) { const z0 = hz1 + hl * 0.45, z1 = fore[2] - 0.035, n = Math.max(2, Math.round((z1 - z0) / 0.03)), w = Math.max(h.w, br * 1.4) + 0.004, hy = (h.y1 - h.y0) / 2 + 0.004, yc = (h.y0 + h.y1) / 2;
-      if (z1 > z0) for (let k = 0; k < n; k++) { const za = z0 + ((z1 - z0) * k) / n, zb = Math.min(z1, za + ((z1 - z0) / n) * 1.3); add(exLoft(za, zb, (t) => ({ w: w * (0.86 + 0.14 * t), h: hy * (0.86 + 0.14 * t), y: yc }), 2, 4, 16), sh); }
-      for (const s of [-1, 1]) for (let k = 0; k < 3; k++) add(new THREE.ConeGeometry(0.002, 0.01, 4).rotateX(Math.PI).translate(s * h.w * 0.6, h.y0 - 0.004, fore[2] - 0.05 + k * 0.007), X.trim); }
-    const room = Math.max(0.004, c.S - rec.y1 - 0.008);
-    for (let k = 0; k < 4; k++) { const z = c.r0 + (c.r1 - c.r0) * (0.05 + k * 0.12), hg = Math.min(room, (0.016 - k * 0.002) * big); add(new THREE.ConeGeometry(0.0032 * big, hg, 5).translate(0, hg / 2, 0), sh2, exRot(0, rec.y1 - 0.001, z, 0.8, 0, 0)); }
-    if (c.stock) { const e = c.stockAt(0.95), cv = new THREE.CatmullRomCurve3([[0, e.yc - e.hh * 0.5, e.z - 0.02], [0, e.yc - e.hh - 0.02, e.z + 0.01], [0, e.yc - e.hh - 0.06 * big, e.z - 0.01], [0, e.yc - e.hh - 0.085 * big, e.z - 0.05 * big]].map((q) => XV(q))), pts = cv.getPoints(5);
-      for (let i = 0; i < 5; i++) add(exLimb(pts[i].toArray(), pts[i + 1].toArray(), 0.008 * big * (1 - i * 0.15), 0.008 * big * (1 - (i + 1) * 0.15), 2), sh);
-      const tp = pts[5]; add(exFin([[0, 0], [-0.02, 0.012], [-0.016, 0], [-0.02, -0.012]], 0.003, 0), X.trim, xAt(0, tp.y, tp.z)); }
+  dragon: { build(c) { // 흑룡: 총구를 문 용 머리(뿔·눈썹뼈·이빨·수염·불 구슬), 총몸·개머리를 덮은 겹친 비늘과 그 틈의 붉은 빛, 손 앞 비늘 마디 덮개, 등가시, 탄창을 움켜쥔 발톱, 꼬리
+    const { add, X, zT, yB, br, S, fore, side, big, reg } = c, [h0, h1] = c.hz;
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plCham(R, 0.002, 0.006), { mat: X.alt, rim: X.glow, rr: 0.0012 }); exScales(c, R, s, c.sh, 0.018 * big, 0.04, 0.96, 0.06, 0.94, p.top); }
+      if (reg.mg) { const R2 = reg.mg, p = c.panel(R2, s, plCham(R2, 0.002, 0.004), { mat: X.alt, rim: X.glow, rr: 0.001 }); if (p) exScales(c, R2, s, c.sh, 0.014, 0.05, 0.95, 0.08, 0.92, p.top); }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plCham(R3, 0.003, 0.005, 0.05, 1), { mat: X.alt, rim: X.glow, rr: 0.001 }); if (p) exScales(c, R3, s, c.sh, 0.013, 0.1, 0.95, 0.1, 0.9, p.top); }
+      if (reg.stk) { const R4 = reg.stk, p = c.panel(R4, s, plCham(R4, 0.003, 0.008, 0, 0.95), { mat: X.alt, rim: X.glow, rr: 0.0012 }); if (p) exScales(c, R4, s, c.sh, 0.021 * big, 0.03, 0.94, 0.06, 0.94, p.top); }
+    });
+    // 등가시: 총몸 위 (조준선 아래) + 개머리 위
+    const sp = (R, u0, u1, n, h) => { if (!R) return; for (let k = 0; k < n; k++) { const u = u0 + ((u1 - u0) * k) / Math.max(1, n - 1), q = R.at(u), hg = Math.min(Math.max(0.004, S - q.b - 0.004), h * (1 - k * 0.08)); add(new THREE.ConeGeometry(0.0035 * big, hg, 5).translate(0, hg / 2, 0).rotateX(0.7), X.trim, xAt(0, q.b - 0.001, q.t)); } };
+    sp(reg.rec, 0.08, 0.6, 4, 0.016 * big); sp(reg.stk, 0.05, 0.75, 5, 0.014 * big);
+    if (!side) { // 손 앞: 겹친 비늘 마디 (앞이 안으로 좁아지는 고리) + 금 테 + 배 쪽 가시
+      const pr = c.sleeve(h0, h1, { pad: 0.0025, p: 2, mat: X.alt }), n = Math.max(3, Math.round((h1 - h0) / 0.026));
+      for (let k = 0; k < n; k++) { const za = h0 + ((h1 - h0) * k) / n, zb = Math.min(h1, za + ((h1 - h0) / n) * 1.25); add(exLoft(za, zb, (t) => { const q = pr(za + (zb - za) * t), g = 0.0008 + 0.0026 * t; return { w: q.w + g, h: Math.min(q.h + g, S - 0.004 - q.y), y: q.y }; }, 2, 4, 22), c.sh); exBand(c, pr, zb - 0.0016, zb, 0.0036, X.trim); }
+      c.both((s) => { for (let k = 0; k < 3; k++) { const z = h0 + 0.012 + k * 0.009, q = pr(z); add(new THREE.ConeGeometry(0.002, 0.011, 4).rotateX(Math.PI + 0.5).translate(s * q.w * 0.5, q.y - q.h - 0.004, z), X.trim); } });
+    }
+    // 탄창을 움켜쥔 발톱 셋
+    const m = c.mag; if (m) { const zf = m.min.z, yt = m.max.y; for (const s of [-1, 0, 1]) { const x = s * (m.max.x + 0.001), p0 = [x * 0.6, yt + 0.004, zf + 0.012], p1 = [x, yt - 0.012, zf - 0.004], p2 = [x * 1.05, yt - 0.03, zf + 0.002]; add(exLimb(p0, p1, 0.0032, 0.0026), X.alt); add(exLimb(p1, p2, 0.0026, 0.0006, 2), X.trim); } }
+    // 용 머리: 총구를 문 머리 (위턱·아래턱·코·눈썹뼈·뿔·눈·이빨·수염·갈기) + 입 속 불 구슬
+    const hl = (side ? 0.06 : 0.12) * big, hz0 = zT - hl * 0.55, hz1 = zT + hl * 0.45, hw = Math.max(br * 2.6, 0.018 * big), hh = Math.min(hw * 0.85, (S - yB - 0.004) / 1.65);
+    exBand(c, () => ({ w: br * 1.6, h: br * 1.6, y: yB }), hz1 + hl * 0.5, hz1 + hl * 0.5 + 0.008, 0.0012, X.trim); // 머리를 총열에 물리는 금 고리
+    add(exLoft(hz0, hz1, (t) => ({ w: hw * (0.5 + 0.5 * t), h: hh * (0.42 + 0.4 * t), y: yB + hh * (0.55 + 0.25 * t) }), 2, 10, 18), c.sh);
+    add(exLoft(hz0 + 0.006, hz1 - hl * 0.15, (t) => ({ w: hw * (0.45 + 0.4 * t), h: hh * 0.42, y: yB - hh * (0.85 + 0.2 * t) }), 2, 8, 14), c.sh);
+    add(exLoft(hz1 - 0.004, hz1 + hl * 0.55, (t) => ({ w: hw * (1 - 0.15 * t), h: hh * (0.95 - 0.15 * t), y: yB + hh * 0.12 }), 2, 6, 18), c.sh);
+    c.both((s) => { for (let k = 0; k < 3; k++) add(exFin([[0, 0], [0.012 * big, hh * (0.55 - k * 0.12)], [0.03 * big, hh * (0.75 - k * 0.15)], [0.016 * big, -hh * 0.05]], 0.0012, 0).rotateX(-0.35 - k * 0.45).translate(s * hw * (0.95 - k * 0.04), yB + hh * 0.35, hz1 - hl * 0.05 + k * 0.004), k === 1 ? X.glow : X.trim); }); // 볼 뒤 지느러미 갈기
+    for (let k = 0; k < 4; k++) { const t = 0.3 + k * 0.2, z = hz0 + (hz1 - hz0) * t, tp = yB + hh * (0.55 + 0.25 * t) + hh * (0.42 + 0.4 * t); add(exBox(z - 0.006, z + 0.006, hw * (0.3 + 0.2 * t), 0.0016, tp - 0.0004, 0, 4, 0.7, 1), X.trim); } // 정수리 금 비늘판
+    add(new THREE.SphereGeometry(hh * 0.42, 14, 10).translate(0, yB, hz0 + hl * 0.12), X.hot); add(exLoft(hz0 + 0.004, hz0 + hl * 0.5, (t) => ({ w: hw * (0.32 + 0.2 * t), h: hh * 0.22, y: yB - hh * 0.2 }), 2, 4, 12), X.glow); // 입 속 불
+    for (const s of [-1, 1]) { add(exLimb([s * hw * 0.35, yB + hh * 1.0, hz0 + hl * 0.35], [s * hw * 0.75, yB + hh * 1.15, hz0 + hl * 0.72], 0.0028, 0.002), X.alt); // 눈썹뼈
+      add(exTube([[s * hw * 0.5, yB + hh, hz0 + hl * 0.6], [s * hw * 1.05, yB + Math.min(hh * 1.6, S - yB - 0.004), hz1 + hl * 0.2], [s * hw * 1.3, yB + Math.min(hh * 1.75, S - yB - 0.003), hz1 + hl * 0.7]], 0.0024 * big, 12), X.trim);
+      add(new THREE.SphereGeometry(hh * 0.2, 10, 8).scale(0.6, 0.8, 1.4).translate(s * hw * 0.66, yB + hh * 0.92, hz0 + hl * 0.42), X.hot);
+      add(exPath([0, 0.25, 0.5, 0.75, 1].map((t) => [s * hw * (0.5 + 0.5 * t) * 0.98, yB + hh * (0.55 + 0.25 * t) - hh * (0.42 + 0.4 * t) * 0.6, hz0 + (hz1 - hz0) * t]), 0.0013, false, 5), X.trim); // 윗턱 금테
+      add(exPath([0.1, 0.4, 0.7, 1].map((t) => [s * hw * (0.45 + 0.4 * t) * 0.9, yB - hh * (0.75 + 0.2 * t) + hh * 0.2, hz0 + 0.006 + (hz1 - hl * 0.15 - hz0 - 0.006) * t]), 0.001, false, 5), X.trim); // 아래턱 금테
+      add(exPath([[s * hw * 0.45, yB + hh * 0.35, hz0 + hl * 0.05], [s * hw * 1.1, yB + hh * 0.1, hz0 + hl * 0.3], [s * hw * 1.5, yB - hh * 0.2, hz1 + hl * 0.1], [s * hw * 1.7, yB - hh * 0.5, hz1 + hl * 0.6]], 0.0007, false, 4), X.glow); // 수염
+      for (let k = 0; k < 4; k++) add(new THREE.ConeGeometry(0.0025, 0.012 * big, 4).rotateX(Math.PI / 2 + 0.6).rotateZ(s * 0.8).translate(s * hw * (0.95 - k * 0.05), yB + hh * (0.6 - k * 0.12), hz1 + hl * (0.05 + k * 0.12)), X.trim); } // 볼 가시
+    for (let k = 0; k < 4; k++) for (const s of [-1, 1]) add(new THREE.ConeGeometry(0.0016, 0.007, 4).rotateX(Math.PI).translate(s * hw * 0.32, yB + hh * 0.22, hz0 + 0.004 + k * hl * 0.14), X.alt2 || X.trim);
+    for (let k = 0; k < 3; k++) add(new THREE.ConeGeometry(0.0016, 0.006, 4).translate(0, 0, 0).translate(0, yB - hh * 0.52, hz0 + 0.008 + k * hl * 0.16), X.alt2 || X.trim);
+    // 꼬리: 개머리 끝에서 아래로 휘는 마디 + 가시 끝
+    if (reg.stk) { const e = reg.stk.at(0.97), cv = new THREE.CatmullRomCurve3([[0, (e.a + e.b) / 2, e.t - 0.02], [0, e.a - 0.01, e.t + 0.012], [0, e.a - 0.05 * big, e.t - 0.005], [0, e.a - 0.075 * big, e.t - 0.045 * big]].map((q) => XV(q))), pts = cv.getPoints(6);
+      for (let i = 0; i < 6; i++) add(exLimb(pts[i].toArray(), pts[i + 1].toArray(), 0.0085 * big * (1 - i * 0.13), 0.0085 * big * (1 - (i + 1) * 0.13), 2), i % 2 ? X.alt : c.sh);
+      const tp = pts[6]; add(exFin([[0, 0], [-0.022, 0.013], [-0.017, 0], [-0.022, -0.013]], 0.003, 0), X.trim, xAt(0, tp.y, tp.z)); add(exPath([[0, tp.y + 0.003, tp.z + 0.004], [0, tp.y, tp.z - 0.012]], 0.0008, false, 4), X.glow); }
     c.tip = hz0 + 0.004;
   } },
-  phoenix: { build(c) { // 불사조: 총구를 감싼 새 머리와 부리, 볏, 총몸 양옆에서 솟는 깃털 날개, 개머리 끝 꼬리깃
-    const { add, X, sh, sh2, zT, yB, br, rec, side, big } = c, hw = Math.max(br * 1.5, 0.01 * big), hz1 = zT + (side ? 0.03 : 0.05) * big;
-    add(exLoft(zT - 0.004, hz1, (t) => ({ w: hw * (0.75 + 0.35 * t), h: hw * (0.7 + 0.35 * t), y: yB + hw * 0.1 * t }), 2, 8, 14), sh);
-    add(new THREE.ConeGeometry(hw * 0.7, 0.03 * big, 8).rotateX(-Math.PI / 2).translate(0, yB, zT - 0.017 * big), X.trim);
-    for (const s of [-1, 1]) add(new THREE.SphereGeometry(hw * 0.14, 8, 6).translate(s * hw * 0.7, yB + hw * 0.35, zT + 0.012), X.hot);
-    for (let k = 0; k < 3; k++) add(exFin(exFeather(0.024 * big - k * 0.004, 0.004), 0.0016, 0), k % 2 ? X.glow : X.trim, exRot(0, yB + hw * 0.8, zT + 0.012 + k * 0.006, -(0.5 + k * 0.22), 0, 0));
-    const wz = c.r0 + (c.r1 - c.r0) * 0.12, nfw = side ? 4 : 6, Lw = side ? 0.07 : 0.17 * big;
-    for (const s of [-1, 1]) for (let k = 0; k < nfw; k++) add(exFin(exFeather(Lw * (1 - k * 0.08), (side ? 0.006 : 0.01) * big), 0.0018, 0), k % 3 === 0 ? X.glow : k % 3 === 1 ? X.trim : sh2, exRot(s * (rec.w + 0.002 + k * 0.0012), rec.yc + rec.hh * 0.4, wz + k * 0.007, -(0.55 + k * 0.15), s * (0.34 + k * 0.03), 0));
-    for (const s of [-1, 1]) add(exTube([[s * (rec.w + 0.001), rec.yc - rec.hh * 0.3, c.r0 + 0.02], [s * (rec.w + 0.001), rec.yc + rec.hh * 0.1, (c.r0 + c.r1) / 2], [s * (rec.w + 0.001), rec.yc - rec.hh * 0.2, c.r1 - 0.02]], 0.0012, 16), X.glow);
-    if (c.stock) { const e = c.stockAt(0.92); for (let k = 0; k < 5; k++) add(exFin(exFeather(0.1 * big * (1 - Math.abs(k - 2) * 0.12), 0.009 * big), 0.002, 0), k % 2 ? X.glow : X.trim, exRot(0, e.yc + e.hh * 0.2, e.z, 0.15 + Math.abs(k - 2) * 0.05, (k - 2) * 0.2, 0)); }
-    c.tip = zT - 0.032 * big;
+  phoenix: { build(c) { // 황금 불사조: 금판에 불꽃 선과 햇살에 박힌 루비, 총몸에서 세 겹으로 솟는 깃털 날개, 덮개와 개머리를 덮은 겹친 깃털, 부리 총구와 볏, 긴 꼬리깃
+    const { add, X, zT, yB, br, S, side, big, reg } = c, [h0, h1] = c.hz;
+    const flame = (p, u0, u1, v0, amp, n) => { const pts = []; for (let k = 0; k <= n * 4; k++) { const t = k / (n * 4); pts.push([u0 + (u1 - u0) * t, v0 + amp * Math.sin(t * n * Math.PI * 2) * (0.4 + 0.6 * t)]); } p.line(pts, 0.0006, X.glow); };
+    const feathers = (R, s, sz, u0, u1, v0, v1, mats) => { if (!R) return; const F = exField(R, s), du = (sz * 0.7) / R.len, dv = (sz * 0.32) / R.H; let i = 0; c.b.part(R.part); for (let u = u0; u < u1; u += du, i++) for (let v = v0 + (i % 2 ? dv / 2 : 0); v < v1; v += dv) { const [z, y] = exZY(R, u, v), x = F(u, v) + s * 0.0028; add(exFin(exFeather(sz, sz * 0.2), 0.0011, 0).rotateY(s * 0.1).translate(x, y, z), mats[(i + Math.round(v * 7)) % mats.length]); } c.b.part(); };
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plCham(R, 0.002, 0.006), { mat: X.alt3, rim: X.trim, rr: 0.0011 }); flame(p, 0.05, 0.6, 0.3, 0.12, 3); flame(p, 0.1, 0.55, 0.55, 0.09, 4); const gu = 0.78, gv = 0.55, gr = Math.min(0.0065 * big, R.H * 0.22); for (let k = 0; k < 12; k++) { const a = (k * Math.PI) / 6, r1 = gr * 1.5, r2 = gr * (k % 2 ? 2.2 : 2.9); p.line([[gu + (Math.cos(a) * r1) / R.len, gv + (Math.sin(a) * r1) / R.H], [gu + (Math.cos(a) * r2) / R.len, gv + (Math.sin(a) * r2) / R.H]], 0.0004, X.glow); } p.put(exSide(new THREE.TorusGeometry(gr * 1.15, 0.0009, 5, 24), s), X.alt, gu, gv, 0.0005); p.put(new THREE.OctahedronGeometry(1, 0).scale(gr * 0.8, gr, gr).translate(s * gr * 0.2, 0, 0), X.alt2, gu, gv, 0); }
+      if (reg.mg) { const R2 = reg.mg, p = c.panel(R2, s, plCham(R2, 0.002, 0.004), { mat: X.alt3, rim: X.trim, rr: 0.0009 }); if (p) flame(p, 0.1, 0.9, 0.5, 0.18, 3); }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plCham(R3, 0.003, 0.005, 0.05, 1), { mat: X.alt3, rim: X.trim, rr: 0.0009 }); if (p) flame(p, 0.1, 0.9, 0.5, 0.15, 2); }
+      if (reg.stk) feathers(reg.stk, s, 0.03 * big, 0.02, 0.85, 0.08, 0.9, [X.trim, X.alt, X.trim, X.glow]);
+    });
+    if (!side) { // 손 앞: 깃털빛 덮개 + 금 띠 + 뒤로 겹친 깃털
+      const pr = c.sleeve(h0, h1, { pad: 0.0025, p: 2, mat: X.alt }); exBand(c, pr, h0 - 0.002, h0 + 0.006, 0.0018, X.trim); exBand(c, pr, h1 - 0.006, h1 + 0.002, 0.0018, X.trim);
+      c.both((s) => { for (let k = 0; k < Math.max(3, Math.round((h1 - h0) / 0.018)); k++) { const z = h0 + 0.01 + k * 0.018; if (z > h1 - 0.01) break; for (const f of [-0.45, 0, 0.45]) { const q = pr(z), y = q.y + q.h * f; add(exFin(exFeather(0.026 * big, 0.005 * big), 0.001, 0).rotateY(s * 0.12).translate(s * (q.w * Math.sqrt(Math.max(0, 1 - f * f)) + 0.0012), y, z), (k + (f > 0 ? 1 : 0)) % 3 === 2 ? X.glow : X.trim); } } });
+    }
+    // 날개: 총몸 앞쪽 어깨에서 세 겹 (짧은 덮깃 → 둘째깃 → 긴 첫째깃)
+    const R = reg.rec, wz = R ? R.at(0.15).t : c.r0 + 0.02, wq = R ? R.at(0.15) : { a: yB - 0.02, b: yB + 0.02 }, Lw = (side ? 0.07 : 0.17) * big;
+    for (const s of [-1, 1]) { const x0 = R ? exField(R, s)(0.15, 0.7) : s * 0.015, y0 = wq.a + (wq.b - wq.a) * 0.7;
+      add(new THREE.CylinderGeometry(0.0085 * big, 0.0095 * big, 0.004, 20).rotateZ(Math.PI / 2).translate(x0 + s * 0.002, y0, wz + 0.006), X.trim); add(new THREE.OctahedronGeometry(0.0045 * big, 0).scale(0.6, 1, 1).translate(x0 + s * 0.0045, y0, wz + 0.006), X.alt2); add(new THREE.TorusGeometry(0.007 * big, 0.0008, 5, 20).rotateY(Math.PI / 2).translate(x0 + s * 0.0042, y0, wz + 0.006), X.glow); // 날개 경첩
+      for (let k = 0; k < (side ? 4 : 7); k++) add(exFin(exFeather(Lw * (1 - k * 0.07), (side ? 0.006 : 0.011) * big), 0.0018, 0), k % 3 === 0 ? X.glow : k % 3 === 1 ? X.trim : X.alt, exRot(x0 + s * (0.003 + k * 0.0012), y0, wz + k * 0.007, -(0.55 + k * 0.14), s * (0.34 + k * 0.03), 0));
+      for (let k = 0; k < (side ? 3 : 5); k++) add(exFin(exFeather(Lw * (0.6 - k * 0.05), (side ? 0.006 : 0.01) * big), 0.0016, 0), k % 2 ? X.trim : X.alt, exRot(x0 + s * (0.005 + k * 0.0012), y0 - 0.002, wz + 0.004 + k * 0.008, -(0.25 + k * 0.12), s * (0.42 + k * 0.03), 0));
+      for (let k = 0; k < 4; k++) add(exFin(exFeather(Lw * 0.28, 0.008 * big), 0.0014, 0), k % 2 ? X.glow : X.trim, exRot(x0 + s * 0.006, y0 - 0.004, wz + 0.003 + k * 0.009, -0.05 - k * 0.12, s * 0.5, 0)); }
+    // 머리: 총구를 감싼 머리 + 부리 + 루비 눈 + 볏
+    const hw = Math.max(br * 1.6, 0.01 * big), hz1 = zT + (side ? 0.03 : 0.05) * big;
+    add(exLoft(zT - 0.004, hz1, (t) => ({ w: hw * (0.75 + 0.35 * t), h: hw * (0.7 + 0.35 * t), y: yB + hw * 0.1 * t }), 2, 8, 16), X.trim);
+    add(new THREE.ConeGeometry(hw * 0.72, 0.032 * big, 8).rotateX(-Math.PI / 2).translate(0, yB, zT - 0.018 * big), X.trim); add(new THREE.ConeGeometry(hw * 0.5, 0.02 * big, 8).rotateX(-Math.PI / 2).translate(0, yB - hw * 0.3, zT - 0.01 * big), X.alt);
+    for (const s of [-1, 1]) add(new THREE.OctahedronGeometry(hw * 0.18, 0).translate(s * hw * 0.72, yB + hw * 0.35, zT + 0.012), X.alt2);
+    for (let k = 0; k < 4; k++) add(exFin(exFeather(0.028 * big - k * 0.004, 0.0045), 0.0016, 0), k % 2 ? X.glow : X.trim, exRot(0, yB + hw * 0.8, zT + 0.012 + k * 0.006, -(0.45 + k * 0.2), 0, 0));
+    if (reg.stk) { const e = reg.stk.at(0.96), ey = (e.a + e.b) / 2; for (let k = 0; k < 7; k++) add(exFin(exFeather(0.12 * big * (1 - Math.abs(k - 3) * 0.1), 0.01 * big), 0.002, 0), k % 2 ? X.glow : k % 3 ? X.trim : X.alt, exRot(0, ey, e.t, 0.18 + Math.abs(k - 3) * 0.05, (k - 3) * 0.17, 0)); }
+    c.tip = zT - 0.034 * big;
   } },
-  aqua: { build(c) { // 수중: 총구 앞 덕트 속에서 도는 임펠러, 손 앞 물방울 덮개와 등지느러미, 옆지느러미, 탄창 대신 물탱크, 개머리 꼬리지느러미
-    const { b, add, X, sh, sh2, zM, zT, yB, br, rec, fore, side, big } = c, R = br * 2.3, du1 = zT + 0.008, du0 = zT - (side ? 0.035 : 0.055) * big, dmid = (du0 + du1) / 2;
-    for (const z of [du0, du1]) add(exRing(R, 0.004 * big, z, yB, 32, 8), X.trim);
-    for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + (k * Math.PI) / 2; add(exCyl(0.0017, 0.0017, du0, du1, 6, yB + Math.sin(a) * R, Math.cos(a) * R), sh2); }
-    b.part('imp', [-dmid, yB, 0], 4, 'z'); for (let k = 0; k < 5; k++) add(new THREE.BoxGeometry(0.002, R * 0.8, 0.011 * big).rotateY(0.5).translate(0, R * 0.42, 0).rotateZ((k * Math.PI * 2) / 5).translate(0, yB, dmid), X.trim); add(new THREE.SphereGeometry(R * 0.2, 10, 8).translate(0, yB, dmid), X.hot); b.part();
-    if (!side) { const z0 = zT + 0.02, z1 = fore[2] - 0.035; if (z1 - z0 > 0.04) { add(exLoft(z0, z1, (t) => { const k = Math.sin(Math.PI * Math.min(1, 0.06 + t * 0.94)) ** 0.5; return { w: R * (0.6 + 0.4 * k), h: R * (0.55 + 0.45 * k), y: yB }; }, 2.2, 14, 18), sh);
-      const fz0 = z0 + (z1 - z0) * 0.3, fl = (z1 - z0) * 0.5, fh = Math.min(0.026 * big, Math.max(0.006, c.S - yB - R - 0.012)), fy = yB + R * 0.95; add(exFin([[fz0, fy], [fz0 + fl * 0.6, fy + fh], [fz0 + fl * 0.85, fy + fh * 0.9], [fz0 + fl, fy]], 0.0022, 0), X.trim); } }
-    for (const s of [-1, 1]) add(exFin([[0, 0], [0.012, 0.018 * big], [0.02, 0.016 * big], [0.028, 0]], 0.002, 0), sh2, exRot(s * (rec.w + 0.002), rec.yc - rec.hh * 0.4, c.r0 + 0.03, 0, 0, -s * 2.2));
-    for (const s of [-1, 1]) add(exTube([[s * (rec.w + 0.001), rec.yc, c.r0 + 0.01], [s * (rec.w + 0.001), rec.yc + rec.hh * 0.2, (c.r0 + c.r1) / 2], [s * (rec.w + 0.001), rec.yc - rec.hh * 0.1, c.r1 - 0.01]], 0.0012, 16), X.glow);
+  aqua: { build(c) { // 아쿠아 메카: 흰 선체 판에 파란 줄과 볼트 박은 둥근 창(속에 거품), 손 앞 물방울 포드와 흡입구·등지느러미, 총구 덕트 속 임펠러, 탄창 물 캡슐, 옆·꼬리 지느러미
+    const { b, add, X, zT, yB, br, S, fore, side, big, reg } = c, [h0, h1] = c.hz;
+    const port = (p, u, v, r) => { const s = p.s; p.put(exSide(new THREE.TorusGeometry(r, r * 0.2, 8, 28), s), X.trim, u, v, 0.0005); p.put(exDome(r * 0.45, r * 0.85, r * 0.85, s, 12), X.glass, u, v, 0); for (let k = 0; k < 3; k++) p.put(new THREE.SphereGeometry(r * (0.12 + k * 0.05), 8, 6), X.glow, u + ((k - 1) * r * 0.4) / p.R.len, v + ((k - 1) * r * 0.3) / p.R.H, 0.0005); for (let k = 0; k < 6; k++) { const a = (k * Math.PI) / 3; p.put(exBolt(0.0008, 0.002).rotateZ(-s * Math.PI / 2), X.alt2, u + (Math.cos(a) * r * 1.35) / p.R.len, v + (Math.sin(a) * r * 1.35) / p.R.H, 0.0003); } };
+    c.both((s) => {
+      const R = reg.rec;
+      if (R) { const p = c.panel(R, s, plCham(R, 0.002, 0.008), { mat: X.trim, rim: X.alt, rr: 0.0008 }); c.panel(R, s, plArrow(R, 0.003, 0.012, 0.04, 0.6, 0.2, 0.38), { mat: X.alt, off: p.top + 0.0001, th: 0.0007 }); p.line([[0.05, 0.45], [0.55, 0.45], [0.62, 0.55], [0.95, 0.55]], 0.0006, X.glow); port(p, 0.78, 0.5, Math.min(0.012 * big, R.H * 0.33)); const tube = [[0.04, 0.24], [0.4, 0.24], [0.5, 0.32], [0.66, 0.32]]; p.line(tube, 0.0024, X.glass, 0.0008).line(tube, 0.0011, X.glow, 0.0018); for (const u of [0.1, 0.36, 0.6]) p.put(new THREE.TorusGeometry(0.003, 0.0008, 5, 12).rotateY(Math.PI / 2), X.trim, u, u > 0.45 ? 0.32 : 0.24, 0.0018); }
+      if (reg.grp) { const R3 = reg.grp, p = c.panel(R3, s, plCham(R3, 0.003, 0.006, 0.05, 1), { mat: X.alt, rim: X.trim, rr: 0.0006 }); if (p) p.line([[0.15, 0.5], [0.85, 0.5]], 0.0006, X.glow); }
+      if (reg.stk) { const R4 = reg.stk, p = c.panel(R4, s, plCham(R4, 0.003, 0.01, 0, 0.92), { mat: X.trim, rim: X.alt, rr: 0.0008 }); if (p) { c.panel(R4, s, plArrow(R4, 0.003, 0.015, 0.05, 0.85, 0.3, 0.48, true), { mat: X.alt, off: p.top + 0.0001, th: 0.0007 }); p.line([[0.08, 0.62], [0.8, 0.62]], 0.0006, X.glow); port(p, 0.5, 0.72, Math.min(0.009 * big, R4.H * 0.22)); } }
+      add(exFin([[0, 0], [0.014, 0.02 * big], [0.024, 0.018 * big], [0.032, 0]], 0.002, 0), X.alt, exRot(s * ((R ? Math.abs(exField(R, s)(0.2, 0.25)) : 0.015) + 0.002), R ? R.at(0.2).a + 0.004 : yB - 0.02, R ? R.at(0.2).t : c.r0 + 0.03, 0, 0, -s * 2.2)); // 옆지느러미
+    });
     const m = c.mag;
-    if (m) { const mz = (m.min.z + m.max.z) / 2, mh = (m.max.y - m.min.y) * 0.5, my = m.max.y - (m.max.y - m.min.y) * 0.42, vx = m.max.x + 0.007; b.part('mag'); // 탄창 옆 물캡슐과 거품
-      for (const s of [-1, 1]) { add(new THREE.CylinderGeometry(0.0065, 0.0065, mh, 14).translate(s * vx, my, mz), X.glass); for (const d of [-1, 1]) add(new THREE.CylinderGeometry(0.0072, 0.0072, 0.004, 14).translate(s * vx, my + d * mh * 0.5, mz), X.trim); for (let k = 0; k < 4; k++) add(new THREE.SphereGeometry(0.0016 + (k % 2) * 0.001, 8, 6), X.glow, xAt(s * vx, my - mh * 0.35 + k * mh * 0.22, mz + (k % 2 ? 0.002 : -0.002))); } b.part(); }
-    if (c.stock) { const e = c.stockAt(0.95), ez = e.z - 0.02; add(exFin([[ez, e.yc], [ez + 0.035, e.yc + 0.038 * big], [ez + 0.028, e.yc], [ez + 0.035, e.yc - 0.033 * big]], 0.0026, 0), X.trim); add(exTube([[0, e.yc + 0.006, ez + 0.012], [0, e.yc + 0.028 * big, ez + 0.03]], 0.0012, 6), X.glow); }
+    if (m) { const mz = (m.min.z + m.max.z) / 2, mh = (m.max.y - m.min.y) * 0.5, my = m.max.y - (m.max.y - m.min.y) * 0.45, vx = m.max.x + 0.007; b.part('mag'); // 탄창 옆 물 캡슐과 거품
+      for (const s of [-1, 1]) { add(new THREE.CylinderGeometry(0.0065, 0.0065, mh, 14).translate(s * vx, my, mz), X.glass); for (const d of [-1, 1]) add(new THREE.CylinderGeometry(0.0074, 0.0074, 0.004, 14).translate(s * vx, my + d * mh * 0.5, mz), X.trim); for (let k = 0; k < 5; k++) add(new THREE.SphereGeometry(0.0015 + (k % 2) * 0.001, 8, 6), X.glow, xAt(s * vx, my - mh * 0.38 + k * mh * 0.18, mz + (k % 2 ? 0.002 : -0.002))); } b.part(); }
+    if (!side) { // 손 앞: 물방울 포드 (흰 선체 + 파란 줄 + 흡입구) + 등지느러미
+      const pr = c.sleeve(h0, h1, { pad: 0.003, p: 2.2, mat: X.trim, k: (t) => 0.9 + 0.12 * Math.sin(Math.PI * Math.min(1, t * 1.1)) });
+      c.both((s) => { const pts = []; for (let k = 0; k <= 10; k++) { const z = h0 + 0.008 + ((h1 - h0 - 0.016) * k) / 10, q = pr(z); pts.push([s * (q.w * 0.98), q.y - q.h * 0.18, z]); } add(exPath(pts, 0.0016, false, 6), X.alt); add(exPath(pts.map(([x, y, z]) => [x * 1.004, y + 0.003, z]), 0.0006, false, 4), X.glow); for (let k = 0; k < 4; k++) { const z = h0 + 0.01 + k * 0.006, q = pr(z); add(exBox(z - 0.0018, z + 0.0018, 0.0012, q.h * 0.3, q.y - q.h * 0.55, s * q.w * 0.84, 2), X.alt2); } });
+      const qm = pr((h0 + h1) / 2), fz0 = h0 + (h1 - h0) * 0.35, fl = (h1 - h0) * 0.45, fy = qm.y + qm.h * 0.85, fh = Math.min(0.026 * big, Math.max(0.005, S - fy - 0.006)); add(exFin([[fz0, fy], [fz0 + fl * 0.55, fy + fh], [fz0 + fl * 0.85, fy + fh * 0.9], [fz0 + fl, fy]], 0.0022, 0), X.alt);
+    }
+    // 총구 덕트: 흰 고리 둘 + 지지대 + 도는 임펠러
+    const Rd = br * 2.4, du1 = zT + 0.008, du0 = zT - (side ? 0.035 : 0.055) * big, dm = (du0 + du1) / 2;
+    for (const z of [du0, du1]) add(exRing(Rd, 0.004 * big, z, yB, 32, 8), X.trim); add(exRing(Rd * 1.02, 0.0012, du0 + 0.003, yB, 32, 5), X.glow);
+    for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + (k * Math.PI) / 2; add(exCyl(0.0017, 0.0017, du0, du1, 6, yB + Math.sin(a) * Rd, Math.cos(a) * Rd), X.alt); }
+    b.part('imp', [-dm, yB, 0], 4, 'z'); for (let k = 0; k < 6; k++) add(new THREE.BoxGeometry(0.0018, Rd * 0.8, 0.011 * big).rotateY(0.5).translate(0, Rd * 0.42, 0).rotateZ((k * Math.PI * 2) / 6).translate(0, yB, dm), X.trim); add(new THREE.SphereGeometry(Rd * 0.2, 10, 8).translate(0, yB, dm), X.hot); b.part();
+    b.part('bub', [-(h0 + zT) / 2, yB, 0], 0.5, 'z'); for (let k = 0; k < 6; k++) { const a = k * 1.05; add(new THREE.SphereGeometry(0.0018 + (k % 3) * 0.0008, 8, 6), X.glass, xAt(Math.cos(a) * 0.035 * big, yB + Math.sin(a) * 0.03 * big, (h0 + zT) / 2 + (k - 2.5) * 0.012)); } b.part();
+    if (reg.stk) { const e = reg.stk.at(0.95), ey = (e.a + e.b) / 2, ez = e.t - 0.02; add(exFin([[ez, ey], [ez + 0.036, ey + 0.04 * big], [ez + 0.028, ey], [ez + 0.036, ey - 0.034 * big]], 0.0026, 0), X.alt); add(exPath([[0, ey + 0.006, ez + 0.012], [0, ey + 0.028 * big, ez + 0.03]], 0.0012, false, 4), X.glow); }
     c.tip = du0 - 0.004;
   } },
 };
-// 실제 총 모델의 꼭짓점에서 단면을 재는 도구 (z0~z1, y 범위 안의 반너비·위아래)
-function exSections(verts, yB) {
-  const sec = (z0, z1, yLo = -9, yHi = 9) => {
-    let y0 = 9, y1 = -9, w = 0, n = 0;
-    for (let i = 0; i < verts.length; i += 3) { const z = verts[i + 2]; if (z < z0 || z > z1) continue; const y = verts[i + 1]; if (y < yLo || y > yHi) continue; n++; if (y < y0) y0 = y; if (y > y1) y1 = y; const x = Math.abs(verts[i]); if (x > w) w = x; }
-    if (!n) return { w: 0.012, y0: yB - 0.02, y1: yB + 0.02, yc: yB, hh: 0.02, z: (z0 + z1) / 2 };
-    return { w: Math.min(w, 0.04), y0, y1, yc: (y0 + y1) / 2, hh: (y1 - y0) / 2, z: (z0 + z1) / 2 };
-  };
-  return sec;
-}
 
 const cache = new Map();
 // 같은 모양·같은 스킨을 여러 번 써도 형태 데이터는 한 번만 만든다
