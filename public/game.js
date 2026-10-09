@@ -4,7 +4,7 @@ import { ARENA, PLAYER, WEAPONS, SKINS, NADES, ECON, NADE_WEAPON, ZONE_WEAPON, V
 import { dressOp, tickOps, opDraw } from './operators.js';
 import { loadGunModels } from './gunmodels.js';
 await Promise.race([loadGunModels(), new Promise((r) => setTimeout(r, 9000))]); // 실제 총 모델을 먼저 받아 둠 (늦으면 코드 모델로 시작)
-import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox, pulseSkin, skinFire } from './guns.js';
+import { makeGun, makeArms, initGunEnv, tickSkins, skinFx, setGunQuality, gunBox, pulseSkin, skinFire, setGunAds } from './guns.js';
 import { paintTex, isPaint, initPaintEditor, paintUI } from './paint.js';
 import { makeRig, rigHold, rigShot, rigFlinch, rigMuzzle, animate as animRig, setAvatarFlash } from './avatar.js';
 import { initAudio, audioOn, setVolume, sfxShot, sfxBoom, sfxStep, sfxSplash, sfxTone, sfxImpact as playImpact, sfxWhiz, sfxReload, sfxUI, setAmbient, engineSound, sfxSkin, sfxSample } from './audio.js';
@@ -1333,9 +1333,9 @@ function aimAssist(dt) {
     if (a < ba) { ba = a; best = o; bd = d; _ad[0] = dx / d; _ad[1] = dy / d; _ad[2] = dz / d; }
   }
   if (!best || rayWorld(eye, _ad, bd) < bd - 0.6 || smoked(eye, [best.x, best.y + 1.05, best.z])) return; // 벽·연막 뒤는 보정하지 않음
-  assistSlow = ba < 0.045 ? 0.5 : ba < 0.08 ? 0.72 : 0.9;
-  if (ba < 0.085 && ba > 0.004 && (input.fire || me.scoped || Math.abs(input.jx) + Math.abs(input.jy) > 0.25)) {
-    const wy = Math.atan2(-_ad[0], -_ad[2]), wp = Math.asin(clamp(_ad[1], -1, 1)), k = Math.min(1, dt * (me.scoped ? 3.2 : 2.2));
+  assistSlow = ba < 0.045 ? 0.6 : ba < 0.08 ? 0.78 : 0.92;
+  if (ba < 0.06 && ba > 0.004 && (input.fire || me.scoped)) { // 쏘거나 조준할 때만, 아주 가까운 적에게만 살짝 (화면이 혼자 홱 돌지 않게)
+    const wy = Math.atan2(-_ad[0], -_ad[2]), wp = Math.asin(clamp(_ad[1], -1, 1)), k = Math.min(1, dt * (me.scoped ? 1.8 : 1.2) * (1 - ba / 0.06));
     let dyaw = wy - me.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
     me.yaw += dyaw * k; me.pitch = clamp(me.pitch + (wp - me.pitch) * k, -1.45, 1.45);
   }
@@ -1406,13 +1406,17 @@ const STICK_R = 52;
 // 터치가 잠깐 끊겼다 다시 잡히는 패드를 위한 여유: 끊긴 뒤 0.16초 안에 같은 자리를 다시 누르면 이어진 것으로 봄
 const GRACE = 160;
 let moveLost = null, fireLostT = 0;
+const TAN_HIP = Math.tan((75 * Math.PI) / 360);
 function look(dx, dy, base) {
-  const zm = ew(me.w).zoom;
-  const k = base * sens * (me.scoped ? (WEAPONS[me.w].scope ? 0.3 * ctl.sScope : (zm ? (zm < 32 ? 0.36 : 0.45) : 0.6) * ctl.sAds) : 1) * (input.fire && isTouch ? ctl.sFire : 1) * assistSlow;
-  me.yaw -= dx * k; me.pitch = clamp(me.pitch - dy * k, -1.45, 1.45);
-  // 반동을 손으로 눌러 준 만큼은 사격을 멈춘 뒤 되돌아오지 않게 함
-  if (dy > 0 && me.rcP > 0) me.rcP = Math.max(0, me.rcP - dy * k);
-  if (dx * me.rcY < 0) me.rcY = Math.abs(dx * k) >= Math.abs(me.rcY) ? 0 : me.rcY - dx * k;
+  const zm = ew(me.w).zoom, adsK = Math.tan(((zm || VM[WEAPONS[me.w].vm].fov) * Math.PI) / 360) / TAN_HIP; // 정조준: 화면이 확대된 만큼만 느려져서 손 감각이 같음
+  const k = base * sens * (me.scoped ? (WEAPONS[me.w].scope ? 0.3 * ctl.sScope : adsK * ctl.sAds) : 1) * (input.fire && isTouch ? ctl.sFire : 1) * assistSlow;
+  const yd = -dx * k, pd = -dy * k;
+  me.yaw += yd; me.pitch = clamp(me.pitch + pd, -1.45, 1.45);
+  // 반동 되돌림: 손으로 반대쪽으로 눌러 준 만큼은 사격을 멈춘 뒤 되돌아오지 않게 하고,
+  // 손으로 시점을 크게 옮기면(다른 곳을 겨누면) 남은 되돌림을 버림 → 쏘고 나서 화면이 엉뚱한 데로 끌려가지 않음
+  if (pd < 0 && me.rcP > 0) me.rcP = Math.max(0, me.rcP + pd);
+  if (yd * me.rcY < 0) me.rcY = Math.abs(yd) >= Math.abs(me.rcY) ? 0 : me.rcY + yd;
+  const mv = Math.hypot(yd, pd); if (mv > 0) { const f = Math.max(0, 1 - mv * 6); me.rcP *= f; me.rcY *= f; }
   me.swx = clamp(me.swx + dx * k * 0.25, -0.07, 0.07); me.swy = clamp(me.swy + dy * k * 0.25, -0.05, 0.05);
 }
 document.addEventListener('touchstart', (e) => {
@@ -1451,7 +1455,7 @@ document.addEventListener('touchmove', (e) => {
       if (len > STICK_R) { dx *= STICK_R / len; dy *= STICK_R / len; }
       input.jx = dx / STICK_R; input.jy = dy / STICK_R;
       $('knob').style.transform = `translate(${dx}px,${dy}px)`;
-    } else if (r.role === 'look') look(t.clientX - r.lx, t.clientY - r.ly, 0.0055);
+    } else if (r.role === 'look') { const dx = t.clientX - r.lx, dy = t.clientY - r.ly; if (Math.hypot(dx, dy) < Math.max(160, VW * 0.22)) look(dx, dy, 0.0055); } // 한 번에 화면의 1/4 넘게 튄 값은 놓친 터치가 다시 잡힌 것 → 버림
     r.lx = t.clientX; r.ly = t.clientY;
   }
 }, { passive: false });
@@ -1511,7 +1515,7 @@ document.addEventListener('mousedown', (e) => {
   if (el) { pressBtn(el.dataset.btn, true, el); const up = () => { pressBtn(el.dataset.btn, false, el); removeEventListener('mouseup', up); }; addEventListener('mouseup', up); return; }
   if (modalOpen()) return;
   if (!me.alive && e.button === 0) specIdx++;
-  if (document.pointerLockElement !== canvas) { canvas.requestPointerLock?.(); initAudio(); return; }
+  if (document.pointerLockElement !== canvas) { lockPointer(); initAudio(); return; }
   if (e.button === 0) input.fire = true;
   if (e.button === 2) setScope(true);
 });
@@ -1519,7 +1523,22 @@ document.addEventListener('mouseup', (e) => {
   if (e.button === 2) setScope(false);
   if (e.button === 0 && document.pointerLockElement === canvas) input.fire = false;
 });
-document.addEventListener('mousemove', (e) => { if (document.pointerLockElement === canvas) look(e.movementX, e.movementY, 0.0023); });
+// 마우스 시점: 잠금 직후의 첫 움직임(커서가 있던 자리에서 튄 값)과, 브라우저가 가끔 한 번씩 보내는 터무니없이 큰 값은 버림
+// (이 값들이 그대로 들어가면 화면이 갑자기 엉뚱한 쪽으로 홱 돌아감)
+let lockAt = 0, mAvg = 0;
+function lockPointer() {
+  const plain = () => { try { canvas.requestPointerLock?.(); } catch {} };
+  try { const p = canvas.requestPointerLock?.({ unadjustedMovement: true }); if (p && p.catch) p.catch(plain); } catch { plain(); } // 가속 없는 마우스 값 (안 되는 브라우저는 보통 잠금)
+}
+document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement === canvas) { lockAt = performance.now(); mAvg = 0; } });
+document.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement !== canvas) return;
+  const dx = e.movementX || 0, dy = e.movementY || 0, m = Math.hypot(dx, dy);
+  if (performance.now() - lockAt < 150) return;
+  if (m > 450 && m > mAvg * 6 + 200) return;
+  mAvg = mAvg * 0.85 + m * 0.15;
+  look(dx, dy, 0.0023);
+});
 document.addEventListener('keydown', (e) => {
   if (!joined) return;
   if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) pressBtn('scoreHold', true); return; }
@@ -2246,6 +2265,7 @@ function frame(now) {
   const [kz, kr] = VM[W.vm].kick;
   me.sprT += ((me.sprint && me.alive ? 1 : 0) - me.sprT) * Math.min(1, dt * 10);
   const ad = ease(me.adsP), hip = 1 - ad, gp = vmGun(me.w), vp = VM[W.vm].pos, ap = gp.userData.ads;
+  setGunAds(ad, gp.userData.info.aura); // 정조준할수록 스킨 빛·불티를 줄여 조준점 둘레를 깨끗하게
   gp.position.set(vp[0] + (ap[0] - vp[0]) * ad, vp[1] + (ap[1] - vp[1]) * ad, vp[2] + (ap[2] - vp[2]) * ad);
   me.land = Math.max(0, me.land - dt * 4.5);
   { // 점프하면 총이 한 박자 늦게 따라오고, 옆으로 걸으면 살짝 기울고, 가만히 있으면 숨결에 흔들림
