@@ -530,13 +530,17 @@ function matsFor(skin, aw) {
   return M;
 }
 // 움직이는 스킨(빛나는 맥박, 흐르는 무늬)
+// 정조준 정도 (0~1): 1인칭 화면이 매 프레임 알려 줌. 조준할수록 스킨 빛을 줄여 조준점 둘레가 번쩍이지 않게
+let adsK = 0;
+export function setGunAds(k, aura) { adsK = k; if (aura) aura.userData.fade = k; }
 export function tickSkins(t) {
+  const ad = adsK; adsK = 0; // 알려 주지 않은 프레임(죽어서 관전·메뉴)은 0
   for (const a of animated) a.f(a.M, t);
   const k = pulseK * Math.max(0, 1 - (performance.now() / 1000 - pulseAt) / 0.8) ** 2; // 꺼낼 때 한 번 확 밝아짐
-  for (const [m, b0] of exoGlow) m.emissiveIntensity = b0 * (0.8 + 0.25 * Math.sin(t * 2.7 + b0) + k * 2); // 높은 등급 스킨 부품의 빛
+  for (const [m, b0] of exoGlow) m.emissiveIntensity = b0 * (0.8 + 0.25 * Math.sin(t * 2.7 + b0) + k * 2) * (1 - 0.55 * ad); // 높은 등급 스킨 부품의 빛
   if (exFlow) exFlow.offset.x = -t * 0.45; // 빛 선을 따라 흐르는 띠
   for (const M of bundleSets) { // 얼티밋 스킨: 빛나는 부품이 숨 쉬듯 일렁임
-    M._glow.forEach(([m, b], i) => { m.emissiveIntensity = b * (0.82 + 0.22 * Math.sin(t * 3.1 + i * 1.7) + k * 2.6); });
+    M._glow.forEach(([m, b], i) => { m.emissiveIntensity = b * (0.82 + 0.22 * Math.sin(t * 3.1 + i * 1.7) + k * 2.6) * (1 - 0.45 * ad); });
     if (k && M.body.emissiveMap) M.body.emissiveIntensity *= 1 + k * 2;
     if (M._rims) for (const [m, c] of M._rims) m.userData.rim.value.copy(c).multiplyScalar(1 + 0.18 * Math.sin(t * 2.2) + k * 4);
   }
@@ -2333,7 +2337,7 @@ function makeAura(cfg, box) {
       else if (cfg.kind === 'orbit') { const a = t * 2.2 * q.sp + q.ph * 6.283; x = 0.5 + Math.cos(a) * 0.62; y = 0.5 + Math.sin(a) * 0.62; z = (q.z + t * 0.05 * q.sp) % 1; k = 0.5 + 0.5 * Math.sin(t * 5 + i); }
       else { x = q.x; y = q.y; z = q.z; k = Math.max(0, Math.sin(life * Math.PI * 2)) ** 3; if (life < 0.02) { q.x = Math.random(); q.y = Math.random(); q.z = Math.random(); } }
       pos[o] = min.x + x * size.x; pos[o + 1] = min.y + y * size.y; pos[o + 2] = min.z + z * size.z;
-      tc.copy(c0).lerp(c1, life).multiplyScalar(k * 1.6); col[o] = tc.r; col[o + 1] = tc.g; col[o + 2] = tc.b;
+      tc.copy(c0).lerp(c1, life).multiplyScalar(k * 1.6 * (1 - 0.85 * (g.userData.fade || 0))); col[o] = tc.r; col[o + 1] = tc.g; col[o + 2] = tc.b;
     }
     geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
   };
@@ -2345,7 +2349,7 @@ function makeAura(cfg, box) {
     ln.onBeforeRender = () => {
       const now = performance.now(); if (now - last < 70) return; last = now;
       for (let b = 0; b < m; b++) {
-        const on = Math.random() < 0.55; let x = 0.2 + Math.random() * 0.6, y = 0.35 + Math.random() * 0.4, z = Math.random() * 0.7 + 0.15; const ex = 0.2 + Math.random() * 0.6, ey = 0.35 + Math.random() * 0.4, ez = z + (Math.random() - 0.5) * 0.25;
+        const on = Math.random() < 0.55 * (1 - 0.85 * (g.userData.fade || 0)); /* 정조준 중엔 번개가 드물게 */ let x = 0.2 + Math.random() * 0.6, y = 0.35 + Math.random() * 0.4, z = Math.random() * 0.7 + 0.15; const ex = 0.2 + Math.random() * 0.6, ey = 0.35 + Math.random() * 0.4, ez = z + (Math.random() - 0.5) * 0.25;
         for (let s2 = 0; s2 < seg; s2++) { const o = (b * seg + s2) * 6, f = (s2 + 1) / seg, nx = x + (ex - x) / (seg - s2) + (Math.random() - 0.5) * 0.12, ny = y + (ey - y) / (seg - s2) + (Math.random() - 0.5) * 0.12, nz = z + (ez - z) / (seg - s2) + (Math.random() - 0.5) * 0.06;
           const A = on ? [min.x + x * size.x, min.y + y * size.y, min.z + z * size.z] : [0, -99, 0], B = on ? [min.x + nx * size.x, min.y + ny * size.y, min.z + nz * size.z] : [0, -99, 0];
           lp.set(A, o); lp.set(B, o + 3); x = nx; y = ny; z = nz; void f; }
@@ -3048,8 +3052,9 @@ export function makeGun(wi, skin = 0, parts, lv = 1, opt = {}) {
   const src = cache.get(key), group = src.group.clone();
   for (const c of group.children) if (c.userData.spin) { const sp = c.userData.spin, ax = c.userData.axis || 'z'; for (const m of c.children) m.onBeforeRender = () => { c.rotation[ax] = spinPhase() * sp; }; } // 도는 장식 (쏘거나 살펴볼 때 빨라짐)
   const kit = KITS[SKINS[skin].id];
-  if (kit && kit.aura && !opt.noAura) { if (!src.box) src.box = gunBox(src.group); group.add(makeAura(kit.aura, src.box)); } // 총 둘레에 늘 피어오르는 불티·번개·반짝이
-  return { group, muzzle: src.muzzle, grip: src.grip, fore: src.fore, sight: src.sight, adsZ: src.adsZ, oneHand: src.oneHand, travel: src.travel || 0, rack: !!src.rack, pump: !!src.pump, slide: group.getObjectByName('slide') || null, mag: group.getObjectByName('mag') || null };
+  let aura = null;
+  if (kit && kit.aura && !opt.noAura) { if (!src.box) src.box = gunBox(src.group); group.add((aura = makeAura(kit.aura, src.box))); } // 총 둘레에 늘 피어오르는 불티·번개·반짝이
+  return { group, aura, muzzle: src.muzzle, grip: src.grip, fore: src.fore, sight: src.sight, adsZ: src.adsZ, oneHand: src.oneHand, travel: src.travel || 0, rack: !!src.rack, pump: !!src.pump, slide: group.getObjectByName('slide') || null, mag: group.getObjectByName('mag') || null };
 }
 
 // 총의 크기 상자 (길게 뻗는 레이저 빛줄기는 빼고 잼)
