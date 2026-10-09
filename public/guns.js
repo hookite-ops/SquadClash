@@ -155,6 +155,35 @@ function baseMats() {
   };
 }
 
+// 실제 총 모델의 '공장 마감' (기본 스킨): 총마다 실제 총처럼 블루잉 쇠·파커라이징·아노다이징·폴리머·호두나무·스테인리스를 고름 (GLB_FIT 의 fin)
+let FINM = null;
+function finMats() {
+  if (FINM) return FINM;
+  const br = () => T('nBrushed', () => normalOf(H.brushed(), 0.6, 3)), sp = () => T('nStipple', () => normalOf(H.stipple(), 1.4, 9));
+  const ma = () => T('metalAlb', () => texOf(H.metalAlb(), true, 2)), pa = () => T('polyAlb', () => texOf(H.polyAlb(), true, 5));
+  const wood = () => T('wood', () => texOf(H.wood(), true, 2)), woodN = () => T('nWood', () => normalOf(H.wood(), 1.2, 2));
+  const v = (k) => new THREE.Vector2(k, k);
+  const metal = (hex, metalness, roughness, o = {}) => std({ color: over(hex), map: ma(), metalness, roughness, roughnessMap: smudge(), normalMap: br(), normalScale: v(0.22), wear: 0.55, wearCol: 0x9aa2ac, ...o });
+  const poly = (hex, roughness = 0.74, o = {}) => std({ color: over(hex), map: pa(), metalness: 0, roughness, normalMap: sp(), normalScale: v(0.4), wear: 0.25, wearCol: 0x6a6e74, ...o });
+  return (FINM = {
+    blue: metal(0x1c2028, 0.88, 0.34, { wearCol: 0xaab2bf }), // 블루잉 쇠 (검푸른 윤)
+    blk: metal(0x232529, 0.78, 0.4), // 검은 질화·파커라이징 쇠
+    park: metal(0x3a3c3e, 0.55, 0.6, { wearCol: 0x8c9096 }), // 회색 파커라이징
+    anod: metal(0x222428, 0.55, 0.36), // 검은 아노다이징 알루미늄
+    steel: metal(0x26292e, 0.92, 0.3), // 총열·작은 쇠
+    stain: metal(0xb6bbc2, 1, 0.2, { wear: 0, normalScale: v(0.12) }), // 스테인리스
+    chrome: std({ color: 0xdfe4ea, metalness: 1, roughness: 0.1, roughnessMap: smudge(), wear: 0 }),
+    magS: metal(0x202226, 0.75, 0.4), // 쇠 탄창
+    poly: poly(0x1d1e21), // 검은 폴리머
+    polyG: poly(0x33363a, 0.7), // 짙은 회색 폴리머
+    fde: poly(0x8b7456, 0.68, { wearCol: 0xc9b694 }), // 사막색(FDE)
+    od: poly(0x4d5539, 0.72, { wearCol: 0x8f9878 }), // 국방색
+    wood: std({ color: 0x744736, map: wood(), metalness: 0, roughness: 0.5, normalMap: woodN(), normalScale: v(0.35), clearcoat: 0.12, clearcoatRoughness: 0.4, wear: 0.3, wearCol: 0xd8a070 }), // 기름 먹인 호두나무
+    woodD: std({ color: 0x6e4632, map: wood(), metalness: 0, roughness: 0.48, normalMap: woodN(), normalScale: v(0.35), clearcoat: 0.35, clearcoatRoughness: 0.35, wear: 0.3, wearCol: 0xb07a50 }),
+  });
+}
+const FIN_DEF = { body: 'blk', body2: 'poly', metal: 'steel', grip: 'poly', mag: 'magS', light: 'chrome', wood: 'wood', olive: 'od' }; // 공장 마감 기본값 (부품 역할 → 마감)
+
 // ───────────── 스킨 무늬 (512 칸 기준으로 그리고 PQ 배 해상도로 굽는다, 0.5m 마다 반복) ─────────────
 // 화질 설정: 낮음이면 무늬 해상도를 절반으로, 겉칠(클리어코트) 재질도 끔. 총을 만들기 전에 불러야 함
 export function setGunQuality(q) { PQ = q === 'low' ? 1 : 2; PHYS = q !== 'low'; }
@@ -522,9 +551,8 @@ function matsFor(skin, aw) {
     }
   }
   else { // 기본 스킨: 금속 위로 은은한 광택이 지나가고, 가장자리가 차갑게 빛남
-    const sw = sweepTex(0.04);
-    for (const m of [M.recv, M.slide, M.steel]) { m.emissive = new THREE.Color(0xd8e6ff); m.emissiveMap = sw; m.emissiveIntensity = 0; m.userData.rim.value.setRGB(0.07, 0.09, 0.12); }
-    M.body = M.recv; animated.push({ M, f: (m, t) => { sw.offset.x = t * 0.22; const k = 0.08 + 0.14 * Math.max(0, Math.sin(t * 0.9)) ** 3; m.recv.emissiveIntensity = m.slide.emissiveIntensity = k; m.steel.emissiveIntensity = k * 0.6; } });
+    for (const m of [M.recv, M.slide, M.steel]) m.userData.rim.value.setRGB(0.05, 0.06, 0.08); // 쓸고 지나가는 흰 띠는 없앰 (가장자리만 아주 옅게)
+    M.body = M.recv; M._def = true;
   }
   SETS.set(key, M);
   return M;
@@ -717,7 +745,12 @@ class Builder {
           const g = p.g, c = g.attributes.position.count, pa = g.attributes.position.array;
           pos.set(pa, o * 3); nor.set(g.attributes.normal.array, o * 3); if (g.attributes.aWear) wr.set(g.attributes.aWear.array, o);
           if (p.keepUV) uv.set(g.attributes.uv.array, o * 2);
-          else for (let i = 0; i < c; i++) { uv[(o + i) * 2] = -pa[i * 3 + 2] * 2 + pa[i * 3] * 0.6; uv[(o + i) * 2 + 1] = pa[i * 3 + 1] * 2 + 0.5; } // 옆에서 본 평면으로 무늬를 입힘
+          else for (let t = 0; t + 2 < c; t += 3) { // 삼각형마다 가장 마주 보는 방향에서 무늬를 입힘 (윗면·앞면이 옆에서 늘어진 줄무늬가 되지 않게)
+            const i0 = t * 3, ax = pa[i0 + 3] - pa[i0], ay = pa[i0 + 4] - pa[i0 + 1], az = pa[i0 + 5] - pa[i0 + 2], bx = pa[i0 + 6] - pa[i0], by = pa[i0 + 7] - pa[i0 + 1], bz = pa[i0 + 8] - pa[i0 + 2];
+            const nx = Math.abs(ay * bz - az * by), ny = Math.abs(az * bx - ax * bz), nz = Math.abs(ax * by - ay * bx);
+            for (let i = t; i < t + 3; i++) { const x = pa[i * 3], y = pa[i * 3 + 1], z = pa[i * 3 + 2], k = (o + i) * 2;
+              if (nx >= ny && nx >= nz) { uv[k] = -z * 2 + x * 0.6; uv[k + 1] = y * 2 + 0.5; } else if (ny >= nz) { uv[k] = -z * 2; uv[k + 1] = x * 2 + 0.27; } else { uv[k] = x * 2 + 0.41; uv[k + 1] = y * 2 + 0.5; } }
+          }
           o += c; g.dispose();
         }
         if (pv) for (let i = 0; i < n; i++) { pos[i * 3] -= grp.position.x; pos[i * 3 + 1] -= grp.position.y; pos[i * 3 + 2] -= grp.position.z; }
@@ -2381,23 +2414,119 @@ const LABELS = ['', 'P-12', 'DB-2', 'AP-15', 'SP-13', 'RV-6', 'VX-22', 'SD-30', 
 // scope: 모델에 조준경이 붙어 있음 · wood: b50(중간 갈색)을 나무로 · supp: 소음기를 덧붙임 · k: 길이 배율
 const GLB_FIT = {
   1: { n: 'G21', mu: 7, g: [85, 62], m: 16, s: 2, top: [45, 1], un: [20, 27], rc: [8, 85, 2, 15], mag: 'drop' },
-  2: { n: 'SawedOff', rc: [60, 80, 5, 30], g: [86, 65], f: [52, 35], m: 12, s: 3, un: [40, 40], wood30: true },
+  2: { n: 'SawedOff', rc: [60, 80, 5, 30], g: [86, 65], f: [52, 35], m: 12, s: 3, un: [40, 40], wood30: true, fin: { body: 'blue', wood: 'wood' } },
   3: { n: 'G18C', mu: 25, g: [88, 60], m: 16, s: 2, top: [58, 1], un: [38, 27], rc: [25, 94, 2, 15], mag: 'drop' },
-  4: { n: 'PB', g: [85, 65], m: 20, s: 2, top: [75, 3], un: [55, 33], rc: [50, 98, 2, 20], mag: 'drop' },
-  5: { n: 'Revolver', rc: [55, 80, 5, 30], g: [90, 65], m: 17, s: 3, top: [40, 2], un: [40, 30] },
+  4: { n: 'PB', g: [85, 65], m: 20, s: 2, top: [75, 3], un: [55, 33], rc: [50, 98, 2, 20], mag: 'drop', fin: { wood: 'woodD' } },
+  5: { n: 'Revolver', rc: [55, 80, 5, 30], g: [90, 65], m: 17, s: 3, top: [40, 2], un: [40, 30], sh: { b30: 'body', b60: 'grip' }, magSem: 'body', fin: { body: 'stain', grip: 'woodD' } },
   6: { n: 'MP7', az: -0.46, g: [60, 72], f: [28, 55], m: 33, s: 7, top: [55, 8], un: [25, 60], rc: [10, 75, 10, 35], mag: 'drop' },
   7: { n: 'MP5', g: [73, 72], f: [25, 40], m: 31, s: 8, top: [55, 8], un: [25, 48], rc: [12, 85, 7, 25], supp: true, mag: { t: [37, 58], b: [1, 47], w: [44, 42], tilt: 12 } },
   8: { n: 'M4S90', g: [74, 55], f: [40, 32], m: 22, s: 8, top: [60, 6], un: [35, 45], rc: [45, 72, 7, 28] },
   9: { n: 'Saiga12', g: [73, 65], f: [35, 25], m: 20, s: 3, top: [50, 3], un: [35, 30], rc: [21, 73, 3, 18], mag: { t: [35, 80], b: [8, 66], w: [56, 26], tilt: 15 } },
-  10: { n: 'Famas', rc: [35, 90, 25, 40], g: [58, 62], f: [32, 44], m: 34, s: 20, top: [55, 4], un: [30, 47], mg: [68, 77, 98] },
-  11: { n: 'SCAR16', g: [73, 78], f: [40, 45], m: 39, s: 10, top: [55, 20], un: [35, 50], rc: [50, 77, 20, 40], mag: { t: [49, 79], b: [30, 74], w: [53, 54], tilt: 10 } },
-  12: { n: 'VSS_Sniper', rc: [37, 70, 30, 45], g: [64, 70], f: [45, 55], m: 45, s: 13, scope: true, un: [42, 58], mg: [45, 55, 90] },
-  13: { n: 'AK47', rc: [42, 73, 5, 20], g: [70, 72], f: [36, 28], m: 20, s: 6, top: [45, 8], un: [34, 30], mg: [40, 50, 95], wood: true },
+  10: { n: 'Famas', rc: [35, 90, 25, 40], g: [58, 62], f: [32, 44], m: 34, s: 20, top: [55, 4], un: [30, 47], mg: [68, 77, 98], sh: { b50: 'body', b70: 'body2', b60: 'grip', b30: 'metal' }, parts: [['b70', 0, 26, 0, 100, 'metal']], fin: { body: 'polyG' } },
+  11: { n: 'SCAR16', g: [73, 78], f: [40, 45], m: 39, s: 10, top: [55, 20], un: [35, 50], rc: [50, 77, 20, 40], mag: { t: [49, 79], b: [30, 74], w: [53, 54], tilt: 10 }, fin: { body: 'fde' } },
+  12: { n: 'VSS_Sniper', rc: [37, 70, 30, 45], g: [64, 70], f: [45, 55], m: 45, s: 13, scope: true, un: [42, 58], mg: [45, 55, 90], sh: { b30: 'body', b60: 'wood', b70: 'metal' }, parts: [['b60', 0, 100, 0, 27, 'metal']], fin: { metal: 'blk', wood: 'woodD' } },
+  13: { n: 'AKM', synth: synthAK, sh: { light: 'light' }, fin: { body: 'blue', metal: 'blk' } }, // 직접 설계한 AKM (아래 synthAK)
   14: { n: 'SVDM', g: [76, 70], f: [35, 40], m: 37, s: 12, scope: true, un: [35, 47], rc: [47, 80, 25, 45], mag: { t: [45, 62], b: [45, 98], w: [57, 44], tilt: 5 } },
-  15: { n: 'Barett', rc: [55, 92, 30, 45], g: [76, 70], f: [45, 40], m: 34, s: 15, scope: true, un: [45, 45], mg: [57, 67, 80] },
-  16: { n: 'MG5', az: -0.5, g: [70, 75], f: [35, 35], m: 22, s: 8, top: [55, 10], un: [38, 45], rc: [48, 85, 10, 30], mag: { t: [39, 58], b: [39, 100], w: [60, 40], tilt: 0 } },
-  17: { n: 'PKM', az: -0.46, g: [72, 75], f: [45, 40], m: 31, s: 15, top: [60, 15], un: [40, 40], rc: [48, 75, 15, 35] },
+  15: { n: 'Barett', rc: [55, 92, 30, 45], g: [76, 70], f: [45, 40], m: 34, s: 15, scope: true, un: [45, 45], mg: [57, 67, 80], sh: { b30: 'body', b60: 'metal', b70: 'body2', b80: 'metal' }, fin: { body: 'park', body2: 'blk', metal: 'blk' } },
+  16: { n: 'MG5', az: -0.5, g: [70, 75], f: [35, 35], m: 22, s: 8, top: [55, 10], un: [38, 45], rc: [48, 85, 10, 30], mag: { t: [39, 58], b: [39, 100], w: [60, 40], tilt: 0 }, fin: { body: 'blk', body2: 'polyG' } },
+  17: { n: 'PKM', az: -0.46, g: [72, 75], f: [45, 40], m: 31, s: 15, top: [60, 15], un: [40, 40], rc: [48, 75, 15, 35], fin: { body: 'blk', wood: 'woodD' } },
 };
+// ───────────── 직접 설계한 AKM (기본 돌격소총) ─────────────
+// 실제 AKM 치수(mm)를 따라 부품 하나하나를 만든 고해상도 모델. 받은 모델처럼 '색 단계별 모양' 묶음으로 내보내 GLB 파이프라인(스킨·파츠·높은 등급 부품)을 그대로 씀
+// 좌표: u = 총구에서 뒤로 mm, y = 총열 축에서 위로 mm, x = 옆 (+ 가 왼쪽: 게임에서 총을 뒤집어 놓으므로 1인칭에서 보이는 쪽). 내보낼 때 총구가 +z 가 되게 z = -u
+function synthAK() {
+  const G = {}, put = (key, g) => (G[key] ||= []).push(g.index ? g.toNonIndexed() : g), Z = (u) => -u;
+  const slab = (pts, half, bev, x0 = 0, r = 0, holes = []) => { // 옆모습 [u, y] 윤곽을 두께 2·half 로 (모서리 bev 만큼 둥글림)
+    const P = (r ? roundPts(pts, r) : pts).map(([u, y]) => [Z(u), y]), sh = new THREE.Shape(); P.forEach(([z, y], i) => (i ? sh.lineTo(z, y) : sh.moveTo(z, y))); sh.closePath();
+    for (const h of holes) { const hp = new THREE.Path(), H2 = (r ? roundPts(h, r * 0.7) : h).map(([u, y]) => [Z(u), y]); H2.forEach(([z, y], i) => (i ? hp.lineTo(z, y) : hp.moveTo(z, y))); hp.closePath(); sh.holes.push(hp); }
+    const d = Math.max(0.2, half * 2 - bev * 2), g = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: bev > 0, bevelThickness: bev, bevelSize: bev, bevelSegments: 3, curveSegments: 10 });
+    g.translate(0, 0, -d / 2); g.applyMatrix4(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0), new THREE.Vector3(-1, 0, 0))); return g.translate(x0, 0, 0);
+  };
+  const ct = (rF, rB, uF, uB, y = 0, x = 0, seg = 22) => new THREE.CylinderGeometry(rF, rB, uB - uF, seg).rotateX(Math.PI / 2).translate(x, y, (Z(uF) + Z(uB)) / 2); // u 방향 원통 (앞 반지름 rF)
+  const lu = (uF, uB, prof, p = 2, nz = 18, nr = 26) => exLoft(Z(uB), Z(uF), (t) => prof(1 - t), p, nz, nr); // u 방향 단면 잇기 (prof(t): t 0 앞 → 1 뒤)
+  const side = (g, s) => g.rotateY((s * Math.PI) / 2); // +z 를 보던 납작한 것을 옆(±x)으로
+  const dome = (u, y, s, r = 2.3, h = 0.9, xs = 14.5) => exDome(h, r, r, s, 8).translate(s * xs, y, Z(u));
+  // 총구: 경사 소염기 (아래쪽이 앞으로 길게 — 총구가 들리지 않게)
+  put('metal', ct(9.5, 9.5, 5, 33)); put('metal', slab([[0, -9.5], [6, -9.5], [6, 0.5], [2, -2]], 8.6, 1.2)); put('b80', new THREE.CircleGeometry(4.2, 18).translate(0, 0, Z(4.9)));
+  put('metal', ct(10.1, 10.1, 27, 33)); for (const sx of [-1, 1]) put('b80', side(new THREE.CircleGeometry(2.2, 12).scale(1.5, 1, 1), sx).translate(sx * 9.4, 3, Z(16)));
+  // 총열
+  put('metal', ct(7.4, 7.4, 30, 400, 0, 0, 20)); put('metal', ct(8.4, 8.4, 160, 260));
+  // 가늠쇠 뭉치: 총열 고리 + 가늠쇠 기둥과 양옆 귀 + 총검 걸쇠 + 꽂을대 받침
+  put('body', ct(11.6, 11.6, 40, 78)); put('body', slab([[48, 8], [72, 8], [70, 22], [66, 28], [54, 28], [50, 22]], 5, 1.4, 0, 1.5));
+  for (const sx of [-1, 1]) put('body', slab([[46, 6], [70, 6], [69, 28], [63, 43], [57, 43], [51, 30]], 1.7, 0.6, sx * 7.4, 2));
+  put('metal', new THREE.CylinderGeometry(1.3, 1.8, 14, 10).translate(0, 33, Z(58)));
+  put('body', slab([[46, -10], [76, -10], [74, -19], [50, -19]], 3.6, 1, 0, 1.5)); put('body', slab([[62, -9], [80, -9], [80, -18], [64, -18]], 6, 1.2, 0, 1.5));
+  // 가스 블록 (앞이 45° 깎임) + 왼쪽 멜빵 고리
+  put('body', slab([[178, -11.5], [213, -11.5], [215, 31], [200, 33], [187, 30], [176, 14]], 10.5, 2.4, 0, 2.5));
+  put('metal', new THREE.TorusGeometry(4.2, 1.15, 8, 16).rotateY(Math.PI / 2).translate(11.6, -11, Z(196)));
+  // 가스관 + 앞 마개 + 옆 가스 구멍
+  put('metal', ct(9.4, 9.4, 206, 396, 22)); put('body', ct(10.3, 10.3, 206, 215, 22));
+  for (const sx of [-1, 1]) for (const u of [224, 233, 242]) put('b80', side(new THREE.CircleGeometry(2.1, 12), sx).translate(sx * 9.45, 22, Z(u)));
+  // 꽂을대 (총열 밑)
+  put('metal', ct(2.6, 2.6, 60, 256, -14.5, 0, 10)); put('metal', ct(3.6, 3.6, 56, 64, -14.5, 0, 12));
+  // 총열덮개: 아래(손 받침, 옆이 불룩) + 위(가스관 덮개, 홈 셋) — 나무
+  put('body', lu(248, 260, () => ({ w: 21.2, h: 20, y: -8.5 }), 2.6, 2, 30)); // 앞 쇠 고리
+  put('wood', lu(259, 399, (t) => ({ w: 19 + 2.2 * Math.sin(Math.PI * Math.min(1, t * 1.15)), h: 18.2 + 0.8 * Math.sin(Math.PI * t), y: -9.5 }), 2.6, 24, 30));
+  for (const sx of [-1, 1]) put('b80', slab([[275, -18.5], [385, -18.5], [385, -17], [275, -17]], 0.5, 0, sx * 21.2, 0.8)); // 손 받침 홈
+  put('wood', lu(263, 390, (t) => ({ w: 12.6, h: 11.2 + 0.6 * Math.sin(Math.PI * t), y: 22.5 }), 2.3, 18, 26));
+  for (const u of [300, 320, 340]) put('b80', lu(u, u + 2.4, () => ({ w: 12.8, h: 11.6, y: 22.5 }), 2.3, 1, 26).translate(0, 0.05, 0)); // 위 덮개 홈
+  // 가늠자 뭉치 + 가늠자 판(뒤로 갈수록 높아짐) + 미끄럼쇠 + 가늠자 끝 홈
+  put('body', slab([[394, -14], [444, -14], [444, 28], [422, 30.5], [402, 30.5], [394, 22]], 13.6, 2, 0, 2.5));
+  put('metal', slab([[404, 30], [447, 30], [447, 35.5], [404, 33]], 5, 0.6));
+  put('metal', slab([[446, 30], [451, 30], [451, 41], [446, 41]], 6.5, 0.6)); put('b80', slab([[445.6, 38.2], [451.4, 38.2], [451.4, 41.4], [445.6, 41.4]], 1.1, 0));
+  put('metal', slab([[421, 29], [430, 29], [430, 37.5], [421, 37.5]], 7.4, 0.8, 0, 1)); put('light', side(new THREE.CircleGeometry(1.6, 10), 1).translate(7.5, 33, Z(425.5)));
+  // 총몸 (찍어 낸 판 + 둥근 덮개 + 덮개 줄 + 뒤 단추)
+  put('body', slab([[440, -30], [626, -30], [662, -28.5], [665, -18], [665, 8], [440, 8]], 14.5, 2.2, 0, 3));
+  put('body', lu(452, 665, (t) => { const k = t < 0.02 ? 0.9 + 5 * t : 1; return { w: 14.3 * k, h: 11.2 * k, y: 6 }; }, 2.2, 22, 30));
+  for (const u of [606, 620, 634, 648]) put('body', lu(u, u + 4, () => ({ w: 14.75, h: 11.7, y: 6 }), 2.2, 2, 30));
+  put('metal', ct(4.4, 4.4, 664, 672, 10));
+  // 오른쪽: 탄피 구멍(어두운 안) + 노리쇠 뭉치(밝은 쇠) + 장전손잡이 + 조정간
+  put('b80', slab([[506, -3], [588, -3], [588, 7.5], [506, 7.5]], 0.35, 0, -14.6));
+  put('light', slab([[516, -1], [580, -1], [580, 5], [516, 5]], 0.3, 0, -14.9));
+  put('metal', new THREE.CylinderGeometry(2.8, 3.2, 15, 12).rotateZ(Math.PI / 2).translate(-22.2, 2.2, Z(570))); put('metal', new THREE.SphereGeometry(4.6, 14, 10).scale(1, 0.9, 1.25).translate(-30.5, 2.2, Z(571)));
+  put('metal', slab([[468, -5], [576, -3], [591, -7], [593, -21], [584, -23], [580, -10], [468, -9]], 0.9, 0.35, -15.4, 1.5)); put('metal', new THREE.CylinderGeometry(3.4, 3.4, 1.6, 14).rotateZ(Math.PI / 2).translate(-16, -7, Z(468)));
+  // 리벳 (양옆: 앞 몸통 받침 셋, 탄창 구멍 위, 방아쇠·공이 핀, 뒤 몸통 받침)
+  for (const sx of [-1, 1]) for (const [u, y] of [[447, -5], [457, -14], [447, -23], [516, -23], [548, -21], [561, -19], [644, -9], [654, -21], [644, -24]]) put('metal', dome(u, y, sx));
+  // 왼쪽 조준경 레일
+  put('body', slab([[546, -11], [630, -11], [630, 4], [546, 4]], 1.2, 0.4, 15.6, 1)); put('b80', slab([[551, -4.5], [625, -4.5], [625, -2], [551, -2]], 0.25, 0, 16.85));
+  for (const u of [560, 588, 616]) put('metal', dome(u, 1, 1, 1.5, 0.6, 16.8));
+  // 방아쇠울 + 방아쇠 + 탄창 멈치
+  put('body', slab([[512, -28], [592, -28], [592, -33], [579, -53], [527, -53], [515, -41]], 4, 0.8, 0, 2.5, [[[521, -31.5], [584, -31.5], [575, -48.5], [531, -48.5], [521, -39]]]));
+  put('metal', slab([[547, -30], [554, -30], [553, -40], [557, -47.5], [552, -48.5], [547, -40]], 2.5, 0.6, 0, 1.2));
+  put('body', slab([[505, -30], [513, -30], [515, -47], [507, -49]], 5.5, 1, 0, 1.5));
+  // 권총 손잡이 (나무) + 밑 쇠 마개
+  put('wood', exLimb([0, -27, Z(606)], [0, -121, Z(645)], 17.2, 16.4, 3.4, 0.74)); put('body', exLimb([0, -120.5, Z(644.8)], [0, -125.5, Z(646.9)], 15.9, 15.4, 2.7, 0.8));
+  // 개머리판 (나무, 뒤로 갈수록 처지고 넓어짐) + 쇠 개머리 판 + 나사 + 멜빵 고리
+  const sT = (t) => 6 - 30 * t, sB = (t) => -30 - 108 * (0.72 * t + 0.28 * t * t), sW = (t) => 12.2 + 6.2 * t;
+  put('wood', lu(662, 880, (t) => ({ w: sW(t), h: (sT(t) - sB(t)) / 2, y: (sT(t) + sB(t)) / 2 }), 3, 22, 30));
+  put('body', lu(879, 888, () => ({ w: sW(1) + 0.7, h: (sT(1) - sB(1)) / 2 + 0.7, y: (sT(1) + sB(1)) / 2 }), 3.2, 2, 30));
+  for (const y of [-38, -124]) put('metal', ct(2.6, 2.6, 887, 889.2, y, 0, 12));
+  put('b80', lu(888.9, 889.4, () => ({ w: 8, h: 28, y: -82 }), 3, 1, 24)); // 손질 도구 뚜껑 금
+  put('metal', new THREE.TorusGeometry(5, 1.25, 8, 18).rotateY(Math.PI / 2).translate(sW(0.82) + 1.6, sB(0.82) + 9, Z(840)));
+  put('body', slab([[655, 8], [690, 3.5], [690, 1], [655, 5]], 4, 0.6)); put('metal', new THREE.CylinderGeometry(2.4, 2.4, 2, 12).translate(0, 7.2, Z(684)));
+  // 탄창: 반지름 약 41cm 로 앞으로 휘는 30발 쇠 탄창 + 옆 강화 줄 + 바닥판 + 앞뒤 걸쇠 (장전할 때 같이 움직임)
+  const MS = 16, L = 216, a0 = 0.13, a1 = 0.66, C = [[472, -24]], A = [a0];
+  for (let i = 1; i <= MS; i++) { const a = a0 + ((a1 - a0) * (i - 0.5)) / MS, p = C[i - 1]; C.push([p[0] - Math.sin(a) * (L / MS), p[1] - Math.cos(a) * (L / MS)]); A.push(a0 + ((a1 - a0) * i) / MS); }
+  const edge = (i, k) => { const a = A[i], hw = 31 + 2.2 * (i / MS); return [C[i][0] + Math.cos(a) * hw * k, C[i][1] - Math.sin(a) * hw * k]; }; // k -1 앞 · +1 뒤
+  const magP = []; for (let i = 0; i <= MS; i++) magP.push(edge(i, -1)); for (let i = MS; i >= 0; i--) magP.push(edge(i, 1));
+  put('mag:metal', slab(magP, 13.6, 2.2));
+  for (const [k0, k1] of [[-0.62, -0.5], [0.42, 0.56]]) for (const sx of [-1, 1]) { const pts = []; for (let i = 2; i <= MS - 1; i++) pts.push(edge(i, k0)); for (let i = MS - 1; i >= 2; i--) pts.push(edge(i, k1)); put('mag:metal', slab(pts, 0.7, 0.3, sx * 14.1, 1)); }
+  { const a = A[MS], d = [-Math.sin(a), -Math.cos(a)], f = edge(MS, -1.05), r = edge(MS, 1.05); put('mag:metal', slab([[f[0], f[1]], [r[0], r[1]], [r[0] + d[0] * 5, r[1] + d[1] * 5], [f[0] + d[0] * 5, f[1] + d[1] * 5]], 14.6, 1.2, 0, 1.5)); }
+  put('mag:metal', slab([[434, -27], [443, -27], [443, -35], [436, -37]], 4.2, 0.6)); put('mag:metal', slab([[499, -27], [508, -27], [507, -33], [500, -34]], 4.6, 0.6));
+  // 내보내기: 색 단계마다 하나로 합쳐 상자 가운데를 원점, 가장 긴 축을 1 로 (받은 모델과 같은 꼴)
+  const box = new THREE.Box3(); for (const L2 of Object.values(G)) for (const g of L2) { g.computeBoundingBox(); box.union(g.boundingBox); }
+  const ctr = box.getCenter(new THREE.Vector3()), ext = box.getSize(new THREE.Vector3()), unit = Math.max(ext.x, ext.y, ext.z), groups = {};
+  for (const [key, list] of Object.entries(G)) {
+    let n = 0; for (const g of list) n += g.attributes.position.count;
+    const pos = new Float32Array(n * 3); let o = 0; for (const g of list) { pos.set(g.attributes.position.array, o * 3); o += g.attributes.position.count; }
+    for (let k = 0; k < pos.length; k += 3) { pos[k] = (pos[k] - ctr.x) / unit; pos[k + 1] = (pos[k + 1] - ctr.y) / unit; pos[k + 2] = (pos[k + 2] - ctr.z) / unit; }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setIndex(Array.from({ length: n }, (_, i) => i)); geo.computeVertexNormals(); geo.computeBoundingBox(); groups[key] = geo;
+  }
+  // 손 자리·조준선·파츠 자리 (u·v % : u 총구에서, v 맨 위에서)
+  const uMin = -box.max.z, uLen = ext.z, yTop = box.max.y, U = (u) => ((u - uMin) / uLen) * 100, V = (y) => ((yTop - y) / ext.y) * 100, uv = (u, y) => [U(u), V(y)];
+  const mb = edge(MS, -1), mr = edge(MS, 1);
+  return { model: { size: [ext.x / unit, ext.y / unit, ext.z / unit], groups }, fit: { mu: U(0), m: V(0), s: V(40), g: uv(616, -56), f: uv(325, -20), top: uv(545, 17), un: uv(330, -28), rc: [U(440), U(665), V(17), V(-8)], hg: [U(259), U(399)], mg: [U(mb[0]), U(mr[0]), V(Math.min(mb[1], mr[1]))] } };
+}
 const procRefs = new Map();
 function procRef(wi) { // 같은 무기의 코드 모델 (기본 스킨): 크기와 손 자리·조준 거리를 그대로 이어받음
   if (procRefs.has(wi)) return procRefs.get(wi);
@@ -2407,8 +2536,28 @@ function procRef(wi) { // 같은 무기의 코드 모델 (기본 스킨): 크기
   procRefs.set(wi, ref);
   return ref;
 }
+// 색 단계 하나를 이어진 덩어리(부품)로 나눠 F.parts 규칙([단계, u0, u1, v0, v1, 역할] — 덩어리 가운데가 옆모습 u·v % 안이면)으로 역할을 매김
+const glbSplits = new Map();
+function glbParts(F, key, geo, size, def) {
+  const rules = (F.parts || []).filter((r) => r[0] === key);
+  if (!rules.length) return [[def, geo]];
+  const ck = F.n + ':' + key;
+  if (!glbSplits.has(ck)) {
+    const g = geo.toNonIndexed(), P = g.attributes.position.array, N = g.attributes.normal.array, nt = P.length / 9, par = [], vid = new Map(), f = (x) => { while (par[x] !== x) x = par[x] = par[par[x]]; return x; };
+    const tv = new Int32Array(nt * 3);
+    for (let i = 0; i < nt * 3; i++) { const k = Math.round(P[i * 3] * 3000) + ',' + Math.round(P[i * 3 + 1] * 3000) + ',' + Math.round(P[i * 3 + 2] * 3000); let id = vid.get(k); if (id === undefined) { id = par.length; vid.set(k, id); par.push(id); } tv[i] = id; }
+    for (let t = 0; t < nt; t++) { const a = f(tv[t * 3]); par[f(tv[t * 3 + 1])] = a; par[f(tv[t * 3 + 2])] = a; }
+    const box = new Map(); for (let t = 0; t < nt; t++) { const r = f(tv[t * 3]); let b = box.get(r); if (!b) box.set(r, (b = [9, -9, 9, -9])); for (let j = 0; j < 3; j++) { const y = P[(t * 3 + j) * 3 + 1], z = P[(t * 3 + j) * 3 + 2]; b[0] = Math.min(b[0], y); b[1] = Math.max(b[1], y); b[2] = Math.min(b[2], z); b[3] = Math.max(b[3], z); } }
+    const by = new Map(); for (let t = 0; t < nt; t++) { const b = box.get(f(tv[t * 3])), u = (0.5 - (b[2] + b[3]) / 2 / size[2]) * 100, v = (0.5 - (b[0] + b[1]) / 2 / size[1]) * 100, rl = rules.find((r) => u >= r[1] && u <= r[2] && v >= r[3] && v <= r[4]), sem = rl ? rl[5] : def; if (!by.has(sem)) by.set(sem, []); by.get(sem).push(t); }
+    const out = []; for (const [sem, list] of by) { const pos = new Float32Array(list.length * 9), nor = new Float32Array(list.length * 9); list.forEach((t, i) => { pos.set(P.subarray(t * 9, t * 9 + 9), i * 9); nor.set(N.subarray(t * 9, t * 9 + 9), i * 9); }); const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sg.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); out.push([sem, sg]); }
+    glbSplits.set(ck, out);
+  }
+  return glbSplits.get(ck).map(([sem, g]) => [sem, g.clone()]);
+}
 function glbGun(wi, M, o) {
-  const F = GLB_FIT[wi], mdl = GLB.models && GLB.models[F.n];
+  const F = GLB_FIT[wi];
+  if (F.synth && GLB.models && !GLB.models[F.n]) { const r = F.synth(); GLB.models[F.n] = r.model; Object.assign(F, r.fit); } // 직접 설계한 모델은 처음 쓸 때 만듦
+  const mdl = GLB.models && GLB.models[F.n];
   if (!mdl) return null;
   const P = procRef(wi), [, sy, sz] = mdl.size, A = o.att || {};
   // 맞춤: 총열 높이는 코드 모델의 총구 높이에, 손잡이 앞뒤 자리는 코드 모델의 손잡이에. 크기는 손잡이~총구 거리가 같도록
@@ -2417,9 +2566,13 @@ function glbGun(wi, M, o) {
   const at = (u, v) => { const q = unit(u, v); return [0, sc * q[0] + off[1], sc * q[1] + off[2]]; };
   const mat = new THREE.Matrix4().makeTranslation(off[0], off[1], off[2]).multiply(new THREE.Matrix4().makeScale(sc, sc, sc)).multiply(new THREE.Matrix4().makeRotationY(Math.PI));
   const furn = M[(WEAPONS[wi].model[1] || {}).furn || 'furn'];
-  const XR = o.exo ? { b70: M.mag || M.recv, b80: M.steel, poly: M.mag || M.recv } : {}; // 높은 등급: 개머리·손잡이까지 스킨 무늬
-  const role = (k) => XR[k] || ({ b30: F.wood30 ? M.wood : furn, b50: F.wood ? M.wood : furn, b60: M.recv, b70: M.poly, b80: M.dark, glass: M.glass, white: M.bolt, // r2detta 밝기 단계
-    body: M.recv, metal: M.steel, poly: M.poly, light: M.bolt, brass: M.brass, tan: furn, wood: M.wood, olive: M.olive, accent: M.accent || M.bolt })[k] || M.recv; // D_U 재질 역할
+  // 부품 역할: 모델의 색 단계(shade) → 역할(body 총몸 · body2 덮개·개머리 · wood 나무 · metal 총열·작은 쇠 · grip 손잡이 · mag 탄창 …) → 재질
+  // 기본 스킨은 총마다 실제 총의 공장 마감(F.fin), 유료 스킨은 스킨 재질. 높은 등급은 손잡이·개머리까지 스킨 무늬
+  const SEM = { b30: F.wood30 ? 'wood' : 'body2', b50: F.wood ? 'wood' : 'body2', b60: 'body', b70: 'grip', b80: o.exo ? 'metal' : 'dark', glass: 'glass', white: 'light', // r2detta 밝기 단계
+    body: 'body', metal: 'metal', poly: 'grip', light: 'light', brass: 'brass', tan: 'body2', wood: 'wood', olive: 'olive', accent: 'accent', ...(F.sh || {}) }; // D_U 재질 역할 · 총마다 고친 것
+  const SK = { body: M.recv, body2: furn, wood: M.wood, metal: M.steel, grip: o.exo ? M.mag || M.recv : M.poly, mag: M.mag, light: M.bolt, brass: M.brass, olive: M.olive, accent: M.accent || M.bolt, glass: M.glass, dark: M.dark };
+  const FM = M._def ? finMats() : null, FN = { ...FIN_DEF, ...(F.fin || {}) };
+  const matOf = (sem) => (FM && FM[FN[sem]]) || SK[sem] || M.recv;
   const b = new Builder(), front = at(F.mu || 0, F.m), yM = front[1];
   // 탄창: 모델에 따라 총 옆에 따로 놓여 있음 → 빼거나('drop') 탄창 위끝 t·아래끝 b 를 재서 탄창 구멍 w 에 꽂음 (tilt: 아래쪽이 앞으로 기운 각도)
   let magM = null;
@@ -2430,15 +2583,17 @@ function glbGun(wi, M, o) {
     magM = new THREE.Matrix4().makeTranslation(0, w[0], w[1]).multiply(new THREE.Matrix4().makeRotationX(th)).multiply(new THREE.Matrix4().makeTranslation(0, -t[0], -t[1]));
   }
   const magMat = magM ? mat.clone().multiply(magM) : mat;
-  const EX = o.exo ? ADORN[o.exo] : null, tris = EX ? [] : null, mtris = EX ? [] : null; let magBox = null; // 높은 등급 스킨 장식에 쓸 실제 총의 삼각형(겉면 재기)·탄창 자리
+  const EX = o.exo ? ADORN[o.exo] : null, NM = !!(EX || F.detail), tris = NM ? [] : null, mtris = NM ? [] : null; let magBox = null; // 높은 등급 스킨 장식에 쓸 실제 총의 삼각형(겉면 재기)·탄창 자리
   if (F.spin) b.part('spin', [-front[2], yM, 0], 2.4, 'z');
   for (const [key, geo] of Object.entries(mdl.groups)) {
     const [grp, shade] = key.includes(':') ? key.split(':') : ['', key];
     if ((grp === 'spin' && !F.spin) || (grp === 'mag' && F.mag === 'drop')) continue;
-    if (EX && grp === 'mag') { const bx = geo.boundingBox.clone().applyMatrix4(magMat); magBox = magBox ? magBox.union(bx) : bx; }
-    if (EX) (grp === 'mag' ? mtris : tris).push({ p: geo.attributes.position.clone().applyMatrix4(grp === 'mag' ? magMat : mat).array, idx: geo.index.array });
+    if (NM && grp === 'mag') { const bx = geo.boundingBox.clone().applyMatrix4(magMat); magBox = magBox ? magBox.union(bx) : bx; }
+    if (NM) (grp === 'mag' ? mtris : tris).push({ p: geo.attributes.position.clone().applyMatrix4(grp === 'mag' ? magMat : mat).array, idx: geo.index.array });
     b.part(grp === 'mag' ? 'mag' : grp === 'spin' ? 'spin' : '');
-    b.add(geo, grp === 'mag' ? (shade === 'brass' ? M.brass : shade === 'olive' ? M.olive : M.mag) : grp === 'spin' ? (shade === 'white' ? M.bolt : M.steel) : role(shade), grp === 'mag' ? magMat : mat);
+    if (grp === 'mag') b.add(geo, shade === 'brass' ? M.brass : shade === 'olive' ? matOf('olive') : matOf(F.magSem || 'mag'), magMat);
+    else if (grp === 'spin') b.add(geo, shade === 'white' ? M.bolt : M.steel, mat);
+    else for (const [sem, g] of glbParts(F, key, geo, mdl.size, SEM[shade] || 'body')) b.add(g, matOf(sem), mat); // 같은 색 단계라도 부품마다 역할이 다르면 나눔 (F.parts)
   }
   b.part();
   // 파츠
@@ -2457,7 +2612,7 @@ function glbGun(wi, M, o) {
   if (F.un && A.grp && !pistol) { const t = at(F.un[0], F.un[1]); fore = underGrip(b, A.grp, -t[2], t[1], M); }
   if (F.un && A.las) { const t = at(F.un[0] + 4, F.un[1]); laserAtt(b, -t[2], t[1] - 0.008, pistol ? 0 : -0.024, M); }
   if (F.mg && A.mag) { const t0 = at(F.mg[0], F.mg[2]), t1 = at(F.mg[1], F.mg[2]); b.part('mag'); magAtt(b, A.mag, -t0[2], -t1[2], t0[1], pistol ? 0.026 : 0.03, M, 0); b.part(); }
-  if (EX) { // 높은 등급 스킨: 실제 총 겉면을 재서(exMap) 총몸·덮개·탄창·손잡이·개머리 자리를 찾고, 스킨마다 다른 부품을 그 자리에 맞춰 붙임
+  if (NM) { // 실제 총 겉면을 재서(exMap) 총몸·덮개·탄창·손잡이·개머리 자리를 찾음 → 총마다 세부 부품(F.detail) + 높은 등급 스킨 부품(ADORN). 총몸·덮개·탄창·손잡이·개머리 자리를 찾고, 스킨마다 다른 부품을 그 자리에 맞춰 붙임
     const map = exMap(tris), rc = F.rc || [10, 85, 5, 25], rA = at(rc[0], rc[3]), rB = at(rc[1], rc[2]), rMid = rA[1], rTop = rB[1], cat = WEAPONS[wi].cat, big = cat === 'mg' ? 1.2 : cat === 'sg' ? 1.08 : pistol ? 0.7 : 1;
     let back = -9; for (const { p } of tris) for (let i = 2; i < p.length; i += 3) if (p[i] > back) back = p[i];
     const probe = (z) => { let best = null, bd = 9; for (const r of map.runs(true, z, yM - 0.07, Math.min(sight - 0.001, yM + 0.06))) { const d = yM < r[0] ? r[0] - yM : yM > r[1] ? yM - r[1] : 0; if (d < bd) { bd = d; best = r; } } return bd < 0.006 ? best : null; }; // 총열 높이를 지나는 덩어리
@@ -2467,8 +2622,9 @@ function glbGun(wi, M, o) {
     let h0 = fore[2], h1 = fore[2]; // 왼손이 잡는 총열덮개 앞뒤 (총열보다 굵은 곳)
     if (!pistol && thick(fore[2])) { while (h0 - 0.004 > front[2] + 0.015 && thick(h0 - 0.004)) h0 -= 0.004; while (h1 + 0.004 < rA[2] && thick(h1 + 0.004)) h1 += 0.004; }
     if (h1 - h0 < 0.05) { h0 = Math.max(front[2] + 0.03, fore[2] - 0.07); h1 = Math.min(rA[2] - 0.002, fore[2] + 0.05); }
+    if (F.hg) { h0 = at(F.hg[0], F.m)[2]; h1 = at(F.hg[1], F.m)[2]; } // 총열덮개 자리를 모델이 알려 줌 (가스관이 붙은 총열처럼 재기 어려운 총)
     const sec = (z) => { let n = 0, a = 0, bb = 0, w = 0; for (const d of [-0.004, 0, 0.004]) { const r = probe(z + d); if (!r) continue; n++; a += r[0]; bb += r[1]; w += map.wAt(z + d, r[0], r[1]); } return n ? { y0: a / n, y1: bb / n, w: Math.max(br, w / n) } : { y0: yM - br * 1.8, y1: yM + br * 1.8, w: br * 1.8 }; };
-    const c = { b, add: (g, m, mx) => b.add(g, m, mx || null, !!g.attributes.uv), X: exoMats(o.exo), M, sh: M.recv, sh2: M.mag || M.recv, zM: front[2], zT: -tip, yB: yM, br, r0: rA[2], r1: rB[2], fore, grip, S: sight, back, mag: magBox, side: pistol, cat, big, map, hz: [h0, h1], sec };
+    const c = { b, add: (g, m, mx) => b.add(g, m, mx || null, !!g.attributes.uv), X: o.exo ? exoMats(o.exo) : null, M, sh: M.recv, sh2: M.mag || M.recv, zM: front[2], zT: -tip, yB: yM, br, r0: rA[2], r1: rB[2], fore, grip, S: sight, back, mag: magBox, side: pistol, cat, big, map, hz: [h0, h1], sec };
     const recLo = pistol ? rMid - (rTop - rMid) * 0.15 : rMid - (rTop - rMid) * 1.3, recHi = Math.min(rTop + 0.004, sight - 0.003), reg = (c.reg = {});
     reg.rec = exRegion(map, true, rA[2] + 0.002, rB[2] - 0.002, (recLo + recHi) / 2, recLo, recHi, 0.008);
     reg.hg = pistol ? null : exRegion(map, true, h0 + 0.003, h1 - 0.003, yM, yM - 0.07, Math.min(sight - 0.003, yM + 0.06), 0.006);
@@ -2480,8 +2636,9 @@ function glbGun(wi, M, o) {
     c.both = (fn) => { for (const s of [-1, 1]) fn(s); };
     c.sleeve = (z0, z1, op = {}) => { const pad = op.pad ?? 0.003, k = op.k || (() => 1), prof = (z) => { const q = sec(z), kk = k((z - z0) / (z1 - z0)), y = (q.y0 + q.y1) / 2; return { w: (q.w + pad) * kk, h: Math.max(0.003, Math.min(((q.y1 - q.y0) / 2 + pad) * kk, sight - 0.004 - y)), y }; }; if (op.mat) c.add(exLoft(z0, z1, (t) => prof(z0 + (z1 - z0) * t), op.p || 2, op.nz || Math.max(6, Math.round((z1 - z0) / 0.006)), op.nr || 22), op.mat); return prof; };
     c.helix = (z0, z1, r, turns, tr, mat, y = yM, ph = 0) => { const pts = [], n = Math.max(12, Math.round(turns * 14)); for (let k = 0; k <= n; k++) { const t = k / n, a = ph + t * turns * Math.PI * 2; pts.push([Math.cos(a) * r, y + Math.sin(a) * r, z0 + (z1 - z0) * t]); } c.add(exPath(pts, tr, false, 5), mat); };
-    EX.build(c);
-    if (c.tip !== undefined) tip = -c.tip;
+    c.mat = matOf; c.at = at; c.bare = !A.muz && !(K && K.muzzle) && !F.supp; // bare: 총구에 아직 아무 장치도 없음
+    if (F.detail) { F.detail(c); if (c.tip !== undefined) { tip = -c.tip; c.zT = c.tip; c.tip = undefined; } }
+    if (EX) { EX.build(c); if (c.tip !== undefined) tip = -c.tip; }
   }
   return { group: b.build(), muzzle: [0, yM, -(tip + 0.015)], grip, fore, sight, adsZ, oneHand: P.oneHand, travel: P.travel || 0, glb: true };
 }
