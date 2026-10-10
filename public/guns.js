@@ -2405,7 +2405,7 @@ function energyCore(b, M, fc, uc, R, hw, mc, mr, md, ticks = 12) {
 const builders = { rifle, shotgun, sniper, pistol, revolver, sawed, smg, knife };
 const LABELS = ['', 'P-12', 'DB-2', 'AP-15', 'SP-13', 'RV-6', 'VX-22', 'SD-30', 'M-6', 'AS-7', 'BR-24', 'DM-12', 'SR-30', 'AR-25', 'LS-5', 'HS-5', 'LM-50', 'HM-100'];
 // ───────────── 실제 총 모델 (기본·무료 스킨) ─────────────
-// 'Low-Poly Weapon Asset Pack' by r2detta (CC BY 4.0). 모델은 gunmodels.js 가 읽어 둠. 어떤 스킨이든 총 모양은 같고(AK 는 AK),
+// VSS (veightyfive) · Shorty (DJMaesen) · 나강 (TastyTony) — 모두 CC BY 4.0. 모델은 gunmodels.js 가 읽어 둠. 어떤 스킨이든 총 모양은 같고(AK 는 AK),
 // 유료 스킨은 재질(색·무늬·빛)과 장식(총몸 장식·총구 장치·파츠 스킨·둘레 효과)만 바뀜.
 // 자리 표기 [u, v] = 옆에서 본 상자 안의 % 위치: u 는 총구(0) → 개머리(100), v 는 위(0) → 아래(100)
 // g 오른손(손잡이) · f 왼손 · m 총구 높이 v · s 조준선 높이 v · top 조준경 파츠 자리 · un 총열 아래(손잡이·레이저) · mg 탄창 바닥 [u0, u1, v]
@@ -2414,20 +2414,20 @@ const LABELS = ['', 'P-12', 'DB-2', 'AP-15', 'SP-13', 'RV-6', 'VX-22', 'SD-30', 
 // scope: 모델에 조준경이 붙어 있음 · wood: b50(중간 갈색)을 나무로 · supp: 소음기를 덧붙임 · k: 길이 배율
 const GLB_FIT = {
   1: { n: 'G21', mu: 7, g: [85, 62], m: 16, s: 2, top: [45, 1], un: [20, 27], rc: [8, 85, 2, 15], mag: 'drop' },
-  2: { n: 'SawedOff', rc: [60, 80, 5, 30], g: [86, 65], f: [52, 35], m: 12, s: 3, un: [40, 40], wood30: true, fin: { body: 'blue', wood: 'wood' } },
+  2: { n: 'Shorty', k: 1.15, az: -0.5, g: [92, 56], f: [36, 47], m: 24, s: 4, un: [20, 47], rc: [52, 88, 12, 30], fin: { body: 'blk' } }, // Serbu Super-Shorty (DJMaesen)
   3: { n: 'G18C', mu: 25, g: [88, 60], m: 16, s: 2, top: [58, 1], un: [38, 27], rc: [25, 94, 2, 15], mag: 'drop' },
   4: { n: 'PB', g: [85, 65], m: 20, s: 2, top: [75, 3], un: [55, 33], rc: [50, 98, 2, 20], mag: 'drop', fin: { wood: 'woodD' } },
-  5: { n: 'Revolver', rc: [55, 80, 5, 30], g: [90, 65], m: 17, s: 3, top: [40, 2], un: [40, 30], sh: { b30: 'body', b60: 'grip' }, magSem: 'body', fin: { body: 'stain', grip: 'woodD' } },
+  5: { n: 'Nagant', g: [86, 58], m: 12, s: 3, top: [40, 4], un: [25, 20], rc: [30, 80, 6, 30], fin: { body: 'blue', wood: 'woodD' } }, // 나강 M1895 (TastyTony)
   6: { n: 'MP7', az: -0.46, g: [60, 72], f: [28, 55], m: 33, s: 7, top: [55, 8], un: [25, 60], rc: [10, 75, 10, 35], mag: 'drop' },
   7: { n: 'MP5', g: [73, 72], f: [25, 40], m: 31, s: 8, top: [55, 8], un: [25, 48], rc: [12, 85, 7, 25], supp: true, mag: { t: [37, 58], b: [1, 47], w: [44, 42], tilt: 12 } },
   8: { n: 'M4S90', g: [74, 55], f: [40, 32], m: 22, s: 8, top: [60, 6], un: [35, 45], rc: [45, 72, 7, 28] },
   9: { n: 'Saiga12', g: [73, 65], f: [35, 25], m: 20, s: 3, top: [50, 3], un: [35, 30], rc: [21, 73, 3, 18], mag: { t: [35, 80], b: [8, 66], w: [56, 26], tilt: 15 } },
-  10: { n: 'Famas', rc: [35, 90, 25, 40], g: [58, 62], f: [32, 44], m: 34, s: 20, top: [55, 4], un: [30, 47], mg: [68, 77, 98], sh: { b50: 'body', b70: 'body2', b60: 'grip', b30: 'metal' }, parts: [['b70', 0, 26, 0, 100, 'metal']], fin: { body: 'polyG' } },
+  10: { n: 'FAMASF1', k: 0.8, g: [56, 64], f: [28, 50], m: 42, s: -1, top: [45, 2], un: [30, 52], rc: [19, 90, 30, 42], mag: { t: [42, 82], b: [22, 82], w: [72, 53], tilt: 0 }, sh: { poly: 'body', body: 'metal' }, parts: [['poly', 50, 64, 54, 101, 'grip']], fin: { body: 'poly' } },
   11: { n: 'SCAR16', g: [73, 78], f: [40, 45], m: 39, s: 10, top: [55, 20], un: [35, 50], rc: [50, 77, 20, 40], mag: { t: [49, 79], b: [30, 74], w: [53, 54], tilt: 10 }, fin: { body: 'fde' } },
-  12: { n: 'VSS_Sniper', rc: [37, 70, 30, 45], g: [64, 70], f: [45, 55], m: 45, s: 13, scope: true, un: [42, 58], mg: [45, 55, 90], sh: { b30: 'body', b60: 'wood', b70: 'metal' }, parts: [['b60', 0, 100, 0, 27, 'metal']], fin: { metal: 'blk', wood: 'woodD' } },
+  12: { n: 'VSS', g: [66, 66], f: [38, 52], m: 45, s: 13, scope: true, un: [38, 53], rc: [45, 68, 36, 46], mg: [46, 54, 92], fin: { wood: 'wood' } }, // VSS 빈토레즈 + PSO-1 (veightyfive)
   13: { n: 'AKM', synth: synthAK, sh: { light: 'light' }, fin: { body: 'blue', metal: 'blk' } }, // 직접 설계한 AKM (아래 synthAK)
   14: { n: 'SVDM', g: [76, 70], f: [35, 40], m: 37, s: 12, scope: true, un: [35, 47], rc: [47, 80, 25, 45], mag: { t: [45, 62], b: [45, 98], w: [57, 44], tilt: 5 } },
-  15: { n: 'Barett', rc: [55, 92, 30, 45], g: [76, 70], f: [45, 40], m: 34, s: 15, scope: true, un: [45, 45], mg: [57, 67, 80], sh: { b30: 'body', b60: 'metal', b70: 'body2', b80: 'metal' }, fin: { body: 'park', body2: 'blk', metal: 'blk' } },
+  15: { n: 'M82', g: [77, 46], f: [40, 37], m: 29, s: 10, scope: true, addScope: [45, 78, 18], un: [40, 37], rc: [34, 82, 18, 30], mg: [47, 56, 96], mag: { t: [52, 57], b: [52, 97], w: [52, 39], tilt: 0 }, fin: { body: 'blk' } }, // 바렛 M82A1 (D_U) + 직접 단 조준경
   16: { n: 'MG5', az: -0.5, g: [70, 75], f: [35, 35], m: 22, s: 8, top: [55, 10], un: [38, 45], rc: [48, 85, 10, 30], mag: { t: [39, 58], b: [39, 100], w: [60, 40], tilt: 0 }, fin: { body: 'blk', body2: 'polyG' } },
   17: { n: 'PKM', az: -0.46, g: [72, 75], f: [45, 40], m: 31, s: 15, top: [60, 15], un: [40, 40], rc: [48, 75, 15, 35], fin: { body: 'blk', wood: 'woodD' } },
 };
@@ -2527,6 +2527,18 @@ function synthAK() {
   const mb = edge(MS, -1), mr = edge(MS, 1);
   return { model: { size: [ext.x / unit, ext.y / unit, ext.z / unit], groups }, fit: { mu: U(0), m: V(0), s: V(40), g: uv(616, -56), f: uv(325, -20), top: uv(545, 17), un: uv(330, -28), rc: [U(440), U(665), V(17), V(-8)], hg: [U(259), U(399)], mg: [U(mb[0]), U(mr[0]), V(Math.min(mb[1], mr[1]))] } };
 }
+// 저격 조준경 (받은 모델에 조준경이 없을 때): fB 뒤끝·fF 앞끝 (앞으로 잰 거리), y0 받침 높이 → 조준선 높이
+function mountScope(b, fB, fF, y0, body, metal, M, k = 1.1) {
+  const su = y0 + 0.034 * k, L = fF - fB, fm = fB + L * 0.45;
+  rail(b, fB + 0.05, fF - 0.08, y0, M, 0.016);
+  b.cyl(0.0225 * k, 0.0225 * k, fB - 0.006, 0.012, su, M.rubber, 0, 20); b.cyl(0.021 * k, 0.021 * k, fB, 0.035, su, body, 0, 20); b.cyl(0.021 * k, 0.0155 * k, fB + 0.035, 0.03, su, body, 0, 20); // 눈대 + 고무
+  b.cyl(0.0155 * k, 0.0155 * k, fB + 0.065, L - 0.155, su, body, 0, 20); // 몸통
+  b.cyl(0.0155 * k, 0.026 * k, fF - 0.09, 0.035, su, body, 0, 20); b.cyl(0.026 * k, 0.026 * k, fF - 0.055, 0.055, su, body, 0, 22); b.cyl(0.0275 * k, 0.0275 * k, fF - 0.012, 0.012, su, metal, 0, 22); // 대물렌즈 통
+  b.disc(0.022 * k, fF + 0.0005, su, M.glass); b.disc(0.018 * k, fB - 0.0065, su, M.glass, true);
+  b.vcyl(0.011, 0.022, fm, su + 0.02 * k, metal); b.vcyl(0.012, 0.006, fm, su + 0.032 * k, body, 0, 16); b.xcyl(0.011, 0.022, fm, su, metal, 0.024, 12); b.xcyl(0.012, 0.006, fm, su, body, 0.036, 16); b.xcyl(0.008, 0.012, fm, su, metal, -0.02, 12); // 손잡이(높이·바람·초점)
+  for (const f of [fB + 0.1, fF - 0.13]) { b.box(0.016, su - y0, 0.018, f, (su + y0) / 2, metal); b.cyl(0.0188 * k, 0.0188 * k, f - 0.009, 0.018, su, metal, 0, 18); for (const s of [-1, 1]) b.sdisc(0.003, f, su - 0.012, s * 0.0192 * k, M.bolt); } // 고리 둘
+  return su;
+}
 const procRefs = new Map();
 function procRef(wi) { // 같은 무기의 코드 모델 (기본 스킨): 크기와 손 자리·조준 거리를 그대로 이어받음
   if (procRefs.has(wi)) return procRefs.get(wi);
@@ -2612,6 +2624,7 @@ function glbGun(wi, M, o) {
   if (F.un && A.grp && !pistol) { const t = at(F.un[0], F.un[1]); fore = underGrip(b, A.grp, -t[2], t[1], M); }
   if (F.un && A.las) { const t = at(F.un[0] + 4, F.un[1]); laserAtt(b, -t[2], t[1] - 0.008, pistol ? 0 : -0.024, M); }
   if (F.mg && A.mag) { const t0 = at(F.mg[0], F.mg[2]), t1 = at(F.mg[1], F.mg[2]); b.part('mag'); magAtt(b, A.mag, -t0[2], -t1[2], t0[1], pistol ? 0.026 : 0.03, M, 0); b.part(); }
+  if (F.addScope) { const [u0, u1, v] = F.addScope, a0 = at(u1, v), a1 = at(u0, v); sight = mountScope(b, -a0[2], -a1[2], a0[1], matOf('body'), matOf('metal'), M); } // 조준경이 없는 저격총 모델에 조준경을 얹음
   if (NM) { // 실제 총 겉면을 재서(exMap) 총몸·덮개·탄창·손잡이·개머리 자리를 찾음 → 총마다 세부 부품(F.detail) + 높은 등급 스킨 부품(ADORN). 총몸·덮개·탄창·손잡이·개머리 자리를 찾고, 스킨마다 다른 부품을 그 자리에 맞춰 붙임
     const map = exMap(tris), rc = F.rc || [10, 85, 5, 25], rA = at(rc[0], rc[3]), rB = at(rc[1], rc[2]), rMid = rA[1], rTop = rB[1], cat = WEAPONS[wi].cat, big = cat === 'mg' ? 1.2 : cat === 'sg' ? 1.08 : pistol ? 0.7 : 1;
     let back = -9; for (const { p } of tris) for (let i = 2; i < p.length; i += 3) if (p[i] > back) back = p[i];

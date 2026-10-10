@@ -1,16 +1,18 @@
 // 총 모델 추출: Sketchfab GLB 들 → public/models/guns.bin (게임이 쓰는 총만, 무기마다 색(재질)별로 합침)
 //  · D_U (@DU1701) 의 low-poly 총들 (CC BY 4.0) — 파일마다 총 하나
-//  · r2detta 'Low-Poly Weapon Asset Pack' (CC BY 4.0) — 아직 D_U 모델이 없는 총
+//  · 그 밖의 CC BY 4.0 총: VSS (veightyfive), Shorty 샷건 (DJMaesen), 나강 리볼버 (TastyTony)
+//  · 무늬(텍스처) 한 장으로 칠한 모델은 삼각형마다 무늬 색을 읽어 나무·쇠·플라스틱 역할을 나눔 (PNG 만)
 // 사용:  node tools/extract_guns.mjs <GLB 들이 있는 폴더>
 // 빼는 것: 낱개 탄·탄피, 빈 탄창, 겹치는 탄통, 탄띠 덩어리. 탄창·탄통은 'mag' 묶음(장전할 때 움직임)으로 따로 둠.
 // 파일 구조: [u32 머리말 길이][머리말 JSON][0 채움][Int16 위치(무리별 min·scale 로 되돌림) … Uint16/32 번호]
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 
 const dir = process.argv[2];
 const files = fs.readdirSync(dir);
 const find = (pat) => { const f = files.find((n) => n.includes(pat)); if (!f) throw new Error('없음: ' + pat); return path.join(dir, f); };
-// name: 게임 쪽 이름 · file: 파일 · drop: 더 뺄 부품 이름(정규식) · node: 팩 안의 총 노드 이름(r2detta)
+// name: 게임 쪽 이름 · file: 파일 · drop: 더 뺄 부품 이름(정규식) · roles: 재질 이름 → 역할 · flip: 총구가 반대로 놓인 모델을 돌림 · raw: 뼈대(스킨) 모델이라 노드 변환을 무시
 const SRC = [
   { name: 'G21', file: find('g21_gen5') },
   { name: 'G18C', file: find('g18c') },
@@ -23,9 +25,13 @@ const SRC = [
   { name: 'SVDM', file: find('svdm') },
   { name: 'MG5', file: find('hk_mg5') },
   { name: 'PKM', file: find('pkm'), drop: /^(box\.001|ammo\.|strip)/ },
-  ...['SawedOff', 'Revolver', 'Famas', 'VSS_Sniper', 'AK47', 'Barett'].map((n) => ({ name: n, file: find('weapon_asset_pack'), node: n })),
+  { name: 'M82', file: find('barrett_m82'), drop: /^Object_1[23]$/ }, // 탄창 속에 가려진 탄은 뺌
+  { name: 'FAMASF1', file: find('famas_f1'), drop: /bipod/ },
+  { name: 'VSS', file: find('vss_vintorez'), flip: true },
+  { name: 'Shorty', file: find('shorty'), drop: /^slug/ },
+  { name: 'Nagant', file: find('nagant'), drop: /^(Lamp|Camera)$/, raw: true, roles: { 'Material.007': 'wood', 'Material.003': 'brass', 'Material.001': 'brass' } },
 ];
-const AMMO = /empty|case|^[\d.x ]+(mm)?\s*_\d+$|^\.\d+acp_\d+$|^\d+n\d|bullets/i; // 낱개 탄·빈 탄창·탄피
+const AMMO = /empty|case|^[\d.x ]+(mm)?\s*_\d+$|^\.\d+acp_\d+$|^\d+n\d|bullets|bmg_\d+$/i; // 낱개 탄·빈 탄창·탄피
 const MAGN = /(^|[\s_])mag(\s|_|$|azine)|magazine|ammo box|^box|belt/i; // 장전할 때 움직이는 것
 const NOMAG = /release/i;
 
@@ -45,7 +51,7 @@ function load(file) {
     for (let k = 0; k < a.count; k++) for (let c = 0; c < n; c++) out[k * n + c] = dv[C[1]](off + k * stride + c * C[0], true);
     return out;
   };
-  return { J, acc };
+  return { J, acc, raw: d, binOff };
 }
 // 재질 → 게임 색 역할: body(총몸) · metal(강철) · poly(손잡이·플라스틱) · brass(놋쇠) · light(밝은 작은 부품) · olive · glass
 function roleOf(J, m) {
@@ -63,13 +69,35 @@ function roleOf(J, m) {
   if (/stell|steel|chrome/.test(nm)) return 'metal';
   return 'body';
 }
+// 무늬 한 장으로 칠한 모델: PNG 를 풀어 삼각형 가운데의 색으로 역할을 정함
+function png(buf) {
+  let o = 8, w = 0, h = 0, ct = 0, bd = 8, pal = null; const idat = [];
+  while (o < buf.length) { const len = buf.readUInt32BE(o), type = buf.toString('ascii', o + 4, o + 8), d = buf.subarray(o + 8, o + 8 + len); if (type === 'IHDR') { w = d.readUInt32BE(0); h = d.readUInt32BE(4); bd = d[8]; ct = d[9]; } else if (type === 'PLTE') pal = d; else if (type === 'IDAT') idat.push(d); else if (type === 'IEND') break; o += 12 + len; }
+  if (bd !== 8) throw new Error('PNG bit depth ' + bd);
+  const ch = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[ct], raw = zlib.inflateSync(Buffer.concat(idat)), st = w * ch, px = Buffer.alloc(w * h * ch);
+  for (let y = 0; y < h; y++) { const f = raw[y * (st + 1)], row = raw.subarray(y * (st + 1) + 1, (y + 1) * (st + 1)); for (let x = 0; x < st; x++) { const a = x >= ch ? px[y * st + x - ch] : 0, b = y ? px[(y - 1) * st + x] : 0, c = x >= ch && y ? px[(y - 1) * st + x - ch] : 0; let v = row[x]; if (f === 1) v += a; else if (f === 2) v += b; else if (f === 3) v += (a + b) >> 1; else if (f === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c; } px[y * st + x] = v & 255; } }
+  return (u, v) => { const x = Math.min(w - 1, Math.max(0, Math.floor((((u % 1) + 1) % 1) * w))), y = Math.min(h - 1, Math.max(0, Math.floor((((v % 1) + 1) % 1) * h))), i = (y * w + x) * ch; if (ct === 3) return [pal[d3(i) * 3] / 255, pal[d3(i) * 3 + 1] / 255, pal[d3(i) * 3 + 2] / 255]; function d3(k) { return px[k]; } return ch >= 3 ? [px[i] / 255, px[i + 1] / 255, px[i + 2] / 255] : [px[i] / 255, px[i] / 255, px[i] / 255]; };
+}
+function texRole([r, g, b]) { // 무늬 색 → 역할
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), lum = 0.3 * r + 0.59 * g + 0.11 * b;
+  if (r > g && g >= b && r - b > 0.1 && mx > 0.12 && (mx - mn) / mx > 0.3) return r > 0.55 && g > 0.4 ? 'brass' : 'wood'; // 갈색 = 나무 (밝은 노랑은 놋쇠)
+  if (lum > 0.5) return 'light';
+  return lum < 0.1 ? 'poly' : 'body';
+}
+
 // r2detta 팩: 밝기 단계 → 역할 (기존 b30… 그대로)
 const SHADE = (nm) => (nm === 'Glass' ? 'glass' : nm === 'White' ? 'white' : nm === 'L115_Awp__0' ? 'b30' : ({ material: 'b30', material_7: 'b50', material_2: 'b60', material_4: 'b70', material_5: 'b80' })[nm] || 'b60');
 
 const weapons = {};
 for (const S of SRC) {
-  const { J, acc } = load(S.file), W = (weapons[S.name] = { groups: {}, src: J.asset.extras });
-  const isPack = !!S.node;
+  const { J, acc, raw, binOff } = load(S.file), W = (weapons[S.name] = { groups: {}, src: J.asset.extras });
+  const isPack = !!S.node, texC = {};
+  const texOf = (mi) => { // 재질의 바탕 무늬 (PNG) → 색 읽기 함수, 없으면 null
+    const M = J.materials[mi] || {}, ti = ((M.pbrMetallicRoughness || {}).baseColorTexture || ((M.extensions || {}).KHR_materials_pbrSpecularGlossiness || {}).diffuseTexture || {}).index;
+    if (ti === undefined) return null; if (texC[ti] !== undefined) return texC[ti];
+    const im = J.images[J.textures[ti].source], bv = J.bufferViews[im.bufferView];
+    return (texC[ti] = im.mimeType === 'image/png' ? png(raw.subarray(binOff + (bv.byteOffset || 0), binOff + (bv.byteOffset || 0) + bv.byteLength)) : null);
+  };
   function walk(ni, M, inGun, sub, drop) {
     const n = J.nodes[ni], Wm = mul(M, local(n)), nm = (n.name || '').trim();
     let g = inGun, s = sub, dr = drop;
@@ -83,8 +111,14 @@ for (const S of SRC) {
     }
     if (g && !dr && n.mesh !== undefined) for (const p of J.meshes[n.mesh].primitives) {
       const pos = acc(p.attributes.POSITION), idx = p.indices !== undefined ? acc(p.indices) : Float64Array.from({ length: pos.length / 3 }, (_, i) => i);
-      const role = isPack ? SHADE(J.materials[p.material].name) : roleOf(J, p.material), key = (s ? s + ':' : '') + role, G = (W.groups[key] ||= { p: [], i: [] }), base = G.p.length / 3;
-      for (let k = 0; k < pos.length; k += 3) { const x = pos[k], y = pos[k + 1], z = pos[k + 2]; G.p.push(Wm[0] * x + Wm[4] * y + Wm[8] * z + Wm[12], Wm[1] * x + Wm[5] * y + Wm[9] * z + Wm[13], Wm[2] * x + Wm[6] * y + Wm[10] * z + Wm[14]); }
+      const Wm2 = S.raw ? I : Wm, X = (k) => [Wm2[0] * pos[k] + Wm2[4] * pos[k + 1] + Wm2[8] * pos[k + 2] + Wm2[12], Wm2[1] * pos[k] + Wm2[5] * pos[k + 1] + Wm2[9] * pos[k + 2] + Wm2[13], Wm2[2] * pos[k] + Wm2[6] * pos[k + 1] + Wm2[10] * pos[k + 2] + Wm2[14]];
+      const tex = !isPack && texOf(p.material), uv = tex && p.attributes.TEXCOORD_0 !== undefined ? acc(p.attributes.TEXCOORD_0) : null;
+      if (tex && uv) { // 삼각형마다 무늬 색으로 역할
+        for (let t = 0; t < idx.length; t += 3) { const a = idx[t], b = idx[t + 1], c = idx[t + 2], role = texRole(tex((uv[a * 2] + uv[b * 2] + uv[c * 2]) / 3, (uv[a * 2 + 1] + uv[b * 2 + 1] + uv[c * 2 + 1]) / 3)), key = (s ? s + ':' : '') + role, G = (W.groups[key] ||= { p: [], i: [] }), base = G.p.length / 3; for (const v of [a, b, c]) G.p.push(...X(v * 3)); G.i.push(base, base + 1, base + 2); }
+        continue;
+      }
+      const mn = (J.materials[p.material] || {}).name, role = isPack ? SHADE(mn) : (S.roles && S.roles[mn]) || roleOf(J, p.material), key = (s ? s + ':' : '') + role, G = (W.groups[key] ||= { p: [], i: [] }), base = G.p.length / 3;
+      for (let k = 0; k < pos.length; k += 3) G.p.push(...X(k));
       for (const v of idx) G.i.push(v + base);
     }
     for (const c of n.children || []) walk(c, Wm, g, s, dr);
@@ -97,6 +131,7 @@ const head = { credits: {}, weapons: {} }, chunks = [];
 let bytes = 0;
 const push = (arr) => { chunks.push(Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength)); const at = bytes; bytes += arr.byteLength; if (bytes % 4) { const pad = 4 - (bytes % 4); chunks.push(Buffer.alloc(pad)); bytes += pad; } return at; };
 for (const [name, w] of Object.entries(weapons)) {
+  const fl = (SRC.find((q) => q.name === name) || {}).flip ? -1 : 1; // 뒤집을 모델: x·z 를 반대로 (y 축으로 반 바퀴)
   const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
   for (const G of Object.values(w.groups)) for (let k = 0; k < G.p.length; k++) { const a = k % 3; mn[a] = Math.min(mn[a], G.p[k]); mx[a] = Math.max(mx[a], G.p[k]); }
   const ext = mx.map((v, a) => v - mn[a]), c = mn.map((v, a) => (v + mx[a]) / 2);
@@ -107,7 +142,7 @@ for (const [name, w] of Object.entries(weapons)) {
   for (const [key, G] of Object.entries(w.groups)) {
     const n = G.p.length / 3, q = new Int16Array(n * 3);
     const odd = ['021', '102', '210'].includes([ax, ay, az].join('')); // 축 바꾸기가 거울상이 되면 두께 축을 뒤집어 그냥 회전으로 만듦
-    for (let i = 0; i < n; i++) for (const [o, a] of [[0, ax], [1, ay], [2, az]]) q[i * 3 + o] = Math.round(((G.p[i * 3 + a] - c[a]) / unit) * (o === 0 && odd ? -1 : 1) * 2 * 32767); // -0.5…0.5 → Int16
+    for (let i = 0; i < n; i++) for (const [o, a] of [[0, ax], [1, ay], [2, az]]) q[i * 3 + o] = Math.round(((G.p[i * 3 + a] - c[a]) / unit) * (o === 0 && odd ? -1 : 1) * (o !== 1 ? fl : 1) * 2 * 32767); // -0.5…0.5 → Int16
     const big = n > 65535, ib = big ? new Uint32Array(G.i) : new Uint16Array(G.i);
     H.groups[key] = { n, ni: G.i.length, big, p: push(q), i: push(ib) };
   }
