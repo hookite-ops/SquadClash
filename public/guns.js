@@ -2424,7 +2424,7 @@ const GLB_FIT = {
   9: { n: 'Saiga12', g: [73, 65], f: [35, 25], m: 20, s: 3, top: [50, 3], un: [35, 30], rc: [21, 73, 3, 18], mag: { t: [35, 80], b: [8, 66], w: [56, 26], tilt: 15 } },
   10: { n: 'FAMASF1', k: 0.8, g: [56, 64], f: [28, 50], m: 42, s: -1, top: [45, 2], un: [30, 52], rc: [19, 90, 30, 42], mag: { t: [42, 82], b: [22, 82], w: [72, 53], tilt: 0 }, sh: { poly: 'body', body: 'metal' }, parts: [['poly', 50, 64, 54, 101, 'grip']], fin: { body: 'poly' } },
   11: { n: 'SCAR16', g: [73, 78], f: [40, 45], m: 39, s: 10, top: [55, 20], un: [35, 50], rc: [50, 77, 20, 40], mag: { t: [49, 79], b: [30, 74], w: [53, 54], tilt: 10 }, fin: { body: 'fde' } },
-  12: { n: 'VSS', g: [66, 66], f: [38, 52], m: 45, s: 13, scope: true, un: [38, 53], rc: [45, 68, 36, 46], mg: [46, 54, 92], fin: { wood: 'wood' } }, // VSS 빈토레즈 + PSO-1 (veightyfive)
+  12: { n: 'VSS', g: [66, 60], f: [40, 30], m: 20, s: 0, scope: true, addScope: [36, 70, 3], un: [38, 31], rc: [30, 68, 3, 18], mg: [46, 54, 80], fin: { wood: 'wood' } }, // VSS 빈토레즈 (veightyfive) + 가운데에 얹은 조준경
   13: { n: 'AKM', synth: synthAK, sh: { light: 'light' }, fin: { body: 'blue', metal: 'blk' } }, // 직접 설계한 AKM (아래 synthAK)
   14: { n: 'SVDM', g: [76, 70], f: [35, 40], m: 37, s: 12, scope: true, un: [35, 47], rc: [47, 80, 25, 45], mag: { t: [45, 62], b: [45, 98], w: [57, 44], tilt: 5 } },
   15: { n: 'M82', g: [77, 46], f: [40, 37], m: 29, s: 10, scope: true, addScope: [45, 78, 18], un: [40, 37], rc: [34, 82, 18, 30], mg: [47, 56, 96], mag: { t: [52, 57], b: [52, 97], w: [52, 39], tilt: 0 }, fin: { body: 'blk' } }, // 바렛 M82A1 (D_U) + 직접 단 조준경
@@ -2527,6 +2527,7 @@ function synthAK() {
   const mb = edge(MS, -1), mr = edge(MS, 1);
   return { model: { size: [ext.x / unit, ext.y / unit, ext.z / unit], groups }, fit: { mu: U(0), m: V(0), s: V(40), g: uv(616, -56), f: uv(325, -20), top: uv(545, 17), un: uv(330, -28), rc: [U(440), U(665), V(17), V(-8)], hg: [U(259), U(399)], mg: [U(mb[0]), U(mr[0]), V(Math.min(mb[1], mr[1]))] } };
 }
+let LENS = null; const scopeLens = () => LENS || (LENS = std({ color: 0x06121e, metalness: 0.7, roughness: 0.04, emissive: 0x0a3550, emissiveIntensity: 0.35, wear: 0 })); // 반사 코팅된 짙은 렌즈
 // 저격 조준경 (받은 모델에 조준경이 없을 때): fB 뒤끝·fF 앞끝 (앞으로 잰 거리), y0 받침 높이 → 조준선 높이
 function mountScope(b, fB, fF, y0, body, metal, M, k = 1.1) {
   const su = y0 + 0.034 * k, L = fF - fB, fm = fB + L * 0.45;
@@ -2534,7 +2535,7 @@ function mountScope(b, fB, fF, y0, body, metal, M, k = 1.1) {
   b.cyl(0.0225 * k, 0.0225 * k, fB - 0.006, 0.012, su, M.rubber, 0, 20); b.cyl(0.021 * k, 0.021 * k, fB, 0.035, su, body, 0, 20); b.cyl(0.021 * k, 0.0155 * k, fB + 0.035, 0.03, su, body, 0, 20); // 눈대 + 고무
   b.cyl(0.0155 * k, 0.0155 * k, fB + 0.065, L - 0.155, su, body, 0, 20); // 몸통
   b.cyl(0.0155 * k, 0.026 * k, fF - 0.09, 0.035, su, body, 0, 20); b.cyl(0.026 * k, 0.026 * k, fF - 0.055, 0.055, su, body, 0, 22); b.cyl(0.0275 * k, 0.0275 * k, fF - 0.012, 0.012, su, metal, 0, 22); // 대물렌즈 통
-  b.disc(0.022 * k, fF + 0.0005, su, M.glass); b.disc(0.018 * k, fB - 0.0065, su, M.glass, true);
+  b.disc(0.022 * k, fF + 0.0005, su, scopeLens()); b.disc(0.018 * k, fB - 0.0065, su, scopeLens(), true); b.tor(0.0215 * k, 0.0012, [fF + 0.001, su, 0], metal, 0, 0, 6.2832, 24); // 코팅된 렌즈 + 렌즈 테
   b.vcyl(0.011, 0.022, fm, su + 0.02 * k, metal); b.vcyl(0.012, 0.006, fm, su + 0.032 * k, body, 0, 16); b.xcyl(0.011, 0.022, fm, su, metal, 0.024, 12); b.xcyl(0.012, 0.006, fm, su, body, 0.036, 16); b.xcyl(0.008, 0.012, fm, su, metal, -0.02, 12); // 손잡이(높이·바람·초점)
   for (const f of [fB + 0.1, fF - 0.13]) { b.box(0.016, su - y0, 0.018, f, (su + y0) / 2, metal); b.cyl(0.0188 * k, 0.0188 * k, f - 0.009, 0.018, su, metal, 0, 18); for (const s of [-1, 1]) b.sdisc(0.003, f, su - 0.012, s * 0.0192 * k, M.bolt); } // 고리 둘
   return su;
@@ -2549,6 +2550,21 @@ function procRef(wi) { // 같은 무기의 코드 모델 (기본 스킨): 크기
   return ref;
 }
 // 색 단계 하나를 이어진 덩어리(부품)로 나눠 F.parts 규칙([단계, u0, u1, v0, v1, 역할] — 덩어리 가운데가 옆모습 u·v % 안이면)으로 역할을 매김
+// 정조준 맞춤 (총마다 한 번 재서 둠): 총구 근처 총열의 좌우 가운데 xc, 그리고 눈에서 앞으로 본 가운데 줄(|x| < 3mm)에서 가장 높은 곳 top
+// → 정조준하면 그 높이(보통 가늠쇠 끝)가 정확히 화면 한가운데에 오고, 그 위로는 아무것도 가리지 않음
+const VM_ADSZ = { pistol: -0.36, smg: -0.33, rifle: -0.34, shotgun: -0.54, sniper: -0.5, mg: -0.36 }; // game.js 의 VM 표와 같은 값
+const glbAims = new Map();
+function glbAim(wi, F, mdl, mat, at) {
+  if (glbAims.has(wi)) return glbAims.get(wi);
+  const front = at(F.mu || 0, F.m), yM = front[1], eyeZ = -(F.scope ? -0.5 : F.az || VM_ADSZ[WEAPONS[wi].vm] || -0.34), v = new THREE.Vector3(), P = [];
+  for (const [key, geo] of Object.entries(mdl.groups)) { if (key.startsWith('mag') || key.startsWith('spin')) continue; const a = geo.attributes.position.array; for (let i = 0; i < a.length; i += 3) { v.set(a[i], a[i + 1], a[i + 2]).applyMatrix4(mat); P.push(v.x, v.y, v.z); } }
+  let x0 = 9, x1 = -9; for (let i = 0; i < P.length; i += 3) if (P[i + 2] > front[2] + 0.002 && P[i + 2] < front[2] + 0.035 && Math.abs(P[i + 1] - yM) < 0.03) { x0 = Math.min(x0, P[i]); x1 = Math.max(x1, P[i]); }
+  const xc = x0 < x1 ? (x0 + x1) / 2 : 0;
+  let top = -9; for (let i = 0; i < P.length; i += 3) if (Math.abs(P[i] - xc) < 0.003 && P[i + 2] > front[2] - 0.01 && P[i + 2] < eyeZ - 0.035 && P[i + 1] < yM + 0.15) top = Math.max(top, P[i + 1]);
+  const r = { xc, top: top > -9 ? top : at(0, F.s)[1] };
+  glbAims.set(wi, r);
+  return r;
+}
 const glbSplits = new Map();
 function glbParts(F, key, geo, size, def) {
   const rules = (F.parts || []).filter((r) => r[0] === key);
@@ -2576,7 +2592,9 @@ function glbGun(wi, M, o) {
   const unit = (u, v) => [sy / 2 - (v / 100) * sy, -sz / 2 + (u / 100) * sz], gU = unit(F.g[0], F.g[1]), mU = unit(F.mu || 0, F.m);
   const sc = ((P.grip[2] - P.muzzle[2]) / (gU[1] - mU[1])) * (F.k || 1), off = [0, P.muzzle[1] - sc * mU[0], P.grip[2] - sc * gU[1]];
   const at = (u, v) => { const q = unit(u, v); return [0, sc * q[0] + off[1], sc * q[1] + off[2]]; };
-  const mat = new THREE.Matrix4().makeTranslation(off[0], off[1], off[2]).multiply(new THREE.Matrix4().makeScale(sc, sc, sc)).multiply(new THREE.Matrix4().makeRotationY(Math.PI));
+  const mkMat = () => new THREE.Matrix4().makeTranslation(off[0], off[1], off[2]).multiply(new THREE.Matrix4().makeScale(sc, sc, sc)).multiply(new THREE.Matrix4().makeRotationY(Math.PI));
+  let mat = mkMat();
+  const AIM = glbAim(wi, F, mdl, mat, at); off[0] = -AIM.xc; mat = mkMat(); // 총열 가운데를 화면 한가운데(x = 0)로
   const furn = M[(WEAPONS[wi].model[1] || {}).furn || 'furn'];
   // 부품 역할: 모델의 색 단계(shade) → 역할(body 총몸 · body2 덮개·개머리 · wood 나무 · metal 총열·작은 쇠 · grip 손잡이 · mag 탄창 …) → 재질
   // 기본 스킨은 총마다 실제 총의 공장 마감(F.fin), 유료 스킨은 스킨 재질. 높은 등급은 손잡이·개머리까지 스킨 무늬
@@ -2610,7 +2628,7 @@ function glbGun(wi, M, o) {
   b.part();
   // 파츠
   const grip = at(F.g[0], F.g[1]);
-  let tip = -front[2], sight = at(0, F.s)[1], adsZ = F.scope ? P.adsZ : F.az, fore = F.f ? at(F.f[0], F.f[1]) : [P.fore[0], grip[1] + (P.fore[1] - P.grip[1]), grip[2] + (P.fore[2] - P.grip[2])]; // 권총: 왼손은 오른손 옆
+  let tip = -front[2], sight = F.sFix !== undefined ? at(0, F.sFix)[1] : F.scope || F.addScope ? at(0, F.s)[1] : AIM.top + 0.0006, adsZ = F.scope ? P.adsZ : F.az, fore = F.f ? at(F.f[0], F.f[1]) : [P.fore[0], grip[1] + (P.fore[1] - P.grip[1]), grip[2] + (P.fore[2] - P.grip[2])]; // 권총: 왼손은 오른손 옆
   const pistol = WEAPONS[wi].slot === 'side', r = pistol ? 0.011 : 0.014;
   if (F.supp && !A.muz) { b.cyl(0.019, 0.019, tip - 0.01, 0.16, yM, M.poly, 0, 18); b.cyl(0.0195, 0.0195, tip + 0.13, 0.02, yM, M.steel, 0, 18); tip += 0.15; }
   const K = o.kit;

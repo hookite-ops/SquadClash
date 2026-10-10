@@ -27,7 +27,7 @@ const SRC = [
   { name: 'PKM', file: find('pkm'), drop: /^(box\.001|ammo\.|strip)/ },
   { name: 'M82', file: find('barrett_m82'), drop: /^Object_1[23]$/ }, // 탄창 속에 가려진 탄은 뺌
   { name: 'FAMASF1', file: find('famas_f1'), drop: /bipod/ },
-  { name: 'VSS', file: find('vss_vintorez'), flip: true },
+  { name: 'VSS', file: find('vss_vintorez'), flip: true, drop: /pso/ }, // 옆에 달린 PSO-1 은 빼고 게임에서 가운데 조준경을 얹음
   { name: 'Shorty', file: find('shorty'), drop: /^slug/ },
   { name: 'Nagant', file: find('nagant'), drop: /^(Lamp|Camera)$/, raw: true, roles: { 'Material.007': 'wood', 'Material.003': 'brass', 'Material.001': 'brass' } },
 ];
