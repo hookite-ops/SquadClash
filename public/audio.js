@@ -1,9 +1,14 @@
-// SQUAD CLASH — 소리. 녹음 파일 없이 전부 그 자리에서 만든다 (잡음과 떨림을 깎고 겹쳐서).
-// 총소리는 '탁' 하는 머리 + 몸통 + 낮게 치는 울림 + 멀리 퍼지는 잔향을 겹치고, 멀수록 먹먹하고 늦게 들린다.
+// SQUAD CLASH — 소리. 녹음 파일 없이 전부 만든다.
+// 총소리·발소리·탄착·장전·폭발은 처음 소리를 켤 때 sfxbank.js 로 표본 하나하나를 계산해 미리 구워 두고(몇 가지씩 다르게), 틀 때마다 높이를 조금씩 바꿔 튼다.
+// 다 굽기 전에는 예전처럼 거르개를 겹쳐 그 자리에서 만든 소리를 낸다. 멀수록 먹먹하고 늦게 들린다.
 import { WEAPONS } from './shared.js';
+import * as SB from './sfxbank.js';
 
 let AC = null, master = null, comp = null, rev = null, noiseBuf = null;
 let volume = 0.8, lastShotAt = 0, shotBurst = 0;
+// 구운 소리의 세기: 예전 소리와 같은 호출에서 비슷한 크기(총소리는 조금 더 크게)가 되도록 오프라인 렌더링으로 맞춤
+const FARK = 1, SUPK = 2.25, WHIZK = 1.75, BOOMK = 1.3, TICKK = 0.24, SWISHK = 0.25;
+const STEPK = { 0: 2.4, 1: 1.45, 2: 1.6, 5: 1.75, 6: 1.8 }, IMPK = { 0: 0.65, 1: 0.35, 2: 0.23, 3: 0.3, 4: 0.3, 5: 0.45 }, RELOADK = { out: 0.38, in: 0.15, rack: 0.27 };
 const R = Math.random;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -28,6 +33,7 @@ export function initAudio() {
     }
     if (AC.state === 'suspended') AC.resume();
     loadSamples();
+    startBake();
   } catch { AC = null; }
 }
 // 녹음된 효과음 (public/sounds/skin_*.wav — 요원 스킨·스킨 팩 효과음). 처음 소리를 켤 때 한 번 불러 둠
@@ -49,6 +55,45 @@ function out(pan, send = 0) {
   const g = AC.createGain();
   if (pan && AC.createStereoPanner) { const p = AC.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); g.connect(p).connect(master); } else g.connect(master);
   if (send > 0 && rev) { const s = AC.createGain(); s.gain.value = send; g.connect(s).connect(rev); }
+  return g;
+}
+// ───────────── 미리 구운 소리 창고 ─────────────
+// shot 가까운 총소리(좌우) · far 먼 총소리 · sup 소음기 · step 발소리(바닥마다) · imp 탄착(재질마다) · reload 장전 단계 · tick 적중음 · whiz · swish · boom
+let BANK = null, bakeDone = false;
+export const soundsReady = () => bakeDone;
+function toBuf(chs, rate) { const b = AC.createBuffer(chs.length, chs[0].length, rate); chs.forEach((c, i) => b.getChannelData(i).set(c)); return b; }
+function startBake() {
+  if (BANK || !AC) return;
+  const sr = AC.sampleRate, B = (BANK = { shot: {}, far: {}, sup: {}, step: {}, imp: {}, reload: {}, tick: {}, whiz: [], swish: [], boom: [] });
+  const put = (m) => {
+    const buf = toBuf(m.chs, m.half ? sr / 2 : sr);
+    if (m.where === 'ir') { if (rev) rev.buffer = buf; return; }
+    if (m.where === 'top') B[m.key].push(buf); else (B[m.where][m.key] || (B[m.where][m.key] = [])).push(buf);
+  };
+  // 워커를 못 쓰면 화면 줄기에서 조금씩 나눠 굽기
+  const local = () => {
+    for (const k of Object.keys(B)) B[k] = Array.isArray(B[k]) ? [] : {};
+    const jobs = SB.bakeList();
+    let i = 0;
+    const step = () => { const t0 = performance.now(); while (i < jobs.length && performance.now() - t0 < 7) { try { put({ ...jobs[i], chs: SB.runJob(jobs[i], sr) }); } catch {} i++; } if (i < jobs.length) setTimeout(step, 4); else bakeDone = true; };
+    setTimeout(step, 0);
+  };
+  try {
+    const w = new Worker(new URL('./sfxworker.js', import.meta.url), { type: 'module' });
+    let failed = false;
+    w.onmessage = (e) => { if (e.data.done) { bakeDone = true; w.terminate(); } else { try { put(e.data); } catch {} } };
+    w.onerror = () => { if (failed || bakeDone) return; failed = true; w.terminate(); local(); };
+    w.postMessage(sr);
+  } catch { local(); }
+}
+const pick = (arr) => (arr && arr.length ? arr[(Math.random() * arr.length) | 0] : null);
+// 구운 소리 하나 틀기: lp 먹먹하게(0 이면 그대로) · send 잔향 · rate 높이(빠르기)
+function play(buf, vol, pan = 0, delay = 0, lp = 0, send = 0, rate = 1) {
+  const s = AC.createBufferSource(), g = out(pan, send);
+  if (pan && buf.numberOfChannels > 1) vol /= Math.sqrt(1 + Math.sin(Math.min(1, Math.abs(pan)) * Math.PI / 2)); // 좌우가 같은 소리를 한쪽으로 몰면 커지는 만큼 줄임
+  s.buffer = buf; s.playbackRate.value = rate; g.gain.value = vol;
+  if (lp > 0 && lp < 16000) { const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; f.Q.value = 0.5; s.connect(f).connect(g); } else s.connect(g);
+  s.start(AC.currentTime + delay);
   return g;
 }
 // 잡음 한 줄기: type 거르개로 f0 → f1 을 훑으며 dur 초 동안 잦아듦
@@ -79,18 +124,34 @@ const SHOT = {
   sr: { crack: 0.85, body: [920, 210, 0.46], thump: [118, 33, 0.4], tail: 0.65 },
   mg: { crack: 0.55, body: [1050, 320, 0.2], thump: [150, 44, 0.16], tail: 0.32 },
 };
+// 구운 총소리의 종류: 권총 · 매그넘 · 기관단총 · 소총 · 지정사수 · 기관총 · 산탄총 · 저격총 · 대물 저격총
+const shotCat = (W) => (W.pellets > 1 ? 'sg' : W.cat === 'side' && W.dmg > 50 ? 'mag' : W.cat === 'sr' && W.dmg > 90 ? 'hsr' : W.cat === 'ar' && W.dmg >= 35 ? 'dmr' : SB.GUN[W.cat] ? W.cat : 'ar');
+const SUPG = { side: 'side', mag: 'side', smg: 'smg', sr: 'sr', hsr: 'sr' }; // 소음기 소리 묶음
+const SHOTK = { side: 1.54, mag: 1.89, smg: 1.56, ar: 1.42, dmr: 1.39, mg: 1.47, sg: 1.74, sr: 1.58, hsr: 1.75 }; // 종류별 세기
+const wRate = (wi) => 1 + (((wi * 37) % 9) - 4) * 0.012; // 총마다 높이가 조금씩 달라 같은 종류라도 구별됨
+const lastVoice = {};
 // far 0~1: 멀수록 먹먹함. delay: 소리가 늦게 닿는 시간(초). quiet: 소음기
 export function sfxShot(wi, vol, pan = 0, far = 0, delay = 0, quiet = false) {
   const W = WEAPONS[wi];
   if (!AC || !W) return;
-  if (W.melee) { const t = AC.currentTime, dst = out(pan); noise(t, 0.09, 'bandpass', 2600, 900, 0.8, vol * 0.5, dst, 0.012); return; } // 칼 휘두르는 소리
+  if (W.melee) { const b = BANK && pick(BANK.swish); if (b) play(b, vol * SWISHK, pan, 0, 0, 0, 0.9 + R() * 0.25); else noise(AC.currentTime, 0.09, 'bandpass', 2600, 900, 0.8, vol * 0.5, out(pan), 0.012); return; } // 칼 휘두르는 소리
   quiet = quiet || !!W.quiet;
   if (quiet) vol *= 0.42;
   if (vol < 0.02) return;
-  vol *= 2.3;
   const now = AC.currentTime;
   if (now - lastShotAt < 0.03) { if (++shotBurst > 3 && far > 0.2) return; } else shotBurst = 0; // 한꺼번에 너무 많이 겹치면 먼 소리는 건너뜀
   lastShotAt = now;
+  const c = shotCat(W), useFar = !quiet && far > 0.5, buf = BANK && pick(quiet ? BANK.sup[SUPG[c] || 'ar'] : useFar ? BANK.far[c] : BANK.shot[c]);
+  if (buf) {
+    const k = quiet ? SUPK : (SHOTK[c] || 1.5) * (useFar ? FARK : 1), lp = far > 0.03 ? 700 + 17000 * Math.pow(1 - far, 2.4) : 0;
+    const g = play(buf, vol * k, pan, delay, lp, quiet ? 0.03 : 0.03 + far * 0.1, wRate(wi) * (0.97 + R() * 0.06));
+    // 연사: 같은 총의 앞 발 잔향은 줄여서 뭉개지지 않게 (마지막 발의 잔향만 길게 남음)
+    const who = wi + (far === 0 && pan === 0 ? 'me' : 'o'), lv = lastVoice[who]; // 내 총과 남의 총은 따로
+    if (lv && now - lv.t < 0.6) { lv.g.gain.cancelScheduledValues(now); lv.g.gain.setTargetAtTime(lv.v * 0.3, now + delay + 0.012, 0.03); }
+    lastVoice[who] = { g, v: vol * k, t: now };
+    return;
+  }
+  vol *= 2.3;
   const S = SHOT[W.pellets > 1 ? 'sg' : W.dmg > 50 && W.cat === 'side' ? 'sr' : W.cat] || SHOT.ar, t = now + delay, p = 0.94 + R() * 0.12; // 쏠 때마다 높낮이가 조금씩 다름
   const dst = out(pan, quiet ? 0.04 : S.tail * (0.5 + far * 1.3));
   if (quiet) { // 소음기: 짧고 낮은 '픽'
@@ -183,6 +244,12 @@ export function sfxSkin(kind, what, vol = 1, pan = 0, far = 0, delay = 0) {
 }
 export function sfxBoom(vol = 0.9, dur = 1.8, pan = 0) {
   if (!AC || vol < 0.02) return;
+  const b = BANK && pick(BANK.boom);
+  if (b) { // 작은 폭발(dur 이 짧음)은 조금 높고 일찍 잦아듦
+    const g = play(b, vol * BOOMK, pan, 0, dur < 1 ? 5000 : 0, 0.3, 1 + Math.max(0, 1.8 - dur) * 0.12 + (R() - 0.5) * 0.06);
+    if (dur < 1.6) g.gain.setTargetAtTime(0, AC.currentTime + dur * 0.7, dur * 0.35);
+    return;
+  }
   vol *= 1.5;
   const t = AC.currentTime, dst = out(pan, 0.55);
   noise(t, 0.05, 'highpass', 1400, 1400, 0.7, vol * 0.55, dst, 0.0006);
@@ -193,6 +260,8 @@ export function sfxBoom(vol = 0.9, dur = 1.8, pan = 0) {
 // 발소리·부딪는 소리. surf: 0 돌·콘크리트 · 1 쇠 · 2 나무 · 5 흙·모래·풀 · 6 자갈
 export function sfxStep(vol, pan = 0, surf = 0) {
   if (!AC || vol < 0.012) return;
+  const b = BANK && pick(BANK.step[surf] || BANK.step[0]);
+  if (b) { play(b, vol * (STEPK[surf] || STEPK[0]), pan, 0, 0, 0.015, 0.9 + R() * 0.18); return; }
   vol *= 4.5;
   const t = AC.currentTime, dst = out(pan);
   if (surf === 1) { noise(t, 0.05, 'bandpass', 2400, 1700, 1.5, vol * 0.7, dst); tone(t, 0.2, 'sine', 600 + R() * 220, 560, vol * 0.16, dst); tone(t, 0.14, 'sine', 1150 + R() * 320, 1080, vol * 0.07, dst); }
@@ -214,6 +283,8 @@ export function sfxTone(freq, dur, vol, type = 'sine', to = freq) {
 // 총알이 맞은 자리. k: 0 돌 · 1 쇠 · 2 나무 · 3 천 · 4 유리 · 5 땅
 export function sfxImpact(k, vol, pan) {
   if (!AC || vol < 0.02) return;
+  const b = BANK && pick(BANK.imp[k] || BANK.imp[0]);
+  if (b) { play(b, vol * (IMPK[k] || IMPK[0]), pan, 0, 0, 0.05, 0.9 + R() * 0.2); return; }
   vol *= 1.8;
   const t = AC.currentTime, dst = out(pan, 0.05);
   if (k === 1) { noise(t, 0.02, 'highpass', 3000, 3000, 0.7, vol * 0.3, dst, 0.0006); const f = 1900 + R() * 2600; tone(t, 0.16, 'sine', f, f * 0.96, vol * 0.11, dst, 0.001); tone(t, 0.1, 'sine', f * 1.52, f * 1.5, vol * 0.05, dst, 0.001); }
@@ -225,12 +296,16 @@ export function sfxImpact(k, vol, pan) {
 }
 export function sfxWhiz(vol, pan) { // 총알이 귀 옆을 스침
   if (!AC) return;
+  const b = BANK && pick(BANK.whiz);
+  if (b) { play(b, vol * WHIZK, pan, 0, 0, 0, 0.88 + R() * 0.24); return; }
   const t = AC.currentTime, dst = out(pan);
   noise(t, 0.16, 'bandpass', 4200 + R() * 1500, 900, 2.2, vol * 3, dst, 0.008); noise(t, 0.02, 'highpass', 3500, 3500, 0.7, vol * 1.4, dst, 0.0006);
 }
 // 장전: out 탄창 빼기 · in 탄창 끼우기 · rack 노리쇠 당기기
 export function sfxReload(stage, vol = 1) {
   if (!AC) return;
+  const b = BANK && pick(BANK.reload[stage]);
+  if (b) { play(b, vol * (RELOADK[stage] || 0.2), 0, 0, 0, 0.03, 0.95 + R() * 0.1); return; }
   vol *= 2.6;
   const t = AC.currentTime, dst = out(0);
   if (stage === 'out') { noise(t, 0.012, 'highpass', 3200, 3200, 0.7, 0.12 * vol, dst, 0.0006); noise(t + 0.02, 0.1, 'bandpass', 1900, 800, 1.4, 0.07 * vol, dst, 0.01); }
@@ -247,6 +322,7 @@ export function sfxUI(k, vol = 1) {
   else if (k === 'buy') { n(0, 880, 0.07, 0.08, 'triangle'); n(0.07, 1320, 0.14, 0.08, 'triangle'); }
   else if (k === 'error') { n(0, 190, 0.16, 0.09, 'square', 150); }
   else if (k === 'equip') { noise(t, 0.09, 'bandpass', 1400, 2600, 1, 0.07 * vol, d, 0.02); noise(t + 0.09, 0.03, 'bandpass', 900, 700, 2, 0.11 * vol, d, 0.001); }
+  else if ((k === 'hit' || k === 'head') && BANK && BANK.tick[k]) play(BANK.tick[k][0], vol * TICKK * (k === 'head' ? 0.69 : 1), 0, 0, 0, 0.05);
   else if (k === 'hit') { n(0, 1250, 0.05, 0.11, 'triangle', 1100); noise(t, 0.012, 'highpass', 4000, 4000, 0.7, 0.05 * vol, d, 0.0006); }
   else if (k === 'head') { n(0, 1900, 0.14, 0.12, 'sine', 1860); n(0, 2850, 0.1, 0.05); noise(t, 0.012, 'highpass', 5000, 5000, 0.7, 0.07 * vol, d, 0.0006); }
   else if (k === 'kill') { n(0, 660, 0.12, 0.12, 'triangle'); n(0.1, 990, 0.22, 0.13, 'triangle'); }
