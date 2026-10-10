@@ -54,8 +54,26 @@ uniform float uBloom; uniform float uSharp; uniform float uSat; uniform float uC
 uniform vec3 uGain; uniform vec3 uLift; uniform vec3 uSunView; uniform vec3 uGlare; uniform vec2 uProj;
 varying vec2 vUv;
 float hash( vec2 p ) { vec3 q = fract( vec3( p.xyx ) * 0.1031 ); q += dot( q, q.yzx + 33.33 ); return fract( ( q.x + q.y ) * q.z ); }
+float lum( vec3 v ) { return sqrt( dot( min( v, vec3( 4.0 ) ), vec3( 0.299, 0.587, 0.114 ) ) ); }
 void main() {
   vec3 c = texture2D( tMain, vUv ).rgb;
+  #ifdef FXAA
+    { // 가벼운 FXAA: 다중 표본을 끈 뒤 계단진 모서리만 그 방향으로 이웃과 섞음 (모바일)
+      vec3 nw = texture2D( tMain, vUv + vec2( -1.0, -1.0 ) * uTexel ).rgb, ne = texture2D( tMain, vUv + vec2( 1.0, -1.0 ) * uTexel ).rgb;
+      vec3 sw = texture2D( tMain, vUv + vec2( -1.0, 1.0 ) * uTexel ).rgb, se = texture2D( tMain, vUv + vec2( 1.0, 1.0 ) * uTexel ).rgb;
+      float lNW = lum( nw ), lNE = lum( ne ), lSW = lum( sw ), lSE = lum( se ), lM = lum( c );
+      float lMin = min( lM, min( min( lNW, lNE ), min( lSW, lSE ) ) ), lMax = max( lM, max( max( lNW, lNE ), max( lSW, lSE ) ) );
+      if ( lMax - lMin > max( 0.04, lMax * 0.12 ) ) {
+        vec2 dir = vec2( -( ( lNW + lNE ) - ( lSW + lSE ) ), ( lNW + lSW ) - ( lNE + lSE ) );
+        float red = max( ( lNW + lNE + lSW + lSE ) * 0.03125, 1.0 / 128.0 );
+        dir = clamp( dir / ( min( abs( dir.x ), abs( dir.y ) ) + red ), -6.0, 6.0 ) * uTexel;
+        vec3 a = 0.5 * ( texture2D( tMain, vUv - dir / 6.0 ).rgb + texture2D( tMain, vUv + dir / 6.0 ).rgb );
+        vec3 b = a * 0.5 + 0.25 * ( texture2D( tMain, vUv - dir * 0.5 ).rgb + texture2D( tMain, vUv + dir * 0.5 ).rgb );
+        float lB = lum( b );
+        c = ( lB < lMin || lB > lMax ) ? a : b;
+      }
+    }
+  #endif
   #ifdef SHARPEN
     vec3 n = texture2D( tMain, vUv + vec2( uTexel.x, 0.0 ) ).rgb + texture2D( tMain, vUv - vec2( uTexel.x, 0.0 ) ).rgb + texture2D( tMain, vUv + vec2( 0.0, uTexel.y ) ).rgb + texture2D( tMain, vUv - vec2( 0.0, uTexel.y ) ).rgb;
     vec3 d = c - n * 0.25;
@@ -120,11 +138,13 @@ export function makePost(renderer, opt = {}) {
   }
   function pass(material, target) { mesh.material = material; renderer.setRenderTarget(target); renderer.render(mesh, cam); }
 
+  const fxaa = () => { const on = samples === 0; if (on === !!mFinal.defines.FXAA) return; if (on) mFinal.defines.FXAA = 1; else delete mFinal.defines.FXAA; mFinal.needsUpdate = true; }; // 다중 표본이 없으면 FXAA
+  fxaa();
   const api = {
     active: true, hdr,
     get samples() { return samples; }, get levels() { return levels; },
     // 화질 단계 바꾸기 (계단 현상 줄이기 표본 수, 빛 번짐 단계 수)
-    config(o) { if (o.samples !== undefined) samples = Math.min(o.samples, caps.maxSamples || 0); if (o.levels !== undefined) levels = o.levels; if (o.sharp !== undefined) { if (o.sharp) mFinal.defines.SHARPEN = 1; else delete mFinal.defines.SHARPEN; mFinal.needsUpdate = true; } main = null; },
+    config(o) { if (o.samples !== undefined) { samples = Math.min(o.samples, caps.maxSamples || 0); fxaa(); } if (o.levels !== undefined) levels = o.levels; if (o.sharp !== undefined) { if (o.sharp) mFinal.defines.SHARPEN = 1; else delete mFinal.defines.SHARPEN; mFinal.needsUpdate = true; } main = null; },
     setGrade(g) { Object.assign(grade, GRADE0, g || {}); },
     // 해 쪽 빛 번짐: 시점 기준 해 방향, 빛 색(세기 포함), 시야각. 색이 0 이면 꺼짐
     setGlare(dir, r, g, b, tanX, tanY) { const u = mFinal.uniforms; if (dir) u.uSunView.value.copy(dir); u.uGlare.value.set(r, g, b); u.uProj.value.set(tanX || 1, tanY || 1); },
