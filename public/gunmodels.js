@@ -1,4 +1,4 @@
-// SQUAD CLASH — 실제 총 모델 (Sketchfab: D_U @DU1701 의 low-poly 총들, r2detta 'Low-Poly Weapon Asset Pack' — 모두 CC BY 4.0)
+// SQUAD CLASH — 실제 총 모델 (Sketchfab: D_U @DU1701 의 low-poly 총들, VSS by veightyfive, "Shorty" by DJMaesen, Nagant M1895 by TastyTony — 모두 CC BY 4.0)
 // tools/extract_guns.mjs 가 만든 public/models/guns.bin 을 읽어, 무기 이름 → 색 단계별 모양(BufferGeometry) 으로 둔다.
 import * as THREE from './vendor/three.module.js';
 
