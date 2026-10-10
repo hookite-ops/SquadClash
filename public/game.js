@@ -155,6 +155,24 @@ function paintTexOf(info) {
   if (info.bot) return paintTex('b' + info.id, 'bot', info.id * 7 + 3);
   return paintTex('def');
 }
+// 적 잘 보이게: 몸 가장자리가 빨갛게 빛나는 윤곽광(멀수록 진하게) + 벽에 가리지 않고 보이는 적 머리 위의 빨간 표식 (화면 크기 고정)
+function rimOf(mat) {
+  const u = { value: new THREE.Color(0, 0, 0) };
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uRim = u;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += uRim * ( 0.25 + pow( 1.0 - saturate( abs( dot( normal, normalize( vViewPosition ) ) ) ), 2.0 ) );');
+  };
+  mat.customProgramCacheKey = () => 'rim';
+  return u;
+}
+let markTex = null;
+function enemyMark() {
+  if (!markTex) { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'); g.beginPath(); g.moveTo(8, 10); g.lineTo(56, 10); g.lineTo(32, 50); g.closePath(); g.lineJoin = 'round'; g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,.6)'; g.stroke(); g.fillStyle = '#ff3b3b'; g.fill(); markTex = new THREE.CanvasTexture(cv); markTex.colorSpace = THREE.SRGBColorSpace; }
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: markTex, transparent: true, depthTest: false, depthWrite: false, sizeAttenuation: false }));
+  const k = isTouch ? 0.034 : 0.024; s.scale.set(k, k, 1); s.position.y = 2.42; s.renderOrder = 20; s.visible = false;
+  return s;
+}
 function makeAvatar(info) {
   const g = new THREE.Group();
   g.rotation.order = 'YXZ';
@@ -162,11 +180,11 @@ function makeAvatar(info) {
   const rig = makeRig(paintTexOf(info), br ? brMat[info.ci] : teamMat[info.team]); // 뼈대와 동작은 avatar.js
   if (info.op) dressOp(rig, info.op); // 요원 스킨: 투구·갑옷·망토 등이 뼈대를 따라 움직임
   g.add(rig.body);
-  const tag = nameSprite(info.name, br ? 0 : info.team), shadow = blobShadow();
-  g.add(tag, shadow);
+  const tag = nameSprite(info.name, br ? 0 : info.team), shadow = blobShadow(), mark = enemyMark();
+  g.add(tag, shadow, mark);
   g.visible = false;
   scene.add(g);
-  const av = Object.assign(rig, { g, tag, shadow, bot: !!info.bot, c: false, buf: [], x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 100, alive: false, wasAlive: false, deadT: 9, fallDir: 0, prot: false, stepT: 0, shotAt: 0, team: info.team, name: info.name, chute: null, ci: info.ci, id: info.id, op: info.op || 0, sk: info.sk || null, att: info.att || null, sl: info.sl || null });
+  const av = Object.assign(rig, { g, tag, shadow, mark, rim: rimOf(rig.mat), losT: 0, los: false, bot: !!info.bot, c: false, buf: [], x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 100, alive: false, wasAlive: false, deadT: 9, fallDir: 0, prot: false, stepT: 0, shotAt: 0, team: info.team, name: info.name, chute: null, ci: info.ci, id: info.id, op: info.op || 0, sk: info.sk || null, att: info.att || null, sl: info.sl || null });
   holdGun(av, W_PISTOL);
   return av;
 }
@@ -893,8 +911,8 @@ function feed(a, b, wi, head) {
   if (a.id === myId || b.id === myId) d.className = 'mine';
   const f = $('feed');
   f.append(d);
-  while (f.children.length > 4) f.firstChild.remove();
-  setTimeout(() => d.remove(), 5000);
+  while (f.children.length > (isTouch ? 2 : 4)) f.firstChild.remove(); // 휴대폰은 화면이 좁아 두 줄만
+  setTimeout(() => d.remove(), isTouch ? 3500 : 5000);
 }
 function drawBoard() {
   const cols = $('cols');
@@ -1333,11 +1351,13 @@ function aimAssist(dt) {
     if (a < ba) { ba = a; best = o; bd = d; _ad[0] = dx / d; _ad[1] = dy / d; _ad[2] = dz / d; }
   }
   if (!best || rayWorld(eye, _ad, bd) < bd - 0.6 || smoked(eye, [best.x, best.y + 1.05, best.z])) return; // 벽·연막 뒤는 보정하지 않음
-  assistSlow = ba < 0.045 ? 0.6 : ba < 0.08 ? 0.78 : 0.92;
-  if (ba < 0.06 && ba > 0.004 && (input.fire || me.scoped)) { // 쏘거나 조준할 때만, 아주 가까운 적에게만 살짝 (화면이 혼자 홱 돌지 않게)
-    const wy = Math.atan2(-_ad[0], -_ad[2]), wp = Math.asin(clamp(_ad[1], -1, 1)), k = Math.min(1, dt * (me.scoped ? 1.8 : 1.2) * (1 - ba / 0.06));
+  assistSlow = ba < 0.04 ? 0.5 : ba < 0.07 ? 0.66 : 0.85;
+  const now = performance.now(), dragging = now - lookMv[2] < 120, moving = Math.abs(input.jx) + Math.abs(input.jy) > 0.25;
+  if (ba < 0.1 && ba > 0.003 && (input.fire || me.scoped || dragging || moving)) {
+    const wy = Math.atan2(-_ad[0], -_ad[2]), wp = Math.asin(clamp(_ad[1], -1, 1));
     let dyaw = wy - me.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-    me.yaw += dyaw * k; me.pitch = clamp(me.pitch + (wp - me.pitch) * k, -1.45, 1.45);
+    const dp = wp - me.pitch, away = dragging && -lookMv[0] * dyaw - lookMv[1] * dp < -0.0005 && Math.hypot(lookMv[0], lookMv[1]) > 3; // 손가락이 적에게서 멀어지는 쪽 → 그대로 둠
+    if (!away) { const k = Math.min(1, dt * (me.scoped ? 2.6 : input.fire ? 2.1 : 1.4) * (1 - ba / 0.1)); me.yaw += dyaw * k; me.pitch = clamp(me.pitch + dp * k, -1.45, 1.45); }
   }
 }
 // 자이로: 기기를 기울여 시점을 돌림 (가로로 쥔 방향에 맞춰 축을 고름)
@@ -1405,8 +1425,11 @@ const touches = new Map();
 const STICK_R = 52;
 // 터치가 잠깐 끊겼다 다시 잡히는 패드를 위한 여유: 끊긴 뒤 0.16초 안에 같은 자리를 다시 누르면 이어진 것으로 봄
 const GRACE = 160;
+let lookMv = [0, 0, 0]; // 마지막 터치 시점 움직임 (조준 보정이 손가락 방향을 거스르지 않게)
 let moveLost = null, fireLostT = 0;
 const TAN_HIP = Math.tan((75 * Math.PI) / 360);
+// 세로 시야각 배율: 화면이 가로로 길수록 가로 시야가 넓어져 적이 작아짐 → 가로 시야를 PC 100°대·터치 100° 안으로 묶음 (16:9 모니터는 거의 그대로)
+function fovK() { const H = ((isTouch ? 100 : 106) * Math.PI) / 360, v = (2 * Math.atan(Math.tan(H) / Math.max(1, camera.aspect)) * 180) / Math.PI; return Math.min(1, v / 75); }
 function look(dx, dy, base) {
   const zm = ew(me.w).zoom, adsK = Math.tan(((zm || VM[WEAPONS[me.w].vm].fov) * Math.PI) / 360) / TAN_HIP; // 정조준: 화면이 확대된 만큼만 느려져서 손 감각이 같음
   const k = base * sens * (me.scoped ? (WEAPONS[me.w].scope ? 0.3 * ctl.sScope : adsK * ctl.sAds) : 1) * (input.fire && isTouch ? ctl.sFire : 1) * assistSlow;
@@ -1455,7 +1478,7 @@ document.addEventListener('touchmove', (e) => {
       if (len > STICK_R) { dx *= STICK_R / len; dy *= STICK_R / len; }
       input.jx = dx / STICK_R; input.jy = dy / STICK_R;
       $('knob').style.transform = `translate(${dx}px,${dy}px)`;
-    } else if (r.role === 'look') { const dx = t.clientX - r.lx, dy = t.clientY - r.ly; if (Math.hypot(dx, dy) < Math.max(160, VW * 0.22)) look(dx, dy, 0.0055); } // 한 번에 화면의 1/4 넘게 튄 값은 놓친 터치가 다시 잡힌 것 → 버림
+    } else if (r.role === 'look') { const dx = t.clientX - r.lx, dy = t.clientY - r.ly, m = Math.hypot(dx, dy); if (m < Math.max(160, VW * 0.22)) { const cv = 0.68 + 0.6 * Math.min(1, m / 24); lookMv = [dx, dy, performance.now()]; look(dx * cv, dy * cv, 0.0055); } } // 한 번에 화면의 1/4 넘게 튄 값은 놓친 터치가 다시 잡힌 것 → 버림 · 손가락이 느리면 정밀하게(0.7배), 빠르면 크게(1.3배)
     r.lx = t.clientX; r.ly = t.clientY;
   }
 }, { passive: false });
@@ -2044,7 +2067,7 @@ function updateOthers(dt, now) {
       if (o.wasAlive) { o.wasAlive = false; o.deadT = 0; }
       o.deadT += dt;
       o.g.visible = o.deadT < 4.2;
-      if (o.g.visible) { animRig(o, dt, { dead: true, fall: o.fallDir }); o.tag.visible = false; o.shadow.visible = false; }
+      if (o.g.visible) { animRig(o, dt, { dead: true, fall: o.fallDir }); o.tag.visible = false; o.shadow.visible = false; o.mark.visible = false; o.rim.value.setRGB(0, 0, 0); }
       continue;
     }
     if (!o.wasAlive) { o.wasAlive = true; o.tag.visible = true; o.shadow.visible = true; o.vx = o.vy = o.vz = 0; }
@@ -2063,6 +2086,16 @@ function updateOthers(dt, now) {
     let seated = false;
     if (vehs.size) for (const v of vehs.values()) if (v.driver === o.id) { seated = true; o.g.position.y = o.y + 0.25; o.g.rotation.y = v.yaw; break; }
     const camD = Math.hypot(o.x - camera.position.x, o.z - camera.position.z), far = camD > 120; // 멀리 있는 캐릭터는 자세 계산을 건너뜀
+    { // 적: 빨간 윤곽광 (멀수록 진하게) + 보이는 적 머리 위 표식 (0.12초마다 시야를 다시 재고, 연막·섬광 중엔 숨김)
+      const foe = mode === 'br' || o.team !== myTeam, k = foe ? clamp(camD / 30, 0.28, 0.85) : 0;
+      o.rim.value.setRGB(k, k * 0.1, k * 0.08);
+      let show = false;
+      if (foe && me.alive && camD > 5 && camD < 130 && now >= (me.flashUntil || 0)) {
+        if (now - o.losT > 120) { o.losT = now; const tx = o.x - eye[0], ty = o.y + (o.c ? 0.9 : 1.3) - eye[1], tz = o.z - eye[2], d = Math.hypot(tx, ty, tz); o.los = d > 0.1 && rayWorld(eye, [tx / d, ty / d, tz / d], d) >= d - 0.4 && !smoked(eye, [o.x, o.y + 1.2, o.z]); }
+        show = o.los;
+      }
+      o.mark.visible = show; if (show) o.mark.position.y = o.c ? 1.95 : 2.42;
+    }
     { const k = clamp(camD / 5, 0.42, 1); o.tag.scale.set(1.5 * k, 0.375 * k, 1); o.tag.position.y = 2.02 + 0.18 * k; } // 코앞에서는 이름표를 작게
     if (!far || !o.posed) { o.posed = true; animRig(o, dt, { speed: seated ? 0 : sp, vf: -sy * o.vx - cy * o.vz, vs: cy * o.vx - sy * o.vz, pitch: o.pitch, crouch: o.c && !seated, air: Math.abs(o.vy) > 2.4 && !(o.chute && o.chute.visible), sprint: sp > 6.3 && now - o.shotAt > 600, seated }); }
     const sc0 = o.prot ? 1.04 : 1;
@@ -2079,19 +2112,26 @@ function updateFx(dt) {
   for (const ms of nadeMeshes.values()) { const t = ms.userData.to; ms.position.x += (t[0] - ms.position.x) * Math.min(1, dt * 18); ms.position.y += (t[1] - ms.position.y) * Math.min(1, dt * 18); ms.position.z += (t[2] - ms.position.z) * Math.min(1, dt * 18); }
 }
 
-let lastT = performance.now(), lastSend = 0, menuAng = 0, perfT = 0, perfN = 0;
+let lastT = performance.now(), lastSend = 0, menuAng = 0, perfT = 0, perfN = 0, perfFrom = 0, perfFast = 0;
 const drawVm = () => { renderer.setClearColor(0x161a21, 1); renderer.clear(); renderer.render(vmScene, vmCam); };
 const drawWorld = () => { renderer.clear(); renderer.render(scene, camera); };
 const drawGame = () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(vmScene, vmCam); };
-// 느린 기기면 화질을 한 단계씩 낮춤: 계단 현상 줄이기 끔 → 해상도 → 빛 번짐 줄임 → 해상도 → 후처리 끔
-function stepDown() {
+// 화질 자동 조절. 느리면 한 단계씩 낮춤: 계단 현상 줄이기(다중 표본 → 가벼운 FXAA) → 해상도 → 빛 번짐 줄임 → 해상도(조금씩) → 후처리 끔
+// 오래 넉넉하면 해상도를 다시 올림 (고해상도 휴대폰 화면이 한 번 느려졌다고 끝까지 흐릿하지 않게)
+const DPR = window.devicePixelRatio || 1, PR_MAX = Math.min(DPR, gfx === 'low' ? 1 : gfx === 'mid' ? (isTouch ? 2 : 1.5) : 2), PR_MIN = Math.min(DPR, isTouch && gfx !== 'low' ? 1.25 : 1);
+const setPR = (v) => { renderer.setPixelRatio(v); resize(); };
+let lastUp = -1e9, noUp = false;
+function qualityDown(now) {
+  if (now - lastUp < 8000) noUp = true; // 올렸더니 바로 느려짐 → 더는 올리지 않음
   const pr = renderer.getPixelRatio();
   if (postOn && post.samples > 0) post.config({ samples: 0 });
-  else if (pr > 1.5) { renderer.setPixelRatio(1.5); resize(); }
+  else if (pr > 1.5) setPR(1.5);
   else if (postOn && post.levels > 3) post.config({ levels: 3 });
-  else if (pr > 1) { renderer.setPixelRatio(1); resize(); }
+  else if (pr > PR_MIN + 0.01) setPR(Math.max(PR_MIN, pr - 0.25));
+  else if (pr > 1) setPR(1);
   else if (postOn) { postOn = false; post.dispose(); }
 }
+function qualityUp(now) { const pr = renderer.getPixelRatio(); if (noUp || pr >= PR_MAX - 0.01) return; setPR(Math.min(PR_MAX, pr + 0.25)); lastUp = now; }
 let booted = false;
 function frame(now) {
   requestAnimationFrame(frame);
@@ -2229,9 +2269,10 @@ function frame(now) {
       sfxTone(1250, 0.05, Math.max(0.05, v) * 0.16, 'square');
     }
   } else bombMesh.visible = false;
-  // 느린 기기면 화질을 자동으로 낮춤 (3초 평균이 초당 33장에 못 미치면 한 단계)
-  perfT += dt; perfN++;
-  if (perfT > 3) { if (perfT / perfN > 0.03 && !QLOCK) stepDown(); perfT = 0; perfN = 0; }
+  // 화질 자동 조절 (게임 시작 5초 뒤부터 잼): 3초 평균이 초당 33장에 못 미치면 한 단계 낮추고, 초당 55장 넘게 9초 이어지면 해상도를 올림
+  if (!perfFrom) perfFrom = now;
+  if (now - perfFrom > 5000) { perfT += dt; perfN++; }
+  if (perfT > 3) { const a = perfT / perfN; if (!QLOCK) { if (a > 0.03) { qualityDown(now); perfFast = 0; } else if (a < 0.018) { if (++perfFast >= 3) { qualityUp(now); perfFast = 0; } } else perfFast = 0; } perfT = 0; perfN = 0; }
   updateOthers(dt, now);
   updateFx(dt);
   applyDbgCam();
@@ -2310,7 +2351,7 @@ function frame(now) {
   if (flash.visible) { const m = gp.userData.muzzle; flash.position.set(gp.position.x + m[0], gp.position.y + m[1], gp.position.z + m[2] - 0.03); vmFlash.position.copy(flash.position); if (now > flash._off) flash.visible = false; }
   if (vmFlash.intensity > 0.01) vmFlash.intensity *= Math.exp(-dt * 38); else vmFlash.intensity = 0;
   vm.visible = me.alive && !scopeOn && !matchEnded && !me.drop && !car.id && !dbgCam;
-  const tf = me.alive && me.scoped ? (W.scope && !scopeOn ? 62 : W.zoom || VM[W.vm].fov) : me.alive && car.id ? 75 + Math.min(10, Math.abs(car.sp) * 0.5) : me.alive && me.sprint ? 81 : 75;
+  const tf = fovK() * (me.alive && me.scoped ? (W.scope && !scopeOn ? 62 : W.zoom || VM[W.vm].fov) : me.alive && car.id ? 75 + Math.min(10, Math.abs(car.sp) * 0.5) : me.alive && me.sprint ? 81 : 75);
   if (Math.abs(camera.fov - tf) > 0.05) { camera.fov += (tf - camera.fov) * Math.min(1, dt * 14); camera.updateProjectionMatrix(); }
   if (hudCache.spr !== me.sprint) { hudCache.spr = me.sprint; $('sprintTag').classList.toggle('on', me.sprint); }
 
